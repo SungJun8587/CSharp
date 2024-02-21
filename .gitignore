@@ -2,3 +2,6 @@ obj/
 bin/
 AssemblyInfo.cs
 .vs/
+AdminTool
+DBSchema
+PushAgent
