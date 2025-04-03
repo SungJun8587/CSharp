@@ -28,7 +28,7 @@ namespace Common.Middleware
                 await _next(httpContext);
                 return;
             }
-            log.Request.DateTime = SgTime.I.NowDateTime;
+            log.Request.DateTime = DateTime.Now;
             HttpRequest request = httpContext.Request;
 
             // Log Base
@@ -76,7 +76,7 @@ namespace Common.Middleware
             log.Response.Status = response.StatusCode.ToString();
             log.Response.Headers = GlobalFunc.FormatHeaders(response.Headers);
             log.Response.Body = responseBodyText;
-            log.Response.DateTime = SgTime.I.NowDateTime;
+            log.Response.DateTime = DateTime.Now;
 
             /*exception: but was managed at app.UseExceptionHandler() or by any middleware*/
             var contextFeature = httpContext.Features.Get<IExceptionHandlerPathFeature>();

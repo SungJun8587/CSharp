@@ -98,14 +98,31 @@ namespace Common.Lib
             }
         }
 
+        // ******************************************************************************************
+        //
+        // Date : 
+        // Description : 19자리 고유숫자 ID 생성(0 ~ 18446744073709551615)
+        // Parameters
+        // Return Type : ulong
+        // Reference :
+        //
+        // ******************************************************************************************		
         public static ulong GetNewIDToGuid()
         {
-            // ulong : 0 ~ 18446744073709551615
-            // 19자리 고유숫자 ID 생성
+
             byte[] gb = Guid.NewGuid().ToByteArray();
             return BitConverter.ToUInt64(gb, 0);
         }
 
+        // ******************************************************************************************
+        //
+        // Date : 
+        // Description : HTTP 헤더 Key, Value로 저장
+        // Parameters
+        // Return Type : Dictionary<string, string>
+        // Reference :
+        //
+        // ******************************************************************************************		
         public static Dictionary<string, string> FormatHeaders(IHeaderDictionary headers)
         {
             Dictionary<string, string> pairs = new Dictionary<string, string>();
@@ -116,6 +133,15 @@ namespace Common.Lib
             return pairs;
         }
 
+        // ******************************************************************************************
+        //
+        // Date : 
+        // Description : HTTP 쿼리스트링 Key, Value 기반으로 List 저장
+        // Parameters
+        // Return Type : List<KeyValuePair<string, string>>
+        // Reference :
+        //
+        // ******************************************************************************************	
         public static List<KeyValuePair<string, string>> FormatQueries(string queryString)
         {
             List<KeyValuePair<string, string>> pairs = new List<KeyValuePair<string, string>>();

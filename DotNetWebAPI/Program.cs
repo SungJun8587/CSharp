@@ -39,6 +39,7 @@ var logger = new LoggerConfiguration()
     .CreateLogger();
 
 
+// https://www.codeproject.com/Articles/5337511/Request-Response-Logging-Middleware-ASP-NET-Core
 // https://www.c-sharpcorner.com/article/how-to-implement-serilog-in-asp-net-core-web-api/
 // 로그 레벨
 //  - Verbose/Trace

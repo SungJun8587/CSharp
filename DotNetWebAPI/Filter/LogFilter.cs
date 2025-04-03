@@ -22,7 +22,7 @@ namespace Common.Filter
         public void OnActionExecuted(ActionExecutedContext context)
         {
             var model = GetLogModel(context.HttpContext);
-            model.Response.DateTimeActionLevel = SgTime.I.NowDateTime;
+            model.Response.DateTimeActionLevel = DateTime.Now;
         }
     }
 
@@ -40,7 +40,7 @@ namespace Common.Filter
             model.Exception.IsActionLevel = true;
             if (model.Response.DateTimeActionLevel == null)
             {
-                model.Response.DateTimeActionLevel = SgTime.I.NowDateTime;
+                model.Response.DateTimeActionLevel = DateTime.Now;
             }
         }
     }

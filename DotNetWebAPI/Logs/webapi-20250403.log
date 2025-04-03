@@ -1,0 +1,63 @@
+{
+  "LogId": "94e953e8-7107-4bb2-a410-41c2e44c204e",
+  "Node": "DotNetWebAPI",
+  "ClientIP": "",
+  "TraceId": "0HNBIGQVSBA9T:00000001",
+  "Request": {
+    "DateTime": "2025-04-03T17:08:42.598484+09:00",
+    "DateTimeActionLevel": "2025-04-03T17:08:44.9548885+09:00",
+    "Path": "/WeatherForecast",
+    "Query": "?eventId=100&eventName=name",
+    "Queries": [
+      {
+        "Key": "eventId",
+        "Value": "100"
+      },
+      {
+        "Key": "eventName",
+        "Value": "name"
+      }
+    ],
+    "Method": "GET",
+    "Scheme": "http",
+    "Host": "localhost:5000",
+    "Headers": {
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+      "Connection": "keep-alive",
+      "Host": "localhost:5000",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+      "Accept-Encoding": "gzip, deflate, br, zstd",
+      "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+      "Cookie": ".AspNetCore.Culture=c%3Dko-KR%7Cuic%3Dko-KR; pma_lang=ko",
+      "Upgrade-Insecure-Requests": "1",
+      "sec-ch-ua": "\"Google Chrome\";v=\"123\", \"Not:A-Brand\";v=\"8\", \"Chromium\";v=\"123\"",
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": "\"Windows\"",
+      "Sec-Fetch-Site": "none",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-User": "?1",
+      "Sec-Fetch-Dest": "document"
+    },
+    "Body": "",
+    "ContentType": null
+  },
+  "Response": {
+    "DateTime": "2025-04-03T17:08:45.0152347+09:00",
+    "DateTimeActionLevel": "2025-04-03T17:08:44.9567408+09:00",
+    "Status": "200",
+    "Headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "Date": "Thu, 03 Apr 2025 08:08:44 GMT",
+      "Server": "Kestrel",
+      "Transfer-Encoding": "chunked"
+    },
+    "Body": "[{\"date\":\"2025-04-04\",\"temperatureC\":14,\"temperatureF\":57,\"summary\":\"Cool\"},{\"date\":\"2025-04-05\",\"temperatureC\":-6,\"temperatureF\":22,\"summary\":\"Bracing\"},{\"date\":\"2025-04-06\",\"temperatureC\":7,\"temperatureF\":44,\"summary\":\"Scorching\"},{\"date\":\"2025-04-07\",\"temperatureC\":21,\"temperatureF\":69,\"summary\":\"Sweltering\"},{\"date\":\"2025-04-08\",\"temperatureC\":-1,\"temperatureF\":31,\"summary\":\"Balmy\"}]",
+    "ContentType": "application/json; charset=utf-8"
+  },
+  "Exception": {
+    "IsActionLevel": false,
+    "Source": null,
+    "Message": null,
+    "StackTrace": null
+  }
+}
