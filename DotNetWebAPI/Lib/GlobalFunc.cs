@@ -44,15 +44,14 @@ namespace Common.Lib
         // Reference :
         //
         // ******************************************************************************************		
-        public static string GetUserIP()
+        public static string GetUserIP(HttpContext httpContext)
         {
-            string UserIP = string.Empty;
+            string userIP = string.Empty;
             StringValues values;
 
             try
             {
-                HttpContext httpContext = new HttpContextAccessor().HttpContext;
-                if (httpContext == null) return UserIP;
+                if (httpContext == null) return userIP;
 
                 if (httpContext.Request?.Headers?.TryGetValue("X-Forwarded-For", out values) ?? false)
                 {
@@ -62,12 +61,12 @@ namespace Common.Lib
                         string[] pRawValues = rawValues.Split(',');
                         if (pRawValues != null && pRawValues.Length > 0)
                         {
-                            UserIP = pRawValues[0];
+                            userIP = pRawValues[0];
                         }
                     }
                 }
 
-                if (string.IsNullOrWhiteSpace(UserIP) && httpContext.Connection != null && httpContext.Connection.RemoteIpAddress != null)
+                if (string.IsNullOrWhiteSpace(userIP) && httpContext.Connection != null && httpContext.Connection.RemoteIpAddress != null)
                 {
                     var remoteIpAddress = httpContext.Connection.RemoteIpAddress;
                     if (remoteIpAddress != null)
@@ -76,21 +75,21 @@ namespace Common.Lib
                         {
                             remoteIpAddress = Dns.GetHostEntry(remoteIpAddress).AddressList.First(x => x.AddressFamily == AddressFamily.InterNetwork);
                         }
-                        UserIP = remoteIpAddress.ToString();
+                        userIP = remoteIpAddress.ToString();
                     }
                 }
 
-                if (string.IsNullOrWhiteSpace(UserIP))
+                if (string.IsNullOrWhiteSpace(userIP))
                 {
                     if (httpContext.Request?.Headers?.TryGetValue("REMOTE_ADDR", out values) ?? false)
                     {
                         string rawValues = values.ToString();
                         if (!string.IsNullOrWhiteSpace(rawValues))
-                            UserIP = values.ToString();
+                            userIP = values.ToString();
                     }
                 }
 
-                return UserIP;
+                return userIP;
             }
             catch
             {

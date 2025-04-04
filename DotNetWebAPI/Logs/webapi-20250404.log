@@ -1,0 +1,169 @@
+{
+  "LogId": "8d5c9c55-77c6-4f6d-8715-eaac54149663",
+  "Node": "DotNetWebAPI",
+  "ClientIP": "192.168.208.1",
+  "TraceId": "0HNBJ7IMNVL56:00000001",
+  "Request": {
+    "DateTime": "2025-04-04T14:51:00.3297983+09:00",
+    "DateTimeActionLevel": "2025-04-04T14:51:00.3859343+09:00",
+    "Path": "/WeatherForecast",
+    "Query": "?eventId=100&eventName=name",
+    "Queries": [
+      {
+        "Key": "eventId",
+        "Value": "100"
+      },
+      {
+        "Key": "eventName",
+        "Value": "name"
+      }
+    ],
+    "Method": "GET",
+    "Scheme": "http",
+    "Host": "localhost:5000",
+    "Headers": {
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+      "Connection": "keep-alive",
+      "Host": "localhost:5000",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+      "Accept-Encoding": "gzip, deflate, br, zstd",
+      "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+      "Cookie": ".AspNetCore.Culture=c%3Dko-KR%7Cuic%3Dko-KR; pma_lang=ko",
+      "Upgrade-Insecure-Requests": "1",
+      "sec-ch-ua": "\"Google Chrome\";v=\"123\", \"Not:A-Brand\";v=\"8\", \"Chromium\";v=\"123\"",
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": "\"Windows\"",
+      "Sec-Fetch-Site": "none",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-User": "?1",
+      "Sec-Fetch-Dest": "document"
+    },
+    "Body": "",
+    "ContentType": null
+  },
+  "Response": {
+    "DateTime": "2025-04-04T14:51:00.4464839+09:00",
+    "DateTimeActionLevel": "2025-04-04T14:51:00.3872912+09:00",
+    "Status": "200",
+    "Headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "Date": "Fri, 04 Apr 2025 05:50:59 GMT",
+      "Server": "Kestrel",
+      "Transfer-Encoding": "chunked"
+    },
+    "Body": "[{\"date\":\"2025-04-05\",\"temperatureC\":16,\"temperatureF\":60,\"summary\":\"Bracing\"},{\"date\":\"2025-04-06\",\"temperatureC\":14,\"temperatureF\":57,\"summary\":\"Chilly\"},{\"date\":\"2025-04-07\",\"temperatureC\":29,\"temperatureF\":84,\"summary\":\"Cool\"},{\"date\":\"2025-04-08\",\"temperatureC\":30,\"temperatureF\":85,\"summary\":\"Chilly\"},{\"date\":\"2025-04-09\",\"temperatureC\":-16,\"temperatureF\":4,\"summary\":\"Sweltering\"}]",
+    "ContentType": "application/json; charset=utf-8"
+  },
+  "Exception": {
+    "IsActionLevel": false,
+    "Source": null,
+    "Message": null,
+    "StackTrace": null
+  }
+}
+{
+  "LogId": "2bc85a5a-0478-4874-969d-edcdfd6d357c",
+  "Node": "DotNetWebAPI",
+  "ClientIP": "192.168.208.1",
+  "TraceId": "0HNBJ7IMNVL56:00000007",
+  "Request": {
+    "DateTime": "2025-04-04T14:52:59.8494239+09:00",
+    "DateTimeActionLevel": "2025-04-04T14:52:59.850874+09:00",
+    "Path": "/WeatherForecast",
+    "Query": "",
+    "Queries": [],
+    "Method": "GET",
+    "Scheme": "http",
+    "Host": "localhost:5000",
+    "Headers": {
+      "Accept": "text/plain",
+      "Connection": "keep-alive",
+      "Host": "localhost:5000",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+      "Accept-Encoding": "gzip, deflate, br, zstd",
+      "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+      "Cookie": ".AspNetCore.Culture=c%3Dko-KR%7Cuic%3Dko-KR; pma_lang=ko",
+      "Referer": "http://localhost:5000/swagger/index.html",
+      "sec-ch-ua": "\"Google Chrome\";v=\"123\", \"Not:A-Brand\";v=\"8\", \"Chromium\";v=\"123\"",
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": "\"Windows\"",
+      "Sec-Fetch-Site": "same-origin",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Dest": "empty"
+    },
+    "Body": "",
+    "ContentType": null
+  },
+  "Response": {
+    "DateTime": "2025-04-04T14:52:59.8522879+09:00",
+    "DateTimeActionLevel": "2025-04-04T14:52:59.8509314+09:00",
+    "Status": "200",
+    "Headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "Date": "Fri, 04 Apr 2025 05:52:59 GMT",
+      "Server": "Kestrel",
+      "Transfer-Encoding": "chunked"
+    },
+    "Body": "[{\"date\":\"2025-04-05\",\"temperatureC\":23,\"temperatureF\":73,\"summary\":\"Scorching\"},{\"date\":\"2025-04-06\",\"temperatureC\":6,\"temperatureF\":42,\"summary\":\"Chilly\"},{\"date\":\"2025-04-07\",\"temperatureC\":-2,\"temperatureF\":29,\"summary\":\"Scorching\"},{\"date\":\"2025-04-08\",\"temperatureC\":-17,\"temperatureF\":2,\"summary\":\"Warm\"},{\"date\":\"2025-04-09\",\"temperatureC\":25,\"temperatureF\":76,\"summary\":\"Balmy\"}]",
+    "ContentType": "application/json; charset=utf-8"
+  },
+  "Exception": {
+    "IsActionLevel": false,
+    "Source": null,
+    "Message": null,
+    "StackTrace": null
+  }
+}
+{
+  "LogId": "800fb374-ba61-429b-abc4-d833b6d60ba5",
+  "Node": "DotNetWebAPI",
+  "ClientIP": "192.168.208.1",
+  "TraceId": "0HNBJ7IMNVL56:00000008",
+  "Request": {
+    "DateTime": "2025-04-04T14:53:22.8502201+09:00",
+    "DateTimeActionLevel": "2025-04-04T14:53:22.856135+09:00",
+    "Path": "/WeatherForecast",
+    "Query": "",
+    "Queries": [],
+    "Method": "GET",
+    "Scheme": "http",
+    "Host": "localhost:5000",
+    "Headers": {
+      "Accept": "text/plain",
+      "Connection": "keep-alive",
+      "Host": "localhost:5000",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+      "Accept-Encoding": "gzip, deflate, br, zstd",
+      "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+      "Cookie": ".AspNetCore.Culture=c%3Dko-KR%7Cuic%3Dko-KR; pma_lang=ko",
+      "Referer": "http://localhost:5000/swagger/index.html",
+      "sec-ch-ua": "\"Google Chrome\";v=\"123\", \"Not:A-Brand\";v=\"8\", \"Chromium\";v=\"123\"",
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": "\"Windows\"",
+      "Sec-Fetch-Site": "same-origin",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Dest": "empty"
+    },
+    "Body": "",
+    "ContentType": null
+  },
+  "Response": {
+    "DateTime": "2025-04-04T14:53:22.8590512+09:00",
+    "DateTimeActionLevel": "2025-04-04T14:53:22.8561617+09:00",
+    "Status": "200",
+    "Headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "Date": "Fri, 04 Apr 2025 05:53:22 GMT",
+      "Server": "Kestrel",
+      "Transfer-Encoding": "chunked"
+    },
+    "Body": "[{\"date\":\"2025-04-05\",\"temperatureC\":45,\"temperatureF\":112,\"summary\":\"Bracing\"},{\"date\":\"2025-04-06\",\"temperatureC\":3,\"temperatureF\":37,\"summary\":\"Scorching\"},{\"date\":\"2025-04-07\",\"temperatureC\":-5,\"temperatureF\":24,\"summary\":\"Mild\"},{\"date\":\"2025-04-08\",\"temperatureC\":34,\"temperatureF\":93,\"summary\":\"Balmy\"},{\"date\":\"2025-04-09\",\"temperatureC\":26,\"temperatureF\":78,\"summary\":\"Mild\"}]",
+    "ContentType": "application/json; charset=utf-8"
+  },
+  "Exception": {
+    "IsActionLevel": false,
+    "Source": null,
+    "Message": null,
+    "StackTrace": null
+  }
+}

@@ -35,7 +35,7 @@ namespace Common.Middleware
             log.LogId = Guid.NewGuid().ToString();
             log.TraceId = httpContext.TraceIdentifier;
 
-            log.ClientIP = GlobalFunc.GetUserIP();
+            log.ClientIP = GlobalFunc.GetUserIP(httpContext);
             log.Node = _options.Name;
 
             // Request

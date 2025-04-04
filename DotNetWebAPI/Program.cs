@@ -10,7 +10,9 @@ IConfiguration configuration = builder.Configuration;
 
 // Add services to the container.
 builder.Services.AddControllers();
+
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+// Swagger UI 및 OpenAPI 문서를 ASP.NET Core 애플리케이션에서 제공
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
