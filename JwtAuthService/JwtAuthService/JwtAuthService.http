@@ -1,0 +1,50 @@
+﻿@baseUrl = https://localhost:8001
+@contentType = application/json
+@refreshToken = StU4bOCjbxtUCbMmL+mvN7vmLMx8eH0h+qeRZ2SFs9eZHVZpTvgO9LaE89DGvuGLs55sJX4rg9Auxj2IsBI6YA==
+@accessToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwidXNlcm5hbWUiOiJ0ZXN0dXNlcjEiLCJlbWFpbCI6InRlc3QxQGdvb2dsZS5jb20iLCJqdGkiOiJkYjdjMWRlOS0xZjlkLTQ1OTYtOTgzNC0xZmY3OTU4Y2EyYWEiLCJleHAiOjE3NjExOTg4MDAsImlzcyI6Ikp3dEF1dGhTZXJ2aWNlIiwiYXVkIjoiSnd0QXV0aFNlcnZpY2VDbGllbnQifQ.vL2jHhPQTpZjri32uinV4JeOVgkcbIeHU8uq2ujwUmg
+
+### 1️. 회원가입
+POST {{baseUrl}}/api/auth/register
+Content-Type: {{contentType}}
+
+{
+  "username": "testuser",
+  "password": "Password123!"
+}
+
+### 2️. 로그인
+POST {{baseUrl}}/api/auth/login
+Content-Type: {{contentType}}
+
+{
+  "username": "testuser",
+  "password": "Password123!"
+}
+
+### 3️. 보호된 API 호출 - 사용자 정보 조회
+GET {{baseUrl}}/api/protected/userinfo
+Authorization: Bearer {{accessToken}}
+
+### 4. 보호된 API 호출 - 토큰 정보 조회
+GET {{baseUrl}}/api/protected/tokeninfo
+Authorization: Bearer {{accessToken}}
+
+### 5. 보호된 API 호출 - 테스트 엔드포인트
+GET {{baseUrl}}/api/protected/test
+Authorization: Bearer {{accessToken}}
+
+### 6. 토큰 갱신
+POST {{baseUrl}}/api/auth/refresh
+Content-Type: {{contentType}}
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+### 7. 로그아웃
+POST {{baseUrl}}/api/auth/logout
+Content-Type: {{contentType}}
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
