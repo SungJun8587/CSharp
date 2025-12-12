@@ -1,12 +1,13 @@
 using JwtAuthService.Data;
+using JwtAuthService.Middleware;
 using JwtAuthService.Repositories;
 using JwtAuthService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using JwtAuthService.Middleware;
 using StackExchange.Redis;
 using System.Text;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,36 +47,106 @@ var validAudience = jwt.GetValue<string>("Audience");
 
 builder.Services.AddAuthentication(options =>
 {
+    // 기본 인증 스킴을 JWT Bearer 로 설정
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false;
-    options.SaveToken = true;
+    options.RequireHttpsMetadata = false;                                 // HTTPS 강제 여부(false 하면 개발환경에서 http 허용)
+    options.SaveToken = true;                                             // JWT를 AuthenticationProperties에 저장할지 여부
+
+    // JWT 토큰 검증 조건 설정
     options.TokenValidationParameters = new TokenValidationParameters
     {
+        // Issuer(발급자) 검증
         ValidateIssuer = true,
         ValidIssuer = validIssuer,
+
+        // Audience(대상자) 검증
         ValidateAudience = true,
         ValidAudience = validAudience,
+
+        // 서명키 검증(HMAC SHA256 등)
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new SymmetricSecurityKey(key),
+
+        // 유효 기간(exp) 검증
         ValidateLifetime = true
     };
 
-    // 5. 토큰 검증 후 블랙리스트 체크
+    // 5. JWT 이벤트(수신/검증/실패 등) 처리자 설정
     options.Events = new JwtBearerEvents
     {
+        // 5-1. 토큰이 수신되었을 때 가장 먼저 호출되는 이벤트
+        OnMessageReceived = async ctx =>
+        {
+            // 현재 요청 Endpoint 가져오기
+            var endpoint = ctx.HttpContext.GetEndpoint();
+
+            // Endpoint가 없거나, [Authorize] 속성이 없으면 JWT 검사 건너뜀
+            if (endpoint == null || endpoint.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.IAuthorizeData>() == null)
+            {
+                // 권한 필요 없는 페이지 → 검사 건너뜀
+                return;
+            }
+
+            // Authorization 헤더 읽기
+            var authHeader = ctx.Request.Headers["Authorization"].ToString();
+
+            // Authorization 헤더 자체가 없거나 비어있을 때
+            if (string.IsNullOrWhiteSpace(authHeader))
+            {
+                ctx.NoResult();
+                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                ctx.Response.ContentType = "application/json";
+
+                var json = JsonSerializer.Serialize(new { message = "AccessToken is missing." });
+                await ctx.Response.WriteAsync(json);
+                return;
+            }
+
+            // Authorization 헤더가 Bearer 방식이 아닌 경우
+            if (!authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.NoResult();
+                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                ctx.Response.ContentType = "application/json";
+
+                var json = JsonSerializer.Serialize(new { message = "Invalid Authorization header format." });
+                await ctx.Response.WriteAsync(json);
+                return;
+            }
+
+            // Bearer 뒤 토큰이 비어 있을 때
+            var token = authHeader.Substring("Bearer ".Length).Trim();
+            if (string.IsNullOrEmpty(token))
+            {
+                ctx.NoResult();
+                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                ctx.Response.ContentType = "application/json";
+
+                var json = JsonSerializer.Serialize(new { message = "AccessToken is empty." });
+                await ctx.Response.WriteAsync(json);
+                return;
+            }
+        },
+        // 5-2. 토큰이 유효성 검증(TokenValidationParameters)에 통과한 후 호출
         OnTokenValidated = async ctx =>
         {
-            var blacklist = ctx.HttpContext.RequestServices.GetRequiredService<ITokenBlacklistService>();
-            var jti = ctx.Principal?.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
+            var blacklist = ctx.HttpContext.RequestServices.GetRequiredService<ITokenBlacklistService>();               // ITokenBlacklistService DI 가져오기
+            var jti = ctx.Principal?.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;     // 토큰 내부의 jti(JWT ID) 값 가져오기
 
-            // 5.1. 블랙리스트에 존재하면 인증 실패 처리
+            // 블랙리스트에 등록된 jti라면 인증 실패 처리
             if (!string.IsNullOrEmpty(jti) && await blacklist.IsBlacklistedAsync(jti))
             {
-                ctx.Fail("token_blacklisted");
+                ctx.NoResult();
+                ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                ctx.Response.ContentType = "application/json";
+
+                var json = JsonSerializer.Serialize(new { message = "Token_blacklisted." });
+                await ctx.Response.WriteAsync(json);
+                return;
             }
         }
     };

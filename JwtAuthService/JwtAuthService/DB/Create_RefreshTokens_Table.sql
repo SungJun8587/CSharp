@@ -39,3 +39,18 @@ CREATE TABLE `BlacklistedAccessTokens` (
     PRIMARY KEY (`Id`),
     UNIQUE KEY `UQ_BlacklistedAccessTokens_Jti` (`Jti`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='블랙리스트에 등록된 액세스 토큰 엔티티';
+
+
+-- Password : Pass123!
+INSERT INTO `Users` (`UserName`, `Password_Hash`, `Email`)
+VALUES
+('user01', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user01@example.com'),
+('user02', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user02@example.com'),
+('user03', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user03@example.com'),
+('user04', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user04@example.com'),
+('user05', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user05@example.com'),
+('user06', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user06@example.com'),
+('user07', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user07@example.com'),
+('user08', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user08@example.com'),
+('user09', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user09@example.com'),
+('user10', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user10@example.com');
