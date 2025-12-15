@@ -1,0 +1,9 @@
+@baseUrl = http://localhost:8000
+@contentType = application/x-protobuf
+
+
+POST {{baseUrl}}/api/auth/login
+Content-Type: {{contentType}}
+Accept: {{contentType}}
+
+< K:/GitHub/CSharp/JwtAuthService/JwtAuthService.Protobuf/login_request.bin

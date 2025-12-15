@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package jwt_auth_service.protobuf.services;
+
+import "google/protobuf/empty.proto";
+import "Protos/user.proto";     // LoginRequest, LoginResponse 등 포함
+
+option csharp_namespace = "JwtAuthService.Protobuf.Services";
+
+// 인증 관련 gRPC 서비스 정의
+service AuthService {
+  // 로그인
+  rpc Login (jwt_auth_service.protobuf.models.LoginRequest)
+       returns (jwt_auth_service.protobuf.models.LoginResponse);
+
+  // 리프레시 토큰 갱신
+  rpc Refresh (jwt_auth_service.protobuf.models.RefreshRequest)
+       returns (jwt_auth_service.protobuf.models.RefreshResponse);
+
+  // 로그아웃
+  rpc Logout (jwt_auth_service.protobuf.models.RefreshRequest)
+       returns (jwt_auth_service.protobuf.models.LogoutResponse);
+
+  // (선택) 회원가입도 추가 가능
+  rpc Register (jwt_auth_service.protobuf.models.RegisterRequest)
+       returns (jwt_auth_service.protobuf.models.LoginResponse); 
+       // 혹은 별도의 RegisterResponse 메시지
+}
+
+// 보호된 리소스 관련 gRPC 서비스
+service ProtectedService {
+  // 사용자 정보 조회
+  rpc GetUserInfo (google.protobuf.Empty) 
+       returns (jwt_auth_service.protobuf.models.User);
+
+  // 현재 토큰 정보 조회
+  rpc GetTokenInfo (google.protobuf.Empty) 
+       returns (jwt_auth_service.protobuf.models.TokenExpiryResponse);
+
+  // 테스트용 보호된 엔드포인트
+  rpc TestProtected (google.protobuf.Empty) 
+       returns (jwt_auth_service.protobuf.models.TestResponse);
+}

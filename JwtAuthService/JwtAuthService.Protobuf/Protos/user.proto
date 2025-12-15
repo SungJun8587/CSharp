@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package jwt_auth_service.protobuf.models;
+
+import "google/protobuf/wrappers.proto";
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "JwtAuthService.Protobuf.Models";
+
+/* 회원가입 요청 */
+message RegisterRequest {
+  string username = 1;
+  string password = 2;
+  google.protobuf.StringValue email = 3;		// null 허용/설정 여부 구분이 필요한 경우
+  google.protobuf.StringValue role = 4;			// null 허용/설정 여부 구분이 필요한 경우
+}
+
+/* 회원가입 응답 */
+message RegisterResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+/* 로그인 요청 */
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+  string device_id = 3;
+}
+
+/* 로그인 후 반환되는 토큰 */
+message TokenResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+}
+
+/* 로그인 응답 */
+message LoginResponse {
+  bool success = 1;
+  string message = 2;
+  TokenResponse token = 3;
+}
+
+/* 토큰 만료 정보 */
+message TokenExpiryResponse {
+  string access_token = 1;
+  google.protobuf.Timestamp access_token_expires_at = 2;
+  string refresh_token = 3;
+  google.protobuf.Timestamp refresh_token_expires_at = 4;
+  uint64 access_token_remaining_seconds = 5;
+  uint64 refresh_token_remaining_seconds = 6;
+}
+
+/* 리프레시 토큰 요청 */
+message RefreshRequest {
+  string refresh_token = 1;
+  string device_id = 2;
+}
+
+/* 리프레시 토큰 응답 */
+message RefreshResponse {
+  bool success = 1;
+  string message = 2;
+  TokenResponse token = 3;
+}
+
+message LogoutResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+/* 사용자 엔티티 */
+message User {
+  string user_id = 1;
+  string username = 2;
+  string password_hash = 3;
+  string email = 4;
+  string role = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+// 테스트용 단순 응답 메시지
+message TestResponse {
+  string message = 1;
+}
