@@ -135,8 +135,8 @@ builder.Services.AddAuthentication(options =>
                 ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 ctx.Response.ContentType = "application/x-protobuf";
 
-                // ErrorResponse 객체 생성
-                var error = new ErrorResponse { Message = "AccessToken is missing or invalid." };
+                // 에러 처리를 위한 ResponseData 객체 생성
+                var error = new ResponseData { Message = "AccessToken is missing or invalid." };
 
                 // 1. MemoryStream에 직렬화
                 // Google.Protobuf 메시지 클래스의 WriteTo(Stream) 메서드 사용
@@ -165,8 +165,8 @@ builder.Services.AddAuthentication(options =>
                 ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 ctx.Response.ContentType = "application/x-protobuf";
 
-                // ErrorResponse 객체 생성
-                var error = new ErrorResponse { Message = "Token_blacklisted." };
+                // 에러 처리를 위한 ResponseData 객체 생성
+                var error = new ResponseData { Message = "Token_blacklisted." };
 
                 // 1. MemoryStream에 직렬화
                 // Google.Protobuf 메시지 클래스의 WriteTo(Stream) 메서드 사용

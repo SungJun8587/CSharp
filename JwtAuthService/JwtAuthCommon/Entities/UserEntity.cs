@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace JwtAuthCommon.Entities
 {
     /// <summary>사용자 엔티티</summary>
@@ -17,6 +19,12 @@ namespace JwtAuthCommon.Entities
 
         /// <summary>사용자 역할</summary>
         public string Role { get; set; } = null!;
+
+        /// <summary>
+        /// 계정 활성화 여부(true/false : 유/무)
+        //      - false 인 경우 로그인 차단(정지 계정 처리 용도)
+        /// </summary>
+        public bool IsActive { get; set; }
 
         /// <summary>생성 시간</summary>
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

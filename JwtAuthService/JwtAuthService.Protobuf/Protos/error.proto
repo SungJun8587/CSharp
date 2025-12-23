@@ -1,9 +1,0 @@
-syntax = "proto3";
-
-package jwt_auth_service.protobuf.models;
-
-option csharp_namespace = "JwtAuthService.Protobuf.Models";
-
-message ErrorResponse {
-  string message = 1;
-}

@@ -10,6 +10,7 @@ CREATE TABLE `Users` (
     `Password_Hash` VARCHAR(255) NOT NULL COMMENT 'BCrypt 해시된 비밀번호',
     `Email` VARCHAR(255) DEFAULT NULL COMMENT '사용자 이메일',
     `Role` VARCHAR(50) NOT NULL COMMENT '사용자 역할',
+    `IsActive` BIT(1) NOT NULL COMMENT '계정 활성화 여부(true/false : 유/무)', 
     `CreatedAt` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시간',
     PRIMARY KEY (`Id`),
     UNIQUE KEY `uq_Users_UserName` (`UserName`)
@@ -43,15 +44,15 @@ CREATE TABLE `BlacklistedAccessTokens` (
 
 
 -- Password : Pass123!
-INSERT INTO `Users` (`UserName`, `Password_Hash`, `Email`, `Role`)
+INSERT INTO `Users` (`UserName`, `Password_Hash`, `Email`, `Role`, `IsActive`)
 VALUES
-('user01', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user01@example.com', 'admin'),
-('user02', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user02@example.com', 'user'),
-('user03', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user03@example.com', 'user'),
-('user04', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user04@example.com', 'user'),
-('user05', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user05@example.com', 'user'),
-('user06', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user06@example.com', 'user'),
-('user07', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user07@example.com', 'user'),
-('user08', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user08@example.com', 'user'),
-('user09', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user09@example.com', 'user'),
-('user10', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user10@example.com', 'user');
+('user01', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user01@example.com', 'Admin', true),
+('user02', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user02@example.com', 'User', true),
+('user03', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user03@example.com', 'User', true),
+('user04', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user04@example.com', 'User', true),
+('user05', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user05@example.com', 'User', true),
+('user06', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user06@example.com', 'User', true),
+('user07', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user07@example.com', 'User', true),
+('user08', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user08@example.com', 'User', true),
+('user09', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user09@example.com', 'User', true),
+('user10', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user10@example.com', 'User', true);

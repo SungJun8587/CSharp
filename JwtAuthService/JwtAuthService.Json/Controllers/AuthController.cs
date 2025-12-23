@@ -34,12 +34,12 @@ namespace JwtAuthService.Json.Controllers
         /// <param name="request">회원가입 요청 DTO</param>
         /// <returns>회원가입 성공 메시지</returns>
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+        public async Task<IActionResult> RegisterUser([FromBody] RegisterRequest request)
         {
             // 1. 입력 유효성 체크
             if (string.IsNullOrWhiteSpace(request.UserName) || string.IsNullOrWhiteSpace(request.Password))
             {
-                return BadRequest(new RegisterResponse()
+                return BadRequest(new ResponseData()
                 {
                     Success = false,
                     Message = "Username and password are required."
@@ -52,14 +52,15 @@ namespace JwtAuthService.Json.Controllers
                 Username = request.UserName,
                 Email = request.Email,
                 Password_Hash = BCrypt.Net.BCrypt.HashPassword(request.Password),
-                Role = !string.IsNullOrEmpty(request.Role) ? request.Role : "User"
+                Role = !string.IsNullOrEmpty(request.Role) ? request.Role : "User",
+                IsActive = true
             };
 
             // 3. 비동기 DB 저장
             await _userRepo.AddAsync(user);
 
             // 4. 성공 응답 반환
-            return Ok(new RegisterResponse() 
+            return Ok(new ResponseData() 
             { 
                 Success = true,
                 Message = "User registered successfully." 
@@ -91,6 +92,7 @@ namespace JwtAuthService.Json.Controllers
             return Ok(new LoginResponse
             { 
                 Success = true,
+                Message = "User Login successfully",
                 Token = new TokenResponse()
                 {
                     AccessToken = accessToken,
@@ -124,6 +126,7 @@ namespace JwtAuthService.Json.Controllers
             return Ok(new RefreshResponse()
             {
                 Success = true,
+                Message = "Token refresh successfully",
                 Token = new TokenResponse()
                 {
                     AccessToken = accessToken,
@@ -133,7 +136,7 @@ namespace JwtAuthService.Json.Controllers
         }
 
         /// <summary>
-        /// 로그아웃 처리 (리프레시 토큰 무효화)
+        /// 로그아웃 처리(리프레시 토큰 무효화)
         /// </summary>
         /// <param name="request">로그아웃 요청 DTO</param>
         /// <returns>로그아웃 성공 메시지</returns>
@@ -144,7 +147,11 @@ namespace JwtAuthService.Json.Controllers
             await _authService.LogoutAsync(request.RefreshToken, request.DeviceId);
 
             // 2. 로그아웃 성공 메시지 반환
-            return Ok(new { message = "Logged out" });
+            return Ok(new ResponseData
+            {
+                Success = true,
+                Message = "Logged out"
+            });
         }
     }
 }

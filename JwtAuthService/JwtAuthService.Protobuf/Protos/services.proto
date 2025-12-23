@@ -19,11 +19,11 @@ service AuthService {
 
   // 로그아웃
   rpc Logout (jwt_auth_service.protobuf.models.RefreshRequest)
-       returns (jwt_auth_service.protobuf.models.LogoutResponse);
+       returns (jwt_auth_service.protobuf.models.ResponseData);
 
   // (선택) 회원가입도 추가 가능
   rpc Register (jwt_auth_service.protobuf.models.RegisterRequest)
-       returns (jwt_auth_service.protobuf.models.LoginResponse); 
+       returns (jwt_auth_service.protobuf.models.ResponseData); 
        // 혹은 별도의 RegisterResponse 메시지
 }
 
@@ -39,5 +39,5 @@ service ProtectedService {
 
   // 테스트용 보호된 엔드포인트
   rpc TestProtected (google.protobuf.Empty) 
-       returns (jwt_auth_service.protobuf.models.TestResponse);
+       returns (jwt_auth_service.protobuf.models.ResponseData);
 }

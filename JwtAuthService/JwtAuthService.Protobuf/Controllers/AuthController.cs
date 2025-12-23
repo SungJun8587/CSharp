@@ -42,7 +42,7 @@ namespace JwtAuthService.Protobuf.Controllers
             // 1. 입력 유효성 체크
             if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
             {
-                return BadRequest(new RegisterResponse
+                return BadRequest(new ResponseData
                 {
                     Success = false,
                     Message = "Username and password are required."
@@ -55,14 +55,15 @@ namespace JwtAuthService.Protobuf.Controllers
                 Username = request.Username,
                 Email = request.Email,
                 Password_Hash = BCrypt.Net.BCrypt.HashPassword(request.Password),
-                Role = !string.IsNullOrEmpty(request.Role) ? request.Role : "User"
+                Role = !string.IsNullOrEmpty(request.Role) ? request.Role : "User",
+                IsActive = true
             };
 
             // 3. 비동기 DB 저장
             await _userRepo.AddAsync(user);
 
             // 4. 성공 응답 반환
-            return Ok(new RegisterResponse
+            return Ok(new ResponseData
             {
                 Success = true,
                 Message = "User registered successfully."
@@ -96,6 +97,7 @@ namespace JwtAuthService.Protobuf.Controllers
             return Ok(new LoginResponse
             {
                 Success = true,
+                Message = "User Login successfully",
                 Token = new TokenResponse()
                 {
                     AccessToken = accessToken,
@@ -131,6 +133,7 @@ namespace JwtAuthService.Protobuf.Controllers
             return Ok(new RefreshResponse
             {
                 Success = true,
+                Message = "Token refresh successfully",
                 Token = new TokenResponse()
                 {
                     AccessToken = accessToken,
@@ -153,7 +156,7 @@ namespace JwtAuthService.Protobuf.Controllers
             await _authService.LogoutAsync(request.RefreshToken, request.DeviceId);
 
             // 2. 로그아웃 성공 메시지 반환
-            return Ok(new LogoutResponse
+            return Ok(new ResponseData
             {
                 Success = true,
                 Message = "Logged out"

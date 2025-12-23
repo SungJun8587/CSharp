@@ -20,15 +20,6 @@ namespace JwtAuthService.Protobuf.Controllers
             _jwtService = jwtService;
         }
 
-        [Authorize(Roles = "Admin")]
-        [HttpGet("all")]
-        [Produces("application/x-protobuf")]
-        public ActionResult<List<User>> All()
-        {
-            // 예시: 간단한 Admin 전용 엔드포인트
-            return new List<User> { new User { UserId = "1", Username = "admin", Role = "Admin" } };
-        }
-
         /// <summary>
         /// 보호된 리소스 조회
         /// </summary>

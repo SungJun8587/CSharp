@@ -1,9 +1,6 @@
-using JwtAuthCommon.Repositories;
-using JwtAuthCommon.Services;
 using JwtAuthService.Json.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.IdentityModel.Tokens.Jwt;
 
 namespace JwtAuthService.Json.Controllers
 {
@@ -19,7 +16,11 @@ namespace JwtAuthService.Json.Controllers
         [HttpGet("test")]
         public IActionResult TestProtected()
         {
-            return Ok(new { message = "You have accessed a protected endpoint!" });
+            return Ok(new ResponseData
+            {
+                Success = true,
+                Message = "You have accessed a protected endpoint!"
+            });
         }
     }
 }

@@ -1,12 +1,9 @@
-using JwtAuthCommon.Entities;
 using JwtAuthCommon.Repositories;
 using JwtAuthCommon.Services;
 using JwtAuthService.Json.Models;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 
 namespace JwtAuthService.Json.Controllers
 {
@@ -21,14 +18,6 @@ namespace JwtAuthService.Json.Controllers
         {
             _refreshTokenRepository = refreshTokenRepository;
             _jwtService = jwtService;
-        }
-
-        [Authorize(Roles = "Admin")]
-        [HttpGet("all")]
-        public ActionResult<List<User>> All()
-        {
-            // 예시: 간단한 Admin 전용 엔드포인트
-            return new List<User> { new User { UserId = "1", UserName = "admin", Role = "Admin" } };
         }
 
         /// <summary>

@@ -2,13 +2,13 @@ using System.Text.Json.Serialization;
 
 namespace JwtAuthService.Json.Models
 {
-    /// <summary>공통 응답</summary>
+    /// <summary>처리 또는 에러 응답</summary>
     public class ResponseData
     {
-        /// <summary>성공 여부</summary>
+        /// <summary>성공 여부(true/false : 성공/실패)</summary>
         public bool Success { get; set; }
 
-        /// <summary>응답 메세지</summary>
+        /// <summary>처리 응답 또는 에러 메세지</summary>
         public string Message { get; set; } = null!;
     }
 
@@ -36,11 +36,6 @@ namespace JwtAuthService.Json.Models
 
         /// <summary>사용자 역할(기본 : user, 관리자 : admin)</summary>
         public string? Role { get; set; }
-    }
-
-    /// <summary>회원가입 요청</summary>
-    public class RegisterResponse : ResponseData
-    {
     }
 
     /// <summary>로그인 요청</summary>

@@ -1,10 +1,6 @@
-using Google.Protobuf.WellKnownTypes;
-using JwtAuthCommon.Repositories;
-using JwtAuthCommon.Services;
 using JwtAuthService.Protobuf.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.IdentityModel.Tokens.Jwt;
 
 namespace JwtAuthService.Protobuf.Controllers
 {
@@ -21,7 +17,11 @@ namespace JwtAuthService.Protobuf.Controllers
         [Produces("application/x-protobuf")]
         public IActionResult TestProtected()
         {
-            return Ok(new { message = "You have accessed a protected endpoint!" });
+            return Ok(new ResponseData
+            {
+                Success = true,
+                Message = "You have accessed a protected endpoint!"
+            });
         }
     }
 }

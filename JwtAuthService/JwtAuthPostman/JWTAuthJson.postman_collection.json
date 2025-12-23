@@ -1,11 +1,201 @@
 {
 	"info": {
-		"_postman_id": "d210bb26-75c0-43a4-bd22-68f1c5bdbcd8",
+		"_postman_id": "adb8779d-d6d7-49c4-b3a8-9643f13f2349",
 		"name": "JWTAuthJson",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "4013172"
 	},
 	"item": [
+		{
+			"name": "Admin",
+			"item": [
+				{
+					"name": "Register",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"username\": \"{{username}}\",\r\n  \"password\": \"{{password}}\",\r\n  \"email\": \"{{email}}\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseURL}}/api/admin/register",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "All",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseURL}}/api/admin/all",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"all"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "AdminList",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseURL}}/api/admin/admins",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"admins"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "UserList",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseURL}}/api/admin/users",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"users"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "DeleteUser",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseURL}}/api/admin/user/4",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"user",
+								"4"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "ActiveUser",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{accessToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{baseURL}}/api/admin/user/4",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"user",
+								"4"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
 		{
 			"name": "Auth",
 			"item": [
@@ -16,7 +206,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\r\n  \"username\": \"{{username}}\",\r\n  \"password\": \"{{password}}\",\r\n  \"email\": \"{{email}}\",\r\n  \"role\": \"user\"\r\n}\r\n",
+							"raw": "{\r\n  \"username\": \"{{username}}\",\r\n  \"password\": \"{{password}}\",\r\n  \"email\": \"{{email}}\"\r\n}\r\n",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -44,17 +234,24 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"if (pm.response.code === 200) {\r",
+									"if (pm.response.code === 200) \r",
+									"{\r",
 									"    let jsonData = pm.response.json();\r",
-									"    \r",
-									"    if (jsonData.token.accessToken) {\r",
-									"        pm.environment.set(\"accessToken\", jsonData.token.accessToken);\r",
+									"    let accessToken = jsonData.token.accessToken;\r",
+									"    let refreshToken = jsonData.token.refreshToken;\r",
+									"\r",
+									"    if (accessToken) \r",
+									"    {\r",
+									"        pm.environment.set(\"accessToken\", accessToken);\r",
 									"    }\r",
 									"\r",
-									"    if (jsonData.token.refreshToken) {\r",
-									"        pm.environment.set(\"refreshToken\", jsonData.token.refreshToken);\r",
+									"    if (refreshToken)\r",
+									"    {\r",
+									"        pm.environment.set(\"refreshToken\", refreshToken);\r",
 									"    }\r",
-									"} else {\r",
+									"} \r",
+									"else\r",
+									"{\r",
 									"    console.log(\"Error response:\", pm.response.text());\r",
 									"}"
 								],
@@ -108,17 +305,24 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"if (pm.response.code === 200) {\r",
+									"if (pm.response.code === 200) \r",
+									"{\r",
 									"    let jsonData = pm.response.json();\r",
-									"    \r",
-									"    if (jsonData.accessToken) {\r",
-									"        pm.environment.set(\"accessToken\", jsonData.token.accessToken);\r",
+									"    let accessToken = jsonData.token.accessToken;\r",
+									"    let refreshToken = jsonData.token.refreshToken;\r",
+									"\r",
+									"    if (accessToken) \r",
+									"    {\r",
+									"        pm.environment.set(\"accessToken\", accessToken);\r",
 									"    }\r",
 									"\r",
-									"    if (jsonData.refreshToken) {\r",
-									"        pm.environment.set(\"refreshToken\", jsonData.token.refreshToken);\r",
+									"    if (refreshToken)\r",
+									"    {\r",
+									"        pm.environment.set(\"refreshToken\", refreshToken);\r",
 									"    }\r",
-									"} else {\r",
+									"} \r",
+									"else\r",
+									"{\r",
 									"    console.log(\"Error response:\", pm.response.text());\r",
 									"}"
 								],
@@ -161,10 +365,13 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"if (pm.response.code === 200) {\r",
+									"if (pm.response.code === 200) \r",
+									"{\r",
 									"    pm.environment.set(\"accessToken\", \"\");\r",
 									"    pm.environment.set(\"refreshToken\", \"\");\r",
-									"} else {\r",
+									"} \r",
+									"else \r",
+									"{\r",
 									"    console.log(\"Error response:\", pm.response.text());\r",
 									"}"
 								],
@@ -205,35 +412,6 @@
 		{
 			"name": "User",
 			"item": [
-				{
-					"name": "All",
-					"request": {
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "{{accessToken}}",
-									"type": "string"
-								}
-							]
-						},
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseURL}}/api/user/all",
-							"host": [
-								"{{baseURL}}"
-							],
-							"path": [
-								"api",
-								"user",
-								"all"
-							]
-						}
-					},
-					"response": []
-				},
 				{
 					"name": "UserInfo",
 					"request": {
@@ -291,6 +469,40 @@
 						}
 					},
 					"response": []
+				}
+			],
+			"auth": {
+				"type": "bearer",
+				"bearer": [
+					{
+						"key": "token",
+						"value": "{{accessToken}}",
+						"type": "string"
+					}
+				]
+			},
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {},
+						"exec": [
+							""
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {},
+						"exec": [
+							""
+						]
+					}
 				}
 			]
 		}
