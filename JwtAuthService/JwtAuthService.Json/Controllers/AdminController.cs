@@ -5,7 +5,8 @@ using JwtAuthService.Json.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-[Authorize(Roles = "Admin")]
+// 관리자만 접근 가능한 API
+[Authorize(Policy = "AdminOnly")]
 [ApiController]
 [Route("api/admin")]
 public class AdminController : ControllerBase
@@ -57,8 +58,9 @@ public class AdminController : ControllerBase
     /// <summary>
     /// 관리자 추가
     /// </summary>
+    [AllowAnonymous]    // 인증 필요 없음
     [HttpPost("register")]
-    public async Task<IActionResult> RegisterAdmin([FromBody] RegisterRequest request)
+    public async Task<IActionResult> AdminRegister([FromBody] RegisterRequest request)
     {
         // 1. 입력 유효성 체크
         if (string.IsNullOrWhiteSpace(request.UserName) || string.IsNullOrWhiteSpace(request.Password))
@@ -81,13 +83,48 @@ public class AdminController : ControllerBase
         };
 
         // 3. 비동기 DB 저장
-        await _userRepo.AddAsync(user);
+        await _userRepo.AddAdminAsync(user);
 
         // 4. 성공 응답 반환
         return Ok(new ResponseData()
         {
             Success = true,
             Message = "User registered successfully."
+        });
+    }
+
+    /// <summary>
+    /// 관리자 로그인
+    /// </summary>
+    /// <param name="request">로그인 요청 DTO</param>
+    /// <returns>액세스 토큰, 리프레시 토큰, 만료시간</returns>
+    [AllowAnonymous] // 인증 필요 없음
+    [HttpPost("login")]
+    public async Task<IActionResult> AdminLogin([FromBody] LoginRequest request)
+    {
+        // 1. 로그인 시도
+        var (accessToken, refreshToken, expiresIn) = await _authService.LoginAsync(request.UserName, request.Password, request.DeviceId);
+
+        // 2. 인증 실패 시
+        if (accessToken == null || refreshToken == null)
+        {
+            return Unauthorized(new LoginResponse()
+            {
+                Success = false,
+                Message = "Invalid credentials"
+            });
+        }
+
+        // 3. 인증 성공 시 토큰 반환
+        return Ok(new LoginResponse
+        {
+            Success = true,
+            Message = "User Login successfully",
+            Token = new TokenResponse()
+            {
+                AccessToken = accessToken,
+                RefreshToken = refreshToken
+            }
         });
     }
 

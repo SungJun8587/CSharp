@@ -1,7 +1,6 @@
 using JwtAuthCommon.Data;
 using JwtAuthCommon.Entities;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 
 namespace JwtAuthCommon.Repositories
 {
@@ -43,8 +42,11 @@ namespace JwtAuthCommon.Repositories
                     Id = p.Id,
                     Username = p.Username,
                     Email = p.Email,
+                    Role = p.Role,
                     IsActive = p.IsActive,
-                    CreatedAt = p.CreatedAt
+                    CreatedAt = p.CreatedAt,
+                    LastLoginAt = p.LastLoginAt,
+                    IsActiveChangedAt = p.IsActiveChangedAt
                 })
                 .ToListAsync();
         }
@@ -62,8 +64,11 @@ namespace JwtAuthCommon.Repositories
                     Id = p.Id,
                     Username = p.Username,
                     Email = p.Email,
+                    Role = p.Role,
                     IsActive = p.IsActive,
-                    CreatedAt = p.CreatedAt
+                    CreatedAt = p.CreatedAt,
+                    LastLoginAt = p.LastLoginAt,
+                    IsActiveChangedAt = p.IsActiveChangedAt
                 })
                 .ToListAsync();
         }
@@ -89,13 +94,58 @@ namespace JwtAuthCommon.Repositories
         }
 
         /// <summary>
+        /// 새로운 관리자를 데이터베이스에 추가.
+        /// </summary>
+        /// <param name="user">추가할 사용자 엔티티</param>
+        public async Task AddAdminAsync(UserEntity user)
+        {
+            using var tx = await _db.Database.BeginTransactionAsync();
+
+            // Admin ID(1 ~ 100) 범위 잠금
+            var nextAdminId = await _db.Users
+                .FromSqlRaw(@"
+                    SELECT Id FROM Users
+                    WHERE Id < 101
+                    ORDER BY Id DESC
+                    LIMIT 1
+                    FOR UPDATE
+                ")
+                .Select(u => u.Id)
+                .FirstOrDefaultAsync();
+
+            var newAdminId = nextAdminId == 0 ? 1 : nextAdminId + 1;
+
+            if (newAdminId >= 101)
+                throw new InvalidOperationException("Admin ID range exceeded(1~100)");
+
+            user.Id = newAdminId;
+
+            _db.Users.Add(user);
+            await _db.SaveChangesAsync();
+
+            await tx.CommitAsync();
+        }
+
+        /// <summary>
         /// 새로운 사용자를 데이터베이스에 추가.
         /// </summary>
         /// <param name="user">추가할 사용자 엔티티</param>
-        public async Task AddAsync(UserEntity user)
+        public async Task AddUserAsync(UserEntity user)
         {
             _db.Users.Add(user);
             await _db.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// 지정된 사용자의 마지막 로그인 시간을 갱신.
+        /// </summary>
+        /// <param name="id">사용자 고유 식별자(ID)</param>
+        public async Task UpdateLastLoginAtAsync(long id)
+        {
+            await _db.Users
+                .Where(u => u.Id == id)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(u => u.LastLoginAt, u => DateTime.UtcNow));
         }
 
         /// <summary>
@@ -109,6 +159,8 @@ namespace JwtAuthCommon.Repositories
                 throw new Exception("User not found");
 
             user.IsActive = false;
+            user.IsActiveChangedAt = DateTime.UtcNow;
+
             await _db.SaveChangesAsync();
         }
 
@@ -123,6 +175,8 @@ namespace JwtAuthCommon.Repositories
                 throw new Exception("User not found");
 
             user.IsActive = true;
+            user.IsActiveChangedAt = null;
+
             await _db.SaveChangesAsync();
         }
     }

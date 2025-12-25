@@ -22,8 +22,14 @@ namespace JwtAuthCommon.Repositories
         /// <summary>사용자 ID로 조회</summary>
         Task<UserEntity?> GetByIdAsync(long id);
 
+        /// <summary>관리자 추가</summary>
+        Task AddAdminAsync(UserEntity user);
+
         /// <summary>사용자 추가</summary>
-        Task AddAsync(UserEntity user);
+        Task AddUserAsync(UserEntity user);
+
+        /// <summary>로그인 성공 시 LastLoginAt 갱신</summary>
+        Task UpdateLastLoginAtAsync(long id);
 
         /// <summary>사용자 삭제 처리</summary>
         Task DeleteUserAsync(long id);

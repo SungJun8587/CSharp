@@ -1,6 +1,6 @@
 {
 	"info": {
-		"_postman_id": "adb8779d-d6d7-49c4-b3a8-9643f13f2349",
+		"_postman_id": "6bdef03e-ac0d-4f82-a1e1-7301b5b43e34",
 		"name": "JWTAuthJson",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "4013172"
@@ -12,21 +12,11 @@
 				{
 					"name": "Register",
 					"request": {
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "{{accessToken}}",
-									"type": "string"
-								}
-							]
-						},
 						"method": "POST",
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\r\n  \"username\": \"{{username}}\",\r\n  \"password\": \"{{password}}\",\r\n  \"email\": \"{{email}}\"\r\n}\r\n",
+							"raw": "{\r\n  \"username\": \"admin01\",\r\n  \"password\": \"Pass123!\",\r\n  \"email\": \"admin01@example.com\"\r\n}\r\n",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -42,6 +32,66 @@
 								"api",
 								"admin",
 								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) \r",
+									"{\r",
+									"    let jsonData = pm.response.json();\r",
+									"    let accessToken = jsonData.token.accessToken;\r",
+									"    let refreshToken = jsonData.token.refreshToken;\r",
+									"\r",
+									"    if (accessToken) \r",
+									"    {\r",
+									"        pm.environment.set(\"accessToken\", accessToken);\r",
+									"    }\r",
+									"\r",
+									"    if (refreshToken)\r",
+									"    {\r",
+									"        pm.environment.set(\"refreshToken\", refreshToken);\r",
+									"    }\r",
+									"} \r",
+									"else\r",
+									"{\r",
+									"    console.log(\"Error response:\", pm.response.text());\r",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"username\": \"admin01\",\r\n  \"password\": \"Pass123!\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseURL}}/api/admin/login",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"login"
 							]
 						}
 					},
@@ -150,7 +200,7 @@
 						"method": "DELETE",
 						"header": [],
 						"url": {
-							"raw": "{{baseURL}}/api/admin/user/4",
+							"raw": "{{baseURL}}/api/admin/user/102",
 							"host": [
 								"{{baseURL}}"
 							],
@@ -158,7 +208,7 @@
 								"api",
 								"admin",
 								"user",
-								"4"
+								"102"
 							]
 						}
 					},
@@ -180,7 +230,7 @@
 						"method": "PATCH",
 						"header": [],
 						"url": {
-							"raw": "{{baseURL}}/api/admin/user/4",
+							"raw": "{{baseURL}}/api/admin/user/102",
 							"host": [
 								"{{baseURL}}"
 							],
@@ -188,7 +238,7 @@
 								"api",
 								"admin",
 								"user",
-								"4"
+								"102"
 							]
 						}
 					},

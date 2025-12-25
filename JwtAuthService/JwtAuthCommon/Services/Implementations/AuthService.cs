@@ -28,6 +28,9 @@ namespace JwtAuthCommon.Services
             if (user == null) return (null, null, 0);
             if (!BCrypt.Net.BCrypt.Verify(password, user.Password_Hash)) return (null, null, 0);
 
+            // 로그인 성공 시점
+            await _userRepo.UpdateLastLoginAtAsync(user.Id);
+
             var (access, refresh) = await _jwtService.GenerateTokensAsync(user, deviceId);
             return (access, refresh, 60 * 15);
         }

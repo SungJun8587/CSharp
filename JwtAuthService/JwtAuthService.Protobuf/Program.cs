@@ -121,8 +121,10 @@ builder.Services.AddAuthentication(options =>
             // 현재 요청 Endpoint 가져오기
             var endpoint = ctx.HttpContext.GetEndpoint();
 
-            // Endpoint가 없거나, [Authorize] 속성이 없으면 JWT 검사 건너뜀
-            if (endpoint == null || endpoint.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.IAuthorizeData>() == null)
+            // Endpoint가 없거나, [Authorize] 속성이 없으면, AllowAnonymous가 붙은 액션이면 JWT 검사 건너뜀
+            if (endpoint == null
+                || endpoint.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.IAuthorizeData>() == null
+                || endpoint.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.IAllowAnonymous>() != null)
             {
                 // 권한 필요 없는 페이지 → 검사 건너뜀
                 return;
@@ -185,7 +187,17 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// 6. 컨트롤러 및 Protobuf 포맷터 추가, Swagger 설정
+// 6. Authorization(권한) 정책 설정
+// - JWT 인증에 성공한 사용자 중
+// - Role Claim 이 "Admin" 인 사용자만 접근 가능하도록 제한
+// - [Authorize(Policy = "AdminOnly")] 로 컨트롤러/액션에서 사용
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireRole("Admin"));
+});
+
+// 7. 컨트롤러 및 Protobuf 포맷터 추가, Swagger 설정
 builder.Services.AddControllers(options =>
 {
     // Protobuf Input/Output 포맷터를 등록하여 Protobuf 통신을 활성화합니다.
@@ -199,33 +211,33 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// 7. DB 마이그레이션 적용 또는 DB 존재 확인
+// 8. DB 마이그레이션 적용 또는 DB 존재 확인
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
 }
 
-// 8. 개발 환경일 경우 Swagger UI 활성화
+// 9. 개발 환경일 경우 Swagger UI 활성화
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// 9. 라우팅, 인증, 권한 미들웨어 적용
+// 10. 라우팅, 인증, 권한 미들웨어 적용
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// 10. JWT 검증 미들웨어 적용
+// 11. JWT 검증 미들웨어 적용
 app.UseMiddleware<JwtValidationMiddleware>();
 
-// 11. 컨트롤러 엔드포인트 매핑
+// 12. 컨트롤러 엔드포인트 매핑
 app.MapControllers();
 
-// 12. 애플리케이션 실행
+// 13. 애플리케이션 실행
 app.Run();
 
-// 13. Program 클래스 부분 정의 (테스트 및 통합용)
+// 14. Program 클래스 부분 정의 (테스트 및 통합용)
 public partial class Program { }

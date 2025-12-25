@@ -12,9 +12,15 @@ CREATE TABLE `Users` (
     `Role` VARCHAR(50) NOT NULL COMMENT '사용자 역할',
     `IsActive` BIT(1) NOT NULL COMMENT '계정 활성화 여부(true/false : 유/무)', 
     `CreatedAt` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시간',
+    `LastLoginAt` DATETIME DEFAULT NULL COMMENT '마지막 로그인 시간',
+    `IsActiveChangedAt` DATETIME DEFAULT NULL COMMENT '계정 활성화 상태 변경 시간',
     PRIMARY KEY (`Id`),
     UNIQUE KEY `uq_Users_UserName` (`UserName`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='사용자 테이블';
+
+-- 관리자는 1 ~ 100, 일반 사용자는 101부터 시작
+ALTER TABLE `Users` AUTO_INCREMENT = 101;
+
 
 -- 리플레시 토큰 테이블
 CREATE TABLE `RefreshTokens` (
@@ -44,15 +50,19 @@ CREATE TABLE `BlacklistedAccessTokens` (
 
 
 -- Password : Pass123!
-INSERT INTO `Users` (`UserName`, `Password_Hash`, `Email`, `Role`, `IsActive`)
+INSERT INTO `Users` (`Id`, `UserName`, `Password_Hash`, `Email`, `Role`, `IsActive`)
 VALUES
-('user01', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user01@example.com', 'Admin', true),
-('user02', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user02@example.com', 'User', true),
-('user03', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user03@example.com', 'User', true),
-('user04', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user04@example.com', 'User', true),
-('user05', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user05@example.com', 'User', true),
-('user06', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user06@example.com', 'User', true),
-('user07', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user07@example.com', 'User', true),
-('user08', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user08@example.com', 'User', true),
-('user09', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user09@example.com', 'User', true),
-('user10', '$2a$12$J7GZrhUvD9g2VxfR1OiAGuN3kBbXjg5eQ8eI4eAbOeXtfLOcAfe6S', 'user10@example.com', 'User', true);
+(1, 'admin01', '$2a$11$8dI6GKmjwyKC5lJ/wdDTE.ANZaVtIlX54/n1TI5gHjTKpgIX8HYCe', 'admin01@example.com', 'Admin', true);
+
+INSERT INTO `Users` (`Id`, `UserName`, `Password_Hash`, `Email`, `Role`, `IsActive`)
+VALUES
+(101, 'user01', '$2a$11$8dI6GKmjwyKC5lJ/wdDTE.ANZaVtIlX54/n1TI5gHjTKpgIX8HYCe', 'user01@example.com', 'User', true),
+(102, 'user02', '$2a$11$8dI6GKmjwyKC5lJ/wdDTE.ANZaVtIlX54/n1TI5gHjTKpgIX8HYCe', 'user02@example.com', 'User', true),
+(103, 'user03', '$2a$11$8dI6GKmjwyKC5lJ/wdDTE.ANZaVtIlX54/n1TI5gHjTKpgIX8HYCe', 'user03@example.com', 'User', true),
+(104, 'user04', '$2a$11$8dI6GKmjwyKC5lJ/wdDTE.ANZaVtIlX54/n1TI5gHjTKpgIX8HYCe', 'user04@example.com', 'User', true),
+(105, 'user05', '$2a$11$8dI6GKmjwyKC5lJ/wdDTE.ANZaVtIlX54/n1TI5gHjTKpgIX8HYCe', 'user05@example.com', 'User', true),
+(106, 'user06', '$2a$11$8dI6GKmjwyKC5lJ/wdDTE.ANZaVtIlX54/n1TI5gHjTKpgIX8HYCe', 'user06@example.com', 'User', true),
+(107, 'user07', '$2a$11$8dI6GKmjwyKC5lJ/wdDTE.ANZaVtIlX54/n1TI5gHjTKpgIX8HYCe', 'user07@example.com', 'User', true),
+(108, 'user08', '$2a$11$8dI6GKmjwyKC5lJ/wdDTE.ANZaVtIlX54/n1TI5gHjTKpgIX8HYCe', 'user08@example.com', 'User', true),
+(109, 'user09', '$2a$11$8dI6GKmjwyKC5lJ/wdDTE.ANZaVtIlX54/n1TI5gHjTKpgIX8HYCe', 'user09@example.com', 'User', true),
+(110, 'user10', '$2a$11$8dI6GKmjwyKC5lJ/wdDTE.ANZaVtIlX54/n1TI5gHjTKpgIX8HYCe', 'user10@example.com', 'User', true);

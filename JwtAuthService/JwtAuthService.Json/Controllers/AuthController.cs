@@ -57,7 +57,7 @@ namespace JwtAuthService.Json.Controllers
             };
 
             // 3. 비동기 DB 저장
-            await _userRepo.AddAsync(user);
+            await _userRepo.AddUserAsync(user);
 
             // 4. 성공 응답 반환
             return Ok(new ResponseData() 
