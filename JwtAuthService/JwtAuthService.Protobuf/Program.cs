@@ -1,5 +1,6 @@
 using Google.Protobuf;
 using JwtAuthCommon.Data;
+using JwtAuthCommon.HostedServices;
 using JwtAuthCommon.Repositories;
 using JwtAuthCommon.Services;
 using JwtAuthService.Protobuf.Middleware;
@@ -67,13 +68,20 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 var redisConf = configuration.GetValue<string>("Redis:Configuration") ?? "localhost:6379";
 var multiplexer = ConnectionMultiplexer.Connect(redisConf);
 builder.Services.AddSingleton<IConnectionMultiplexer>(multiplexer);
+builder.Services.AddSingleton<BlacklistWriteQueue>();
 builder.Services.AddSingleton<ITokenBlacklistService, TokenBlacklistService>();
 
 // 3. Repositories 및 서비스 등록
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+builder.Services.AddScoped<IBlacklistedAccessTokenRepository, BlacklistedAccessTokenRepository>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+
+// 3-1. 블랙리스트 관련 백그라운드 서비스 등록                                                     
+builder.Services.AddHostedService<BlacklistWarmupHostedService>();     // 기동 시 DB → Redis 복원
+builder.Services.AddHostedService<BlacklistDbWriterHostedService>();   // 큐 배치 소비 → DB 기록
+builder.Services.AddHostedService<BlacklistCleanupHostedService>();    // 만료 DB 레코드 주기적 정리
 
 // 4. JWT 인증 설정
 var jwt = configuration.GetSection("Jwt");
