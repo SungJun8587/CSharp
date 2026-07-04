@@ -26,8 +26,14 @@ JwtAuthService/
 ├── JwtAuthCommon/                 # 공통 도메인 로직 (두 API 서버가 공유)
 │   ├── Data/AppDbContext.cs
 │   ├── Entities/                  # UserEntity, RefreshTokenEntity, BlacklistedAccessTokenEntity
-│   ├── Repositories/              # IUserRepository, IRefreshTokenRepository + 구현체
-│   ├── Services/                  # IAuthService, IJwtService, ITokenBlacklistService + 구현체
+│   ├── Repositories/              # IUserRepository, IRefreshTokenRepository,
+│   │                               #   IBlacklistedAccessTokenRepository + 구현체
+│   ├── Services/
+│   │   ├── BlacklistWriteQueue.cs # 블랙리스트 DB 기록용 인메모리 큐 (Channel 기반)
+│   │   ├── Interfaces/            # IAuthService, IJwtService, ITokenBlacklistService
+│   │   └── Implementations/       # AuthService, JwtService, TokenBlacklistService
+│   ├── HostedServices/            # BlacklistWarmupHostedService, BlacklistDbWriterHostedService,
+│   │                               #   BlacklistCleanupHostedService
 │   └── DB/Create_RefreshTokens_Table.sql
 ├── JwtAuthService.Json/           # JSON REST API
 │   ├── Controllers/               # Auth, Admin, User, Protected
