@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XlsxConverter", "XlsxConverter.csproj", "{1E030C96-935E-45EE-83C1-5424BD47E9C8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Core.Util", "..\Core\Util\Core.Util.csproj", "{F6D6B831-1EB1-4A51-9BAA-FC98C6203569}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XlsxConverter.Tests", "tests\XlsxConverter.Tests.csproj", "{A25C1506-9A80-46CF-A3C0-3628C38029A4}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1E030C96-935E-45EE-83C1-5424BD47E9C8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1E030C96-935E-45EE-83C1-5424BD47E9C8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1E030C96-935E-45EE-83C1-5424BD47E9C8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1E030C96-935E-45EE-83C1-5424BD47E9C8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F6D6B831-1EB1-4A51-9BAA-FC98C6203569}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F6D6B831-1EB1-4A51-9BAA-FC98C6203569}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F6D6B831-1EB1-4A51-9BAA-FC98C6203569}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F6D6B831-1EB1-4A51-9BAA-FC98C6203569}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A25C1506-9A80-46CF-A3C0-3628C38029A4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A25C1506-9A80-46CF-A3C0-3628C38029A4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A25C1506-9A80-46CF-A3C0-3628C38029A4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A25C1506-9A80-46CF-A3C0-3628C38029A4}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

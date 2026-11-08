@@ -1,0 +1,15 @@
+{
+  "Host": "127.0.0.1",
+  "Port": 7000,
+  "CharId": 900001,
+  "MultiInstance": true,
+  "ZoneId": 1,
+  "HeroId": 1,
+  "DataDir": "GameData",
+  "Auto": false,
+  "PixelsPerUnit": 20,
+  "WindowWidth": 1280,
+  "WindowHeight": 800,
+  "ConnectTimeoutMs": 3000,
+  "MoveIntervalMs": 120
+}

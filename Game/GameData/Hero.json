@@ -1,0 +1,44 @@
+{
+  "Hero": [
+    {
+      "Id": 1,
+      "Name": "전사",
+      "MaxHp": 450,
+      "Attack": 12,
+      "Defense": 3,
+      "AttackRange": 2.5,
+      "AttackIntervalMs": 800,
+      "Speed": 6.0
+    },
+    {
+      "Id": 2,
+      "Name": "궁수",
+      "MaxHp": 300,
+      "Attack": 15,
+      "Defense": 1,
+      "AttackRange": 12.0,
+      "AttackIntervalMs": 1000,
+      "Speed": 6.5
+    },
+    {
+      "Id": 3,
+      "Name": "마법사",
+      "MaxHp": 240,
+      "Attack": 24,
+      "Defense": 0,
+      "AttackRange": 8.0,
+      "AttackIntervalMs": 1500,
+      "Speed": 5.5
+    },
+    {
+      "Id": 4,
+      "Name": "창술사",
+      "MaxHp": 360,
+      "Attack": 16,
+      "Defense": 2,
+      "AttackRange": 3.6,
+      "AttackIntervalMs": 800,
+      "Speed": 6.5
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 콘솔 테스트: 패킷 크기(C++ sizeof 대조), 파서, 월드 모델, 데이터 로더, 가짜 Gateway 왕복, 자동 전투, 데모 시뮬레이션.
+       실행: dotnet run  또는 빌드된 GameViewer.Tests.exe (종료 코드 0 = 전부 통과) -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <RootNamespace>GameViewer.Tests</RootNamespace>
+    <AssemblyName>GameViewer.Tests</AssemblyName>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Core\GameViewer.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="GameData\*.json" Link="GameData\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="cpp_packet_sizes.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

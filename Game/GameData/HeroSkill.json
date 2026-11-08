@@ -1,0 +1,96 @@
+{
+  "HeroSkill": [
+    {
+      "HeroId": 1,
+      "SkillId": 1
+    },
+    {
+      "HeroId": 1,
+      "SkillId": 2
+    },
+    {
+      "HeroId": 1,
+      "SkillId": 7
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 3
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 4
+    },
+    {
+      "HeroId": 3,
+      "SkillId": 5
+    },
+    {
+      "HeroId": 3,
+      "SkillId": 6
+    },
+    {
+      "HeroId": 1,
+      "SkillId": 16
+    },
+    {
+      "HeroId": 1,
+      "SkillId": 17
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 15
+    },
+    {
+      "HeroId": 3,
+      "SkillId": 12
+    },
+    {
+      "HeroId": 3,
+      "SkillId": 13
+    },
+    {
+      "HeroId": 3,
+      "SkillId": 14
+    },
+    {
+      "HeroId": 4,
+      "SkillId": 18
+    },
+    {
+      "HeroId": 4,
+      "SkillId": 19
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 20
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 21
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 22
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 23
+    },
+    {
+      "HeroId": 4,
+      "SkillId": 24
+    },
+    {
+      "HeroId": 4,
+      "SkillId": 25
+    },
+    {
+      "HeroId": 4,
+      "SkillId": 26
+    },
+    {
+      "HeroId": 4,
+      "SkillId": 27
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "Boss": [
+    {
+      "Id": 1,
+      "MonsterId": 9,
+      "Name": "오우거",
+      "EnrageAfterMs": 180000,
+      "EnrageStatusId": 5
+    },
+    {
+      "Id": 2,
+      "MonsterId": 10,
+      "Name": "왕 슬라임",
+      "EnrageAfterMs": 0,
+      "EnrageStatusId": 0
+    }
+  ]
+}

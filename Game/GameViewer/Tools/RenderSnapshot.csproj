@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 서버/창 없이 데모 전투를 PNG 로 저장하는 도구 (렌더러 확인용).
+       실행: RenderSnapshot.exe <GameData폴더> <출력폴더> 4 9 15   (초 단위로 여러 장) -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>RenderSnapshot</AssemblyName>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\App\Render\*.cs" Link="Render\%(Filename)%(Extension)" />
+    <Reference Include="System.Drawing" />
+    <ProjectReference Include="..\Core\GameViewer.Core.csproj" />
+  </ItemGroup>
+
+</Project>

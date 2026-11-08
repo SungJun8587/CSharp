@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 전투 뷰어 창(WinForms + GDI+). .NET Framework 4.8 대상이라 VS 의 ".NET 데스크톱 개발" 워크로드만 있으면 빌드된다.
+       .NET 8 이상으로 올리려면 TargetFramework 를 net8.0-windows 로 바꾸고 UseWindowsForms 를 true 로 둔다. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <RootNamespace>GameViewer.App</RootNamespace>
+    <AssemblyName>GameViewer.App</AssemblyName>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>disable</Nullable>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Core\GameViewer.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\GameViewer.json" Link="GameViewer.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 이미지 에셋(선택). Assets\sprites.json 에 적은 종류만 이미지로 그린다 -->
+    <None Include="..\Assets\**" Link="Assets\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

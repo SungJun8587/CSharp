@@ -1,0 +1,40 @@
+{
+  "HeroSkill": [
+    {
+      "HeroId": 1,
+      "SkillId": 1
+    },
+    {
+      "HeroId": 1,
+      "SkillId": 2
+    },
+    {
+      "HeroId": 1,
+      "SkillId": 7
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 3
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 4
+    },
+    {
+      "HeroId": 3,
+      "SkillId": 5
+    },
+    {
+      "HeroId": 3,
+      "SkillId": 6
+    },
+    {
+      "HeroId": 4,
+      "SkillId": 18
+    },
+    {
+      "HeroId": 4,
+      "SkillId": 19
+    }
+  ]
+}

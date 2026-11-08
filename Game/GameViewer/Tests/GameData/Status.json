@@ -1,0 +1,56 @@
+{
+  "Status": [
+    {
+      "Id": 1,
+      "Name": "화상",
+      "Kind": "Dot",
+      "Target": "Hit",
+      "DurationMs": 6000,
+      "TickMs": 1000,
+      "DamagePercent": 30,
+      "FlatDamage": 0,
+      "AttackPercent": 0,
+      "DefensePercent": 0,
+      "SpeedPercent": 0
+    },
+    {
+      "Id": 2,
+      "Name": "출혈",
+      "Kind": "Dot",
+      "Target": "Hit",
+      "DurationMs": 5000,
+      "TickMs": 1000,
+      "DamagePercent": 25,
+      "FlatDamage": 0,
+      "AttackPercent": 0,
+      "DefensePercent": 0,
+      "SpeedPercent": 0
+    },
+    {
+      "Id": 3,
+      "Name": "전투 함성",
+      "Kind": "Buff",
+      "Target": "Self",
+      "DurationMs": 8000,
+      "TickMs": 0,
+      "DamagePercent": 0,
+      "FlatDamage": 0,
+      "AttackPercent": 30,
+      "DefensePercent": 20,
+      "SpeedPercent": 0
+    },
+    {
+      "Id": 4,
+      "Name": "둔화",
+      "Kind": "Buff",
+      "Target": "Hit",
+      "DurationMs": 3000,
+      "TickMs": 0,
+      "DamagePercent": 0,
+      "FlatDamage": 0,
+      "AttackPercent": 0,
+      "DefensePercent": 0,
+      "SpeedPercent": -30
+    }
+  ]
+}

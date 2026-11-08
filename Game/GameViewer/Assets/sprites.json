@@ -1,0 +1,124 @@
+{
+  "sprites": [
+    {
+      "kind": "monster",
+      "template": 9,
+      "pattern": "demon/{0:000}.png",
+      "angles": 18,
+      "height": 4.6
+    },
+    {
+      "kind": "monster",
+      "template": 2,
+      "pattern": "mushroom/{0:000}.png",
+      "angles": 18,
+      "height": 3.2
+    },
+    {
+      "kind": "monster",
+      "template": 3,
+      "pattern": "wolf4/{0:000}.png",
+      "angles": 4,
+      "height": 2.3
+    },
+    {
+      "kind": "monster",
+      "template": 4,
+      "pattern": "bat/{0:000}.png",
+      "angles": 4,
+      "height": 2.3
+    },
+    {
+      "kind": "hero",
+      "template": 1,
+      "pattern": "warrior/{0:000}.png",
+      "attackFrames": 5,
+      "attackPattern": "warrior/atk_{0:000}_{1}.png",
+      "weapon": {
+        "poses": 6,
+        "pad": 160,
+        "backPattern": "warrior/sword_{0}_{1:000}_b.png",
+        "frontPattern": "warrior/sword_{0}_{1:000}_f.png",
+        "anchors": "warrior/anchors.json"
+      },
+      "angles": 18,
+      "height": 3.33,
+      "walkFrames": 8,
+      "walkPattern": "warrior/walk_{0:000}_{1:00}.png"
+    },
+    {
+      "kind": "hero",
+      "template": 2,
+      "pattern": "archer/{0:000}.png",
+      "attackFrames": 5,
+      "attackPattern": "archer/atk_{0:000}_{1}.png",
+      "weapon": {
+        "poses": 6,
+        "pad": 160,
+        "backPattern": "archer/bow_{0}_{1:000}_b.png",
+        "frontPattern": "archer/bow_{0}_{1:000}_f.png",
+        "anchors": "archer/anchors.json"
+      },
+      "angles": 18,
+      "height": 3.14,
+      "walkFrames": 8,
+      "walkPattern": "archer/walk_{0:000}_{1:00}.png"
+    },
+    {
+      "kind": "hero",
+      "template": 3,
+      "pattern": "mage/{0:000}.png",
+      "attackFrames": 5,
+      "attackPattern": "mage/atk_{0:000}_{1}.png",
+      "weapon": {
+        "poses": 6,
+        "pad": 160,
+        "backPattern": "mage/staff_{0}_{1:000}_b.png",
+        "frontPattern": "mage/staff_{0}_{1:000}_f.png",
+        "anchors": "mage/anchors.json"
+      },
+      "angles": 18,
+      "height": 3.55,
+      "walkFrames": 8,
+      "walkPattern": "mage/walk_{0:000}_{1:00}.png"
+    },
+    {
+      "kind": "hero",
+      "template": 4,
+      "pattern": "lancer/{0:000}.png",
+      "attackFrames": 5,
+      "attackPattern": "lancer/atk_{0:000}_{1}.png",
+      "weapon": {
+        "poses": 6,
+        "pad": 160,
+        "backPattern": "lancer/spear_{0}_{1:000}_b.png",
+        "frontPattern": "lancer/spear_{0}_{1:000}_f.png",
+        "anchors": "lancer/anchors.json"
+      },
+      "angles": 18,
+      "height": 2.82,
+      "walkFrames": 8,
+      "walkPattern": "lancer/walk_{0:000}_{1:00}.png"
+    },
+    {
+      "kind": "monster",
+      "template": 11,
+      "pattern": "skelwing/{0:000}.png",
+      "angles": 4,
+      "height": 3.4
+    },
+    {
+      "kind": "monster",
+      "template": 1,
+      "pattern": "slime/{0:000}.png",
+      "angles": 18,
+      "height": 2.8
+    },
+    {
+      "kind": "tree",
+      "pattern": "spruce/{0:000}.png",
+      "angles": 18,
+      "height": 2.6
+    }
+  ]
+}
