@@ -21,6 +21,8 @@ namespace GameViewer.Core.Protocol
 		public const ushort MaxServerPacketBytes = 8192;
 		// 존 서버 이름 필드 바이트 크기 (UTF-8, NUL 포함)
 		public const int ServerNameBytes = 32;
+		// 채팅 본문 필드 바이트 크기 (UTF-8, NUL 포함). 한글은 글자당 3바이트라 약 42자.
+		public const int ChatTextBytes = 128;
 		// Gateway가 존 서버에 지시하는 기본 하트비트 주기(ms).
 		// Gateway는 하트비트가 이 주기의 몇 배 이상 끊기면 존 서버를 죽은 것으로 보고 연결을 끊는다.
 		public const uint DefaultHeartbeatIntervalMs = 2000;
@@ -66,6 +68,7 @@ namespace GameViewer.Core.Protocol
 		ZoneError = 2,
 		InvalidCharId = 3,	// 캐릭터 ID가 몬스터 전용 대역(최상위 비트)을 침범
 		InvalidHero = 4,	// 선택한 영웅 ID가 영웅 데이터에 없음
+		ZoneFull = 5,	// 존 정원 초과(Capacity 도달)
 	}
 
 	// 존 서버가 플레이어를 존에서 내보낸 사유. ZoneKickNotifyPacket::reason에 설정됩니다.
@@ -73,6 +76,7 @@ namespace GameViewer.Core.Protocol
 	{
 		ZoneError = 1,
 		ZoneStopping = 2,
+		RateLimited = 3,	// 요청이 너무 많거나 비정상 패킷이 누적됨
 	}
 
 	// 위치 보정 사유. ZcCorrectPosNotifyPacket::reason에 설정됩니다.
@@ -85,6 +89,7 @@ namespace GameViewer.Core.Protocol
 		Dead = 5,	// 사망 상태에서는 이동할 수 없음
 		Blocked = 6,	// 장애물에 막혀 이동할 수 없음
 		Stunned = 7,	// 기절 상태에서는 이동할 수 없음
+		Rooted = 8,	// 속박 상태에서는 이동할 수 없음
 	}
 
 	// 공격 요청 거부 사유. ZcAttackRejectNotifyPacket::reason에 설정됩니다.
@@ -112,6 +117,7 @@ namespace GameViewer.Core.Protocol
 		InvalidTarget = 6,	// 공격할 수 없는 대상 (사망, 자기 자신, PvP 금지, 무적 등)
 		Casting = 7,	// 이미 다른 스킬을 시전 중
 		Stunned = 8,	// 기절 상태에서는 스킬을 쓸 수 없음
+		NotEnoughMp = 9,	// MP가 모자람
 	}
 
 	// 스킬 시전 취소 사유 (ZcSkillCancelNotify.reason)
@@ -123,6 +129,33 @@ namespace GameViewer.Core.Protocol
 		OutOfRange = 4,	// 완료 시점에 대상이 사거리 밖으로 벗어남
 		NoLineOfSight = 5,	// 완료 시점에 장애물이 가로막음
 		Stunned = 6,	// 시전 중 기절함
+	}
+
+	// 줍기 요청 거부 사유 (ZcPickupRejectNotify.reason)
+	public enum PickupRejectReason : byte
+	{
+		NotFound = 1,	// 없거나 이미 누가 주웠거나 아이템이 아닌 엔티티 (존재 여부를 구분하지 않는다)
+		OutOfRange = 2,	// 줍기 거리 밖
+		NotOwner = 3,	// 드롭 소유권 시간 중이고 내 것이 아님
+		InventoryFull = 4,	// 가방이 가득 참 (종류 수 또는 한 종류의 최대 수량)
+		Dead = 5,	// 내가 사망 상태
+	}
+
+	// 채팅 채널 (ZcChatReq/ZcChatNotify.channel)
+	public enum ChatChannel : byte
+	{
+		Say = 1,	// 근처: 내 시야(AOI) 안 플레이어 전원
+		Zone = 2,	// 존 전체. 쿨다운이 있다
+		Whisper = 3,	// 귓속말: 같은 존에 있는 특정 플레이어 한 명(targetId)
+	}
+
+	// 채팅 요청 거부 사유 (ZcChatRejectNotify.reason)
+	public enum ChatRejectReason : byte
+	{
+		InvalidText = 1,	// 비었거나 제어 문자/잘못된 UTF-8이 섞임
+		UnknownChannel = 2,	// 알 수 없는 채널
+		NoTarget = 3,	// 귓속말 대상이 이 존에 없거나 자기 자신 (존재 여부를 구분하지 않는다)
+		Cooldown = 4,	// 존 전체 채팅 쿨다운 중
 	}
 
 	// 클라이언트 <-> Gateway 패킷 타입 (1 ~ 999)
@@ -175,5 +208,14 @@ namespace GameViewer.Core.Protocol
 		ZcProjectileNotify = 2018,	// Zone -> Client, 투사체 발사(시전자 주변 전원에게). 착탄은 ZcSkillImpactNotify
 		ZcSkillImpactNotify = 2019,	// Zone -> Client, 투사체 착탄(시전자 주변 전원에게). 피해는 ZcDamageNotify로 따로 간다
 		ZcStatusNotify = 2020,	// Zone -> Client, 상태 효과 적용/갱신/해제(엔티티 주변 전원에게)
+		ZcPingReq = 2021,	// Client -> Zone, 왕복 지연 측정 요청
+		ZcPongNotify = 2022,	// Zone -> Client, 핑 응답(요청 값 에코 + 존 시간)
+		ZcStatNotify = 2023,	// Zone -> Client, 내 체력/MP 현황(본인에게만)
+		ZcPickupReq = 2024,	// Client -> Zone, 지면 아이템 줍기 요청
+		ZcPickupRejectNotify = 2025,	// Zone -> Client, 줍기 거부 사유(요청한 본인에게만)
+		ZcItemGainNotify = 2026,	// Zone -> Client, 아이템 획득(줍기 성공, 본인에게만)
+		ZcChatReq = 2027,	// Client -> Zone, 채팅 요청(채널 + 귓속말 대상 + 본문)
+		ZcChatNotify = 2028,	// Zone -> Client, 채팅 전달(채널별 수신자에게. 귓속말은 보낸 사람에게도 에코)
+		ZcChatRejectNotify = 2029,	// Zone -> Client, 채팅 거부 사유(요청한 본인에게만)
 	}
 }

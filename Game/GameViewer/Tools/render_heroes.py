@@ -16,6 +16,11 @@ import numpy as np
 from PIL import Image
 
 SS = 2
+SLIM = bool(int(__import__('os').environ.get('HERO_SLIM', '0')))       # 1: 전사 체형을 날렵하게(머리 작게, 몸통 가늘게)
+SLIM_P = {'warrior': (0.84, 0.88, 0.93), 'archer': (0.86, 0.90, 0.94), 'mage': (0.86, 0.92, 0.95), 'lancer': (0.84, 0.88, 0.93)}   # 직업별 (머리, 몸통 좌우, 몸통 앞뒤) 비율
+LOOK = bool(int(__import__('os').environ.get('HERO_LOOK', '0')))       # 1: 윗눈꺼풀/눈썹 기울기와 직업별 큰 실루엣 장비
+BROW = {'warrior': 0.16, 'lancer': 0.08, 'archer': 0.05, 'mage': 0.0}    # 평상시 눈썹 기울기(안쪽이 내려가 사납게)
+METAL = bool(int(__import__('os').environ.get('HERO_METAL', '0')))     # 1: 금속 반사 재질 셰이딩(재렌더할 때 켠다)
 SZ = 400
 N = SZ * SS
 PXU = 96 * SS
@@ -95,6 +100,7 @@ class Builder:
 def lerp(a, b, t): return a + (b - a) * t
 
 
+IDLE_BREATH = 0.035       # 대기 숨쉬기: 윗몸이 오르내리는 높이(렌더 단위)
 WALK_STEP = 1.0        # 딛은 발이 땅 위를 뒤로 가는 길이(렌더 단위). 뷰어는 프레임 한 장당 WALK_STEP*PXU/(STANCE*프레임 수) 원본 픽셀씩 걷는다
 WALK_ARM = 0.50        # 팔 흔들림
 WALK_SHIFT = 0.045     # 체중 이동: 몸통 위쪽이 좌우로 움직이는 거리
@@ -185,24 +191,48 @@ def arm_pose(ph, side, moving, amp, abd=0.12, bend=0.35, fixed=None):
     return sh, elbow, hand
 
 
-def head(b, hair, eye, eyec2=None, tilt=0.0):
-    """얼굴(피부, 눈, 입). 중심 (0,2.52,0)."""
+def head(b, hair, eye, eyec2=None, tilt=0.0, expr='normal', brow=0.0):
+    """얼굴(피부, 눈, 입). 중심 (0,2.52,0).
+    expr: normal 기본 / blink 눈 감음 / hurt 아파서 찡그림(눈 ><, 입 벌림) / shout 기합(눈 치켜뜸, 입 크게) / dead 쓰러짐(눈 X, 입 살짝)."""
     b.group()
     hc = np.array([0, 2.52, 0.0])
     b.E(hc, (0.285, 0.30, 0.285), SKIN, sh=SH_SKIN)
     b.E(hc + [0, -0.12, 0.07], (0.215, 0.20, 0.21), SKIN, sh=SH_SKIN)          # 턱
     b.E(hc + [0, -0.24, 0.0], (0.07, 0.11, 0.07), SKIN, sh=SH_SKIN)             # 목
+    LINE = C(60, 34, 46)
     for s in (-1, 1):
         b.E(hc + [s * 0.285, -0.02, -0.02], (0.04, 0.07, 0.05), SKIN, sh=SH_SKIN)  # 귀
-        # 눈: 흰자 -> 홍채 -> 동공 -> 하이라이트
         ex, ey, ez = s * 0.122, 2.48, 0.232
-        b.E((ex, ey, ez), (0.077, 0.100, 0.036), C(250, 248, 250), sh=np.ones(3) * 0.9)
-        b.E((ex, ey - 0.005, ez + 0.012), (0.063, 0.088, 0.031), eye, sh=np.ones(3) * 0.8)
-        b.E((ex, ey - 0.012, ez + 0.026), (0.034, 0.056, 0.021), C(40, 20, 34), sh=np.ones(3) * 0.8)
-        b.E((ex - s * 0.022, ey + 0.035, ez + 0.037), (0.019, 0.022, 0.013), C(255, 255, 255), emis=True)
-        b.E((ex, ey + 0.088, ez - 0.004), (0.082, 0.018, 0.03), hair * 0.55, sh=np.ones(3) * 0.8)     # 눈썹/속눈썹 선
+        if expr in ('normal', 'shout'):
+            # 눈: 흰자 -> 홍채 -> 동공 -> 하이라이트 (기합 때는 위가 눌린 눈 = 흰자/홍채를 납작하게)
+            k = 0.62 if expr == 'shout' else 1.0
+            b.E((ex, ey - (0.016 if expr == 'shout' else 0), ez), (0.077, 0.100 * k, 0.036), C(250, 248, 250), sh=np.ones(3) * 0.9)
+            b.E((ex, ey - 0.005 - (0.016 if expr == 'shout' else 0), ez + 0.012), (0.063, 0.088 * k, 0.031), eye, sh=np.ones(3) * 0.8)
+            b.E((ex, ey - 0.012 - (0.016 if expr == 'shout' else 0), ez + 0.026), (0.034, 0.056 * k, 0.021), C(40, 20, 34), sh=np.ones(3) * 0.8)
+            b.E((ex - s * 0.022, ey + 0.035 * k - (0.016 if expr == 'shout' else 0), ez + 0.037), (0.019, 0.022, 0.013), C(255, 255, 255), emis=True)
+            if LOOK:                                                                                       # 윗눈꺼풀 선: 눈매를 또렷하게
+                b.E((ex + s * 0.004, ey + 0.083 * k - (0.016 if expr == 'shout' else 0), ez + 0.03), (0.088, 0.016, 0.026), LINE, rot('z', -s * 0.1), sh=np.ones(3) * 0.8)
+        elif expr == 'blink':
+            b.E((ex, ey - 0.03, ez + 0.01), (0.075, 0.014, 0.03), LINE, sh=np.ones(3) * 0.8)                  # 감은 눈 = 가는 선
+        elif expr == 'hurt':
+            # ">  <" 모양: 두 줄이 안쪽을 향해 만난다
+            for sg in (-1, 1):
+                b.seg((ex - s * 0.06, ey + 0.05 * sg, ez + 0.012), (ex + s * 0.05, ey, ez + 0.012), 0.013, 0.013, LINE, sh=np.ones(3) * 0.8)
+        else:   # dead: X
+            for sg in (-1, 1):
+                b.seg((ex - 0.055, ey + 0.055 * sg, ez + 0.012), (ex + 0.055, ey - 0.055 * sg, ez + 0.012), 0.012, 0.012, LINE, sh=np.ones(3) * 0.8)
+        brow_dy = 0.088 if expr in ('normal', 'blink') else (0.062 if expr == 'shout' else 0.078)
+        b.E((ex, ey + brow_dy, ez - 0.004), (0.082, 0.018, 0.03), hair * 0.55, rot('z', (0.28 * s if expr == 'shout' else (-0.2 * s if expr in ('hurt', 'dead') else brow * s))), sh=np.ones(3) * 0.8)     # 눈썹
         b.E((s * 0.19, 2.42, 0.2), (0.045, 0.025, 0.02), C(255, 160, 160), sh=np.ones(3) * 0.95)     # 볼터치
-    b.E((0, 2.395, 0.262), (0.028, 0.009, 0.012), C(190, 80, 90), sh=np.ones(3) * 0.8)                # 입
+    if expr == 'shout':
+        b.E((0, 2.385, 0.258), (0.055, 0.04, 0.018), C(120, 40, 56), sh=np.ones(3) * 0.8)              # 크게 벌린 입
+        b.E((0, 2.368, 0.268), (0.034, 0.016, 0.012), C(236, 120, 130), sh=np.ones(3) * 0.9)
+    elif expr == 'hurt':
+        b.E((0, 2.385, 0.258), (0.036, 0.04, 0.016), C(120, 40, 56), sh=np.ones(3) * 0.8)              # "앗" 하는 입
+    elif expr == 'dead':
+        b.E((0, 2.39, 0.262), (0.03, 0.016, 0.012), C(120, 40, 56), sh=np.ones(3) * 0.8)
+    else:
+        b.E((0, 2.395, 0.262), (0.028, 0.009, 0.012), C(190, 80, 90), sh=np.ones(3) * 0.8)            # 입
     b.E((0, 2.44, 0.285), (0.012, 0.018, 0.012), SKIN_L, sh=SH_SKIN)                                   # 코
 
 
@@ -218,11 +248,99 @@ def hair_cap(b, hair, hair_l, front=True):
             b.E(hc + [s * 0.285, -0.12, 0.07], (0.065, 0.24, 0.085), hair, spec=0.5)
 
 
-def build(name, ph, moving, pose=None):
+def gear(b, name, bob, sway, hair, cloth, cloth2, trim, metal):
+    """몸 위에 얹는 장비 디테일(전부 몸 쪽 그림). 무기와 팔 자세에는 손대지 않으므로 앵커/공격 그림과 어긋나지 않는다."""
+    b.part = 0
+    b.group()
+    brown, brown_d = C(128, 84, 56), C(88, 58, 42)
+    if name == 'warrior':
+        for s in (-1, 1):
+            b.E((s * 0.085, 1.99 + bob, 0.165), (0.088, 0.078, 0.07), metal, spec=0.8)                  # 흉갑 컵
+            b.E((s * 0.22, 1.19 + bob, 0.13), (0.095, 0.16, 0.05), metal, rot('z', s * 0.22), spec=0.7)   # 허리 판금
+            b.E((s * 0.22, 1.05 + bob, 0.13), (0.07, 0.03, 0.05), trim, rot('z', s * 0.22), spec=0.8)
+        b.E((0, 1.87 + bob, 0.19), (0.17, 0.022, 0.05), trim, spec=0.8)                                  # 흉갑 아랫단
+        b.E((0, 1.99 + bob, 0.225), (0.03, 0.04, 0.02), C(255, 214, 120), emis=True)                      # 가슴 보석
+        b.E((0, 1.10 + bob, 0.28), (0.085, 0.21, 0.03), cloth2, spec=0.15)                               # 앞 자락
+        b.E((0, 0.93 + bob, 0.29), (0.085, 0.022, 0.032), trim, spec=0.7)
+        for k in range(5):                                                                              # 등 뒤 짧은 망토
+            t = k / 4.0
+            b.E((0, 2.08 - 0.62 * t + bob, -0.21 - 0.05 * t - sway * 0.04 * t), (0.25 + 0.07 * t, 0.17, 0.04), cloth * (0.85 - 0.12 * t), rot('x', 0.12 - 0.14 * t))
+        b.E((0, 1.97 + bob, 0.135), (0.175, 0.17, 0.075), cloth * 1.08, spec=0.45)                       # 흉갑 판
+        b.E((0, 2.12 + bob, 0.115), (0.19, 0.035, 0.07), trim, spec=0.85)                                 # 흉갑 윗단 금테
+        b.E((0, 1.97 + bob, 0.205), (0.022, 0.15, 0.02), trim, spec=0.85)                                 # 가운데 세로 금선
+        b.E((0, 1.25 + bob, 0.285), (0.06, 0.06, 0.03), trim, spec=0.9)                                   # 허리띠 버클
+        b.E((0, 1.25 + bob, 0.30), (0.03, 0.03, 0.02), C(255, 214, 120), emis=True)
+        for s in (-1, 1):
+            b.E((s * 0.11, 0.98 + bob, 0.285), (0.05, 0.11, 0.03), metal, rot('z', s * 0.12), spec=0.75)  # 앞 허리갑옷 쪽판
+            b.E((s * 0.11, 0.89 + bob, 0.29), (0.045, 0.02, 0.03), trim, spec=0.85)
+        for k in range(2):                                                                              # 망토 아랫단 금테
+            b.E((0, 1.46 + bob - k * 0.0, -0.285 - sway * 0.04), (0.31, 0.02, 0.04), trim, rot('x', -0.02), spec=0.8) if k == 0 else None
+        if LOOK:
+            for s in (-1, 1):                                                                           # 머리띠 양옆 금빛 날개
+                for j, (ang, L) in enumerate(((1.05, 0.46), (0.62, 0.40))):
+                    b.cone((s * 0.30, 2.66 + 0.05 * j + bob, 0.06), 0.045, 0.0, L, trim, R=rot('z', -s * ang), spec=0.9)
+        b.E((0, 2.69 + bob, 0.17), (0.31, 0.022, 0.28), trim, rot('x', 0.16), spec=0.9)              # 머리띠 금속
+        b.E((0, 2.71 + bob, 0.31), (0.04, 0.045, 0.02), C(255, 214, 120), emis=True)
+    elif name == 'archer':
+        b.seg((-0.2, 2.13 + bob, 0.07), (0.18, 1.58 + bob, 0.17), 0.028, 0.028, brown, n=4, spec=0.3)        # 가슴 가죽 끈
+        b.E((0.0, 1.88 + bob, 0.2), (0.04, 0.035, 0.02), trim, spec=0.8)                                  # 끈 버클
+        b.E((0.26, 1.42 + bob, 0.12), (0.075, 0.08, 0.06), brown, spec=0.2)                               # 허리 주머니
+        b.E((0.26, 1.48 + bob, 0.17), (0.03, 0.03, 0.02), trim, spec=0.8)
+        b.seg((-0.27, 1.44 + bob, 0.1), (-0.30, 1.14 + bob, 0.16), 0.03, 0.022, brown_d, n=2, spec=0.3)   # 단검집
+        b.E((-0.27, 1.5 + bob, 0.1), (0.035, 0.05, 0.035), trim, spec=0.8)
+        b.E((0, 2.18 + bob, 0.03), (0.215, 0.07, 0.19), cloth2, spec=0.05)                                 # 털 목도리
+        for s in (-1, 1):
+            b.E((s * 0.29, 2.08 + bob, 0.0), (0.08, 0.05, 0.12), brown, spec=0.3)                        # 가죽 어깨받이
+            b.E((s * 0.31, 2.05 + bob, 0.0), (0.05, 0.02, 0.1), trim, spec=0.7)
+        b.E((0, 1.36 + bob, 0.15), (0.215, 0.032, 0.13), brown, spec=0.3)                                 # 가죽 허리띠
+        b.E((0, 1.36 + bob, 0.255), (0.05, 0.05, 0.02), trim, spec=0.9)                                  # 허리띠 버클
+        b.seg((0.26, 2.84 + bob, 0.04), (0.38, 3.08 + bob, -0.06), 0.03, 0.006, C(120, 200, 120), n=2, spec=0.3)   # 깃털
+        b.seg((0.27, 2.84 + bob, 0.04), (0.45, 2.98 + bob, -0.04), 0.025, 0.006, C(255, 246, 210), n=2, spec=0.3)
+    elif name == 'mage':
+        b.E((0, 2.17 + bob, 0.03), (0.27, 0.06, 0.21), cloth2, spec=0.2)                                   # 어깨 망토 깃
+        b.E((0, 2.14 + bob, 0.05), (0.275, 0.018, 0.215), trim, spec=0.8)
+        b.E((0, 2.06 + bob, 0.205), (0.045, 0.045, 0.03), C(140, 230, 255), emis=True)                    # 가슴 보주
+        b.E((0, 2.06 + bob, 0.19), (0.062, 0.062, 0.02), trim, spec=0.9)
+        for (x, y) in ((-0.20, 0.62), (0.20, 0.62), (-0.15, 0.95), (0.15, 0.95), (0.0, 0.5)):             # 로브 별 무늬
+            r = 0.56 - (y - 0.36) / 1.1 * 0.31
+            z = r * 0.72 * math.sqrt(max(0.0, 1 - (x / r) ** 2))
+            b.E((x, y + bob, z + 0.012), (0.034, 0.034, 0.012), C(255, 224, 130), emis=True)
+        b.seg((-0.04, 2.1 + bob, 0.1), (0.24, 1.46 + bob, 0.2), 0.035, 0.035, cloth2, n=3, spec=0.2)     # 어깨띠
+        b.E((-0.27, 1.40 + bob, 0.1), (0.04, 0.1, 0.04), C(236, 226, 196), rot('z', 1.3), spec=0.2)        # 두루마리
+        b.E((-0.27, 1.40 + bob, 0.1), (0.045, 0.012, 0.045), trim, rot('z', 1.3), spec=0.8)
+        b.E((0, 1.46 + bob, 0.02), (0.235, 0.035, 0.17), trim, spec=0.7)                                     # 허리 장식띠
+        b.E((0, 1.46 + bob, 0.18), (0.05, 0.05, 0.03), C(140, 230, 255), emis=True)
+        b.E((0, 1.46 + bob, 0.165), (0.065, 0.065, 0.02), trim, spec=0.9)
+    elif name == 'lancer':
+        for s in (-1, 1):
+            b.E((s * 0.085, 1.99 + bob, 0.165), (0.088, 0.078, 0.07), metal, spec=0.9)                   # 흉갑 컵
+            b.E((s * 0.21, 1.17 + bob, 0.15), (0.09, 0.16, 0.05), metal, rot('z', s * 0.2), spec=0.8)    # 허리 판금
+            b.E((s * 0.21, 1.03 + bob, 0.15), (0.07, 0.025, 0.05), trim, rot('z', s * 0.2), spec=0.8)
+            b.seg((s * 0.27 + 0.0, 2.80 + bob, 0.06), (s * 0.52, 3.02 + bob, -0.04), 0.035, 0.006, metal, n=2, spec=0.9)      # 투구 날개
+            b.seg((s * 0.27 + 0.0, 2.76 + bob, 0.06), (s * 0.55, 2.84 + bob, -0.06), 0.03, 0.006, metal, n=2, spec=0.9)
+            b.seg((s * 0.27 + 0.0, 2.72 + bob, 0.06), (s * 0.5, 2.68 + bob, -0.06), 0.026, 0.006, metal, n=2, spec=0.9)
+        if LOOK:                                                                                        # 투구 뒤로 흐르는 깃털 장식
+            for k in range(7):
+                u = k / 6.0
+                b.E((0, 2.86 - 0.42 * u + bob, -0.12 - 0.34 * math.sin(u * 1.6) - sway * 0.05 * u), (0.05 + 0.04 * math.sin(u * 3.0), 0.12, 0.09), C(250, 246, 232) if k % 2 else cloth2 * 1.2, rot('x', 0.9 * u), spec=0.3)
+        b.E((0, 2.15 + bob, 0.05), (0.2, 0.022, 0.17), trim, spec=0.9)                                    # 목깃 금테
+        b.E((0, 1.87 + bob, 0.19), (0.17, 0.022, 0.05), trim, spec=0.8)
+        b.E((0, 1.10 + bob, 0.30), (0.075, 0.2, 0.03), cloth2, spec=0.2)                                  # 앞 자락
+        b.E((0, 0.93 + bob, 0.31), (0.075, 0.02, 0.032), trim, spec=0.8)
+
+
+def _ext(p):
+    """도형이 중심에서 뻗는 대략의 반지름(눕힌 몸이 땅에 닿는 높이를 맞추는 데 쓴다)."""
+    if p.cone: return float(max(p.a[0], p.a[1]) * max(1.0, p.k))
+    return float(np.linalg.norm(p.a)) if p.box else float(p.a.max())
+
+
+def build(name, ph, moving, pose=None, expr='normal', idle=None, fall=None, weapon_all=False):
     """pose (공격 자세): {'arm': 무기 든 손 (위팔 각, 굽힘, 벌림), 'pitch': 무기가 위에서 앞으로 숙은 각도(도), 'free': 빈 손 팔, 'draw_arm': 궁수 시위 당기는 팔, 'draw': 시위를 당긴 정도 0..1}. 없으면 서 있는 자세."""
     b = Builder()
     amp = 0.45
     sway = math.sin(ph) if moving else 0.0
+    if idle is not None: sway = 0.9 * math.sin(2 * math.pi * idle)          # 대기 때 머리카락/망토가 숨 쉬듯 살랑인다
     # 걷기: 땅을 딛은 발이 늘 바닥에 닿도록 엉덩이 높이를 정한다. 두 발이 벌어진 순간(접지)이 가장 낮고 다리가 몸 아래를 지날 때 가장 높다.
     # 체중은 딛은 발 쪽으로 몸통 위쪽을 조금 옮긴다 (WALK_SHIFT).
     bob, shift = 0.0, 0.0
@@ -233,7 +351,7 @@ def build(name, ph, moving, pose=None):
     # ---- 캐릭터별 팔레트/설정
     if name == 'warrior':
         hair, hair_l = C(206, 70, 40), C(255, 130, 70)
-        cloth, cloth2, trim, metal = C(196, 44, 52), C(52, 38, 44), C(236, 176, 70), C(180, 186, 200)
+        cloth, cloth2, trim, metal = C(184, 36, 52), C(48, 34, 44), C(244, 184, 64), C(176, 188, 212)
         boot = C(96, 62, 50); eye = C(70, 170, 130)
     elif name == 'archer':
         hair, hair_l = C(238, 220, 168), C(255, 246, 210)
@@ -269,6 +387,11 @@ def build(name, ph, moving, pose=None):
         b.E(ankle + [0, -0.04, 0.085], (0.075, 0.062, 0.15), boot_col * 0.9, rot('x', -phi * 0.6), spec=0.3)  # 발
         b.E(ankle + [0, -0.075, 0.12], (0.062, 0.03, 0.14), cloth2 * 0.7, rot('x', -phi * 0.6))             # 밑창
         b.E(knee + (ankle - knee) * 0.25, (0.095, 0.05, 0.095), trim, frame_y(ankle - knee))               # 부츠 단 장식
+        if name in ('warrior', 'lancer'):                                                                      # 무릎 보호대 + 정강이 판
+            b.E(knee + [0, 0.0, 0.06], (0.105, 0.085, 0.07), metal, spec=0.8)
+            b.seg(knee + (ankle - knee) * 0.35 + [0, 0, 0.05], ankle + (knee - ankle) * 0.15 + [0, 0, 0.05], 0.05, 0.04, metal if name == 'lancer' else cloth2, n=2, spec=0.7)
+        if name == 'archer':                                                                                   # 부츠 윗단 털 장식
+            b.E(knee + (ankle - knee) * 0.12, (0.115, 0.06, 0.115), cloth2, frame_y(ankle - knee), spec=0.05)
 
     nlegs = len(b.P)
     # ---- 몸통
@@ -284,7 +407,9 @@ def build(name, ph, moving, pose=None):
     # 치마/로브 (걸을 때 다리 흔들림에 따라 앞뒤로 살짝)
     if name == 'mage':
         b.cone((0, 0.36 + bob, 0), 0.56, 0.25, 1.10, cloth, k=0.72, spec=0.1)
-        b.E((0, 0.36 + bob, 0.0), (0.56, 0.035, 0.40), trim, spec=0.5)             # 단 장식
+        for k in range(36):                                                        # 단 장식 (속이 빈 고리 = 눕혀도 판처럼 보이지 않는다)
+            a_ = k * math.pi * 2 / 36
+            b.E((0.57 * math.cos(a_), 0.37 + bob, 0.41 * math.sin(a_)), (0.05, 0.032, 0.05), trim, spec=0.5)
         b.E((0, 0.88 + bob, 0.285), (0.06, 0.45, 0.05), cloth2)                    # 앞 패널
         b.E((0, 0.88 + bob, 0.295), (0.015, 0.45, 0.03), trim, spec=0.8)
     elif name == 'archer':
@@ -302,6 +427,7 @@ def build(name, ph, moving, pose=None):
         for s in (-1, 1):
             b.E((s * 0.22, 1.13 + bob, 0.18), (0.09, 0.17, 0.05), cloth2 * 1.3, rot('z', s * 0.2))
 
+    narm = len(b.P)
     # ---- 팔
     farm = {'warrior': (-0.5, 0.6, 0.16), 'archer': None, 'mage': (-0.2, 0.7, 0.14)}
     har = None                                                                      # 궁수: 시위를 당기는 오른손 위치 (활 시위가 따라온다)
@@ -322,19 +448,25 @@ def build(name, ph, moving, pose=None):
         b.seg(sh_, el, 0.072, 0.060, SKIN, n=2, sh=SH_SKIN)
         b.seg(el, ha, 0.060, 0.048, sleeve if name in ('mage', 'rogue') else SKIN, n=2, sh=SH_SKIN if name not in ('mage', 'rogue') else SH_DEF)
         if name in ('warrior', 'lancer'): b.seg(el + (ha - el) * 0.25, ha, 0.062, 0.058, metal, n=1, spec=0.7)    # 팔목 보호대
-        if name == 'mage': b.E(ha + (el - ha) * 0.3, (0.1, 0.12, 0.1), cloth, frame_y(ha - el), spec=0.1)  # 넓은 소매
+        if name == 'mage':
+            wide = 1.2 if LOOK else 1.0
+            b.E(ha + (el - ha) * 0.3, (0.1 * wide, 0.12 * wide, 0.1 * wide), cloth, frame_y(ha - el), spec=0.1)  # 넓은 소매
+            if LOOK: b.E(ha + (el - ha) * 0.12, (0.125, 0.02, 0.125), trim, frame_y(ha - el), spec=0.8)            # 소매 끝 금테
         b.E(ha, (0.060, 0.060, 0.060), SKIN, sh=SH_SKIN)
         # 어깨
         if name == 'warrior':
             b.E(sh_ + [s * 0.04, 0.03, 0], (0.15, 0.10, 0.15), cloth2, spec=0.6)
-            b.E(sh_ + [s * 0.07, 0.07, 0], (0.12, 0.05, 0.12), metal, spec=0.8)
+            b.E(sh_ + [s * 0.07, 0.07, 0], (0.15, 0.065, 0.15), metal, spec=0.85)                          # 큰 견갑
+            b.E(sh_ + [s * 0.075, 0.035, 0], (0.155, 0.018, 0.155), trim, spec=0.9)                        # 견갑 금테
             b.seg(sh_ + [s * 0.1, 0.08, 0], sh_ + [s * 0.2, 0.28, 0], 0.035, 0.005, metal, spec=0.9)     # 어깨 가시
             b.seg(sh_ + [s * 0.12, 0.05, 0.1], sh_ + [s * 0.26, 0.12, 0.2], 0.03, 0.004, metal, spec=0.9)
         elif name == 'lancer':
             b.E(sh_ + [s * 0.04, 0.03, 0], (0.15, 0.10, 0.15), cloth, spec=0.8)             # 은빛 견갑
-            b.E(sh_ + [s * 0.07, 0.07, 0], (0.12, 0.05, 0.12), trim, spec=0.8)
+            b.E(sh_ + [s * 0.07, 0.07, 0], (0.15, 0.065, 0.15), trim, spec=0.85)             # 큰 견갑 금판
+            b.E(sh_ + [s * 0.075, 0.035, 0], (0.155, 0.018, 0.155), cloth2, spec=0.5)
         elif name == 'archer':
             b.E(sh_ + [s * 0.03, 0.02, 0], (0.12, 0.08, 0.12), cloth * 0.95, spec=0.1)
+            b.seg(el + (ha - el) * 0.2, ha, 0.058, 0.054, C(128, 84, 56), n=1, spec=0.3)           # 가죽 팔목 보호대
         elif name == 'rogue':
             b.E(sh_ + [s * 0.03, 0.02, 0], (0.12, 0.085, 0.12), cloth, spec=0.2)
             b.E(sh_ + [s * 0.04, 0.06, 0], (0.10, 0.03, 0.10), trim, spec=0.7)
@@ -435,7 +567,7 @@ def build(name, ph, moving, pose=None):
     # ---- 머리와 머리카락
     hc = np.array([0, bob, 0])
     n0 = len(b.P)
-    head(b, hair, eye)
+    head(b, hair, eye, expr=expr, brow=BROW.get(name, 0.0) if LOOK else 0.0)
     hair_cap(b, hair, hair_l)
     for p in b.P[n0:]: p.c = p.c + hc
     b.group()
@@ -464,9 +596,9 @@ def build(name, ph, moving, pose=None):
     if name == 'archer':
         b.group()
         # 후드가 달린 망토 (등 뒤로 펄럭)
-        for k in range(5):
-            t = k / 4.0
-            b.E((0, 2.0 - 0.75 * t + bob, -0.2 - 0.06 * t - sway * 0.04 * t), (0.27 + 0.1 * t, 0.2, 0.05), cloth * (0.9 - 0.1 * t), rot('x', 0.15 - 0.15 * t))
+        for k in range(7 if LOOK else 5):
+            t = k / (6.0 if LOOK else 4.0)
+            b.E((0, 2.0 - (1.0 if LOOK else 0.75) * t + bob, -0.2 - 0.06 * t - sway * 0.05 * t), (0.27 + 0.12 * t, 0.2, 0.05), cloth * (0.9 - 0.12 * t), rot('x', 0.15 - 0.15 * t))
         b.E((0, 2.2 + bob, -0.12), (0.3, 0.1, 0.12), cloth * 0.9)                  # 어깨 망토
         # 화살통
         R = rot('z', 0.35)
@@ -519,10 +651,47 @@ def build(name, ph, moving, pose=None):
             b.E((0.1 + sw * t * 2, 2.15 + bob - 0.12 * t, -0.2 - 0.16 * t - 0.03 * math.sin(ph * 2 + t * 4) * (1 if moving else 0)),
                 (0.07, 0.06, 0.07 + 0.03 * t), trim * (1.0 - 0.1 * t), spec=0.3)
         b.E((0, 1.55 + bob, -0.24 - 0.04 * sway), (0.27, 0.45, 0.05), hood * 0.9, rot('x', 0.15))   # 짧은 망토
+    ngear = len(b.P)
+    gear(b, name, bob, sway, hair, cloth, cloth2, trim, metal)
+    if SLIM and name in SLIM_P and name != 'warrior':
+        hs, sx, sz = SLIM_P[name]; pv = np.array([0.0, 2.30 + bob, 0.0])
+        for i in list(range(nlegs, narm)) + list(range(n0, len(b.P))):
+            q = b.P[i]
+            if q.part == 1: continue
+            if q.c[1] > 2.25 + bob:
+                q.c = pv + (q.c - pv) * hs; q.a = q.a * hs
+            else:
+                q.c = np.array([q.c[0] * sx, q.c[1], q.c[2] * sz])
+                q.a = q.a * np.array([sx, 1.0, sz]) if not q.cone else q.a * np.array([sx, sx, 1.0])
+    if SLIM and name == 'warrior':
+        # 머리와 머리카락/머리띠는 목 아래를 축으로 작게, 몸통과 장비(팔/다리/무기는 빼고)는 좌우로 가늘게. 팔 관절 위치가 그대로라 손/무기 앵커는 변하지 않는다.
+        pv = np.array([0.0, 2.30 + bob, 0.0]); hs = 0.84
+        gear_head = [i for i in range(ngear, len(b.P)) if b.P[i].c[1] > 2.6 + bob]
+        head_idx = list(range(n0, ngear)) + gear_head
+        for i in head_idx:
+            q = b.P[i]; q.c = pv + (q.c - pv) * hs; q.a = q.a * hs
+        sx, sz = 0.88, 0.93
+        for i in list(range(nlegs, narm)) + [i for i in range(ngear, len(b.P)) if i not in gear_head]:
+            q = b.P[i]; q.c = np.array([q.c[0] * sx, q.c[1], q.c[2] * sz])
+            q.a = q.a * np.array([sx, 1.0, sz]) if not q.cone else q.a * np.array([sx, sx, 1.0])
     if shift:
         for p in b.P: p.c = p.c + np.array([weight_shift(p.c[1], shift), 0.0, 0.0])
         b.anchors = {k: v + np.array([weight_shift(v[1], shift), 0.0, 0.0]) for k, v in b.anchors.items()}
     for p in b.P[nlegs:]: p.c = p.c + np.array([0, 0.15, 0.0])
+    if idle is not None:                                                       # 숨쉬기: 가슴 위쪽이 아주 조금 오르내린다(발은 그대로)
+        br = IDLE_BREATH * math.sin(2 * math.pi * idle - 0.6)
+        for p in b.P[nlegs:]: p.c = p.c + np.array([0.0, br * min(1.0, max(0.0, (p.c[1] - 1.0) / 1.4)), 0.0])
+        b.anchors = {k: v + np.array([0.0, br * min(1.0, max(0.0, (v[1] - 1.0) / 1.4)), 0.0]) for k, v in b.anchors.items()}
+    if fall is not None:                                                       # 뒤로 쓰러지는 정도(라디안): 발 밑을 축으로 통째로 눕힌다
+        Rg = rot('x', -fall)
+        lo0 = min(p.c[1] - _ext(p) for p in b.P)
+        for p in b.P: p.c = Rg @ p.c; p.R = Rg @ p.R
+        lo1 = min(p.c[1] - _ext(p) for p in b.P)
+        sf = math.sin(fall)
+        sc = 1.0 - 0.12 * sf * sf                                                      # 누울수록 조금 줄여 400 그림 안에 넣는다
+        for p in b.P:
+            p.c = (p.c + np.array([0.0, lo0 - lo1, 0.0])) * sc; p.a = p.a * sc
+        for p in b.P: p.c = p.c + np.array([0.0, 0.50 * sf ** 2, 1.35 * sf ** 3])                  # 눕힌 몸의 가운데가 그림 가운데로 오게 (서 있을 땐 그대로)
     return b.P, b.anchors
 
 
@@ -637,6 +806,18 @@ def shade(R, mask):
     # 림 라이트
     rim = np.clip(1 - (n * w_).sum(-1), 0, 1) ** 3 * 0.16
     rgb = rgb + rim[..., None] * np.array([0.55, 0.65, 1.0])
+    if METAL:                                   # 금속(spec 0.7 이상): 하늘/땅 반사 띠 + 지평선 하이라이트 + 좁고 강한 광택
+        ndw = (n * w_).sum(-1)
+        ry = 2 * ndw * n[..., 1] - w_[1]
+        env = sstep(-0.35, 0.2, ry)
+        line = np.exp(-(ry / 0.07) ** 2)
+        sky = np.clip(col * 1.08 + 0.08, 0, 1)
+        gnd = col * np.array([0.58, 0.58, 0.68])
+        mrgb = gnd * (1 - env)[..., None] + sky * env[..., None]
+        mrgb = mrgb * (0.82 + 0.18 * lam)[..., None] + (line * 0.32)[..., None]
+        mrgb = mrgb + (sstep(0.955, 0.975, sp) * 0.5)[..., None]
+        isg = spec >= 0.7
+        rgb = np.where((isg & ~emis)[..., None], mrgb, rgb)
     rgb = np.where(emis[..., None], np.clip(col * 1.1, 0, 1), rgb)
     rgb = np.clip(rgb, 0, 1)
 
@@ -679,11 +860,21 @@ def to_image(img):
     return Image.fromarray((np.clip(img, 0, 1) * 255 + 0.5).astype(np.uint8), 'RGBA')
 
 
-def render(name, theta, ph, moving, pose=None):
+def render(name, theta, ph, moving, pose=None, **kw):
     """몸만(무기 제외) 그린 그림과 무기 앵커."""
-    prims, anchors = build(name, ph, moving, pose)
+    prims, anchors = build(name, ph, moving, pose, **kw)
     R = raster([p for p in prims if p.part == 0], theta)
     return shade(R, np.isfinite(R['depth'])), {k: project(v, theta) for k, v in anchors.items()}
+
+
+def render_full(name, theta, ph=0.0, moving=False, **kw):
+    """몸과 무기를 한 장에 구운 그림(피격/사망용). 400x400 한 장이라 뷰어는 무기 레이어를 따로 얹지 않는다. 가장자리가 잘렸는지 돌려준다."""
+    prims, anchors = build(name, ph, moving, **kw)
+    R = raster(prims, theta)
+    img = shade(R, np.isfinite(R['depth']))
+    a = np.asarray(img)[..., 3]
+    clipped = bool(a[0].any() or a[-1].any() or a[:, 0].any() or a[:, -1].any())
+    return img, clipped
 
 
 WEAPON_PAD = 160       # 창 그림은 몸 그림보다 사방으로 이만큼(그림 픽셀) 크다. 같은 기준점에서 pad 만큼 안쪽으로 겹치면 몸과 맞는다
@@ -773,6 +964,42 @@ def _job(args):
     return res
 
 
+IDLE_N = 8                  # 대기 숨쉬기 프레임 수 (한 바퀴). 눈 깜빡임은 IDLE_BLINK 번 프레임
+IDLE_BLINK = 6
+HIT_FALL = 0.30            # 피격 때 뒤로 젖혀지는 각(라디안)
+DEATH = [(0.55, 'hurt'), (1.10, 'hurt'), (1.50, 'dead')]     # 사망: 쓰러지는 중 -> 거의 누움 -> 누워 있음
+
+
+def _job_extra(args):
+    """대기 숨쉬기/눈 깜빡임 8장, 피격 1장, 사망 3장, 기합 표정의 공격 몸 5장. 몸과 무기를 구운 그림(피격/사망)은 400x400 한 장."""
+    name, out, ang = args
+    th = math.radians(ang)
+    res = {'ang': ang, 'idle_grip': []}
+    for k in range(IDLE_N):
+        img, an = render(name, th, 0.0, False, idle=k / IDLE_N, expr='blink' if k == IDLE_BLINK else 'normal')
+        _save(img, f'{out}/idle_{ang:03d}_{k:02d}.png')
+        res['idle_grip'].append(an['grip'])
+    img, cl = render_full(name, th, 0.0, False, fall=HIT_FALL, expr='hurt'); assert not cl, (name, ang, 'hit')
+    _save(img, f'{out}/hit_{ang:03d}.png')
+    for k, (f, ex) in enumerate(DEATH):
+        img, cl = render_full(name, th, 0.0, False, fall=f, expr=ex); assert not cl, (name, ang, 'death', k)
+        _save(img, f'{out}/death_{ang:03d}_{k}.png')
+    for pi, pose in enumerate(ATK[name]):
+        bi, _ = render(name, th, 0.0, False, pose, expr='shout'); _save(bi, f'{out}/atk_{ang:03d}_{pi}.png')
+    return res
+
+
+def write_idle_anchors(out, results):
+    """기존 anchors.json 에 대기 프레임별 손 위치(idleGrip [방향][프레임])를 덧붙인다."""
+    import json
+    angs = sorted({r['ang'] for r in results})
+    by = {r['ang']: r for r in results}
+    with open(f'{out}/anchors.json') as fp: data = json.load(fp)
+    data['idleFrames'] = IDLE_N
+    data['idleGrip'] = [by[a]['idle_grip'] for a in angs]
+    with open(f'{out}/anchors.json', 'w') as fp: json.dump(data, fp, separators=(',', ':'))
+
+
 def write_anchors(out, results, nwalk, name='lancer'):
     """창술사 앵커(그림 좌표, 400x400 기준)를 anchors.json 으로. pose 0 = 서 있는 창, 1.. = 공격 자세."""
     import json
@@ -793,6 +1020,15 @@ if __name__ == '__main__':
     import multiprocessing as mp
     name, out = sys.argv[1], sys.argv[2]
     rest = sys.argv[3:]
+    if '--extra' in rest:        # 이미 만든 폴더에 대기/피격/사망 그림과 기합 표정 공격 몸만 덧붙인다 (뼈대 그림/걷기/무기는 건드리지 않는다)
+        rest.remove('--extra')
+        angs = [int(a) for a in rest] or list(range(0, 360, 20))
+        results = []
+        with mp.Pool(max(1, mp.cpu_count())) as pool:
+            for i, r in enumerate(pool.imap_unordered(_job_extra, [(name, out, a) for a in angs])):
+                results.append(r); print(f'{i + 1}/{len(angs)}', flush=True)
+        write_idle_anchors(out, results)
+        sys.exit(0)
     nwalk = 0
     if '--walk' in rest:
         i = rest.index('--walk'); nwalk = int(rest[i + 1]); del rest[i:i + 2]

@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using GameViewer.Core.Data;
+using GameViewer.Core.Logic;
 using GameViewer.Core.Net;
 using GameViewer.Core.Protocol;
 using GameViewer.Core.World;
@@ -19,7 +20,15 @@ namespace GameViewer.Core
         public readonly ViewerConfig Config;
         public readonly GameData Data;
         public readonly WorldModel World;
-        public readonly GatewayClient Net = new GatewayClient();
+        public GatewayClient Net { get; private set; }
+
+        /// <summary>true 면 연결이 끊기거나 접속에 실패했을 때 백오프로 자동 재접속한다(로그인/입장이 거부된 경우는 제외). 오프라인 데모에서는 쓰지 않는다.</summary>
+        public bool AutoReconnect;
+        public readonly ReconnectPolicy Reconnect = new ReconnectPolicy();
+        public long ConnectStartedMs;           // 현재 접속 시도를 시작한 시각(진행 표시용)
+        public long InZoneSinceMs = -1;         // 존에 들어온 시각(입장 연출용, 아직이면 -1)
+        public int ReconnectCount;              // 이번 실행에서 자동 재접속에 성공한 횟수
+        private bool _wasInZone;                // 한 번이라도 입장해서 월드가 있다(재접속이면 화면을 유지한 채 다시 붙는다)
 
         public SessionState State { get; private set; }
         public string StatusText { get; private set; }
@@ -41,6 +50,7 @@ namespace GameViewer.Core
         public ViewerSession(ViewerConfig config, GameData data)
         {
             Config = config; Data = data;
+            Net = new GatewayClient();
             World = new WorldModel(data, config.CharId);
             World.SelfSkillUsed += OnSelfSkillUsed;
             World.SelfSkillResponded += delegate (long now) { _skillPendingUntil = 0; };
@@ -57,7 +67,10 @@ namespace GameViewer.Core
             }
         }
 
-        public List<uint> MySkills { get { return Data.SkillsOf(HeroId); } }
+        /// <summary>스킬바 순서가 적용된 내 스킬 목록(칸 번호 = 목록 위치).</summary>
+        public List<uint> MySkills { get { return BarOrder.Apply(HeroId, Data.SkillsOf(HeroId)); } }
+        public readonly GameViewer.Core.Logic.SkillBarOrder BarOrder = new GameViewer.Core.Logic.SkillBarOrder();
+        public bool SwapSkillSlots(int i, int j) { return BarOrder.Swap(HeroId, Data.SkillsOf(HeroId), i, j); }
 
         // ------------------------------------------------------------------ 접속
 
@@ -65,12 +78,15 @@ namespace GameViewer.Core
         public void Start(long now)
         {
             State = SessionState.Connecting;
+            ConnectStartedMs = now;
             StatusText = Config.Host + ":" + Config.Port + " 접속 중...";
             _connectState = 0;
+            GatewayClient net = Net;
             Thread t = new Thread(delegate ()
             {
                 string err;
-                bool ok = Net.Connect(Config.Host, Config.Port, Config.ConnectTimeoutMs, out err);
+                bool ok = net.Connect(Config.Host, Config.Port, Config.ConnectTimeoutMs, out err);
+                if (net != Net) { if (ok) net.Close(); return; }        // 그 사이 새 연결로 바뀌었다
                 _connectError = err;
                 _connectState = ok ? 1 : 2;
             });
@@ -92,6 +108,7 @@ namespace GameViewer.Core
                 {
                     State = SessionState.Failed; StatusText = "접속 실패: " + _connectError;
                     World.AddLog(now, 2, StatusText);
+                    ScheduleReconnect(now);
                 }
             }
 
@@ -104,9 +121,66 @@ namespace GameViewer.Core
                 State = SessionState.Disconnected;
                 StatusText = "연결 끊김: " + (Net.DisconnectReason ?? "unknown");
                 World.AddLog(now, 2, StatusText);
+                ScheduleReconnect(now);
             }
 
+            if (State == SessionState.InZone)
+            {
+                World.Ping.Expire(now);
+                if (World.Ping.Due(now)) Send(Build.ZcPingReq(World.Ping.Begin(now), (ulong)now));
+            }
+
+            if (Reconnect.TryTake(now)) BeginReconnect(now);
             World.Update(now);
+        }
+
+        // ------------------------------------------------------------------ 자동 재접속
+
+        private void ScheduleReconnect(long now)
+        {
+            if (!AutoReconnect || SendOverride != null) return;
+            if (Reconnect.OnFailure(now))
+                World.AddLog(now, 1, "재접속 " + Reconnect.Attempt + "/" + Reconnect.MaxAttempts + " 예약 (" + (Reconnect.RemainingMs(now) / 1000) + "초 후)");
+            else
+                World.AddLog(now, 2, "자동 재접속을 포기했습니다 - F5 로 다시 시도하세요");
+        }
+
+        /// <summary>새 소켓으로 처음부터 다시 접속한다. (이전 수신 스레드가 새 연결 상태를 덮어쓰지 않도록 클라이언트 객체를 바꾼다)</summary>
+        private void BeginReconnect(long now)
+        {
+            GatewayClient old = Net;
+            Net = new GatewayClient();
+            old.Close();
+            ClientSessionId = 0;
+            Start(now);
+            World.AddLog(now, 0, "재접속 시도 " + Reconnect.Attempt + "/" + Reconnect.MaxAttempts);
+        }
+
+        /// <summary>F5: 사용자가 직접 재접속한다 (횟수를 처음부터 다시 센다).</summary>
+        public void ReconnectNow(long now)
+        {
+            if (SendOverride != null) return;
+            Reconnect.Manual();
+            BeginReconnect(now);
+        }
+
+        /// <summary>재접속 중이라 월드(마지막 화면)를 유지하고 있는가.</summary>
+        public bool Reconnecting { get { return _wasInZone && State != SessionState.InZone; } }
+
+        /// <summary>접속 진행 단계: 0 접속 1 로그인 2 입장 3 완료 (표시용).</summary>
+        public int ConnectStep
+        {
+            get
+            {
+                switch (State)
+                {
+                    case SessionState.Connecting: return 0;
+                    case SessionState.LoggingIn: return 1;
+                    case SessionState.Entering: return 2;
+                    case SessionState.InZone: return 3;
+                    default: return -1;
+                }
+            }
         }
 
         private void Dispatch(Frame f, long now)
@@ -122,25 +196,31 @@ namespace GameViewer.Core
                 switch ((GatewayPacketType)f.Type)
                 {
                     case GatewayPacketType.GwLoginRes:
-                        {
-                            GwLoginRes r = GwLoginRes.Parse(f.Data);
-                            if (!r.Success) { Fail(now, "로그인 실패: " + r.Reason); break; }
-                            ClientSessionId = r.ClientSessionId;
-                            State = SessionState.Entering; StatusText = "존 " + Config.ZoneId + " 입장 중...";
-                            Net.Send(Build.GwEnterZoneReq(Config.ZoneId, Config.HeroId));
-                            break;
-                        }
+                    {
+                        GwLoginRes r = GwLoginRes.Parse(f.Data);
+                        if (!r.Success) { Fail(now, "로그인 실패: " + r.Reason); break; }
+                        ClientSessionId = r.ClientSessionId;
+                        State = SessionState.Entering; StatusText = "존 " + Config.ZoneId + " 입장 중...";
+                        Net.Send(Build.GwEnterZoneReq(Config.ZoneId, Config.HeroId));
+                        break;
+                    }
                     case GatewayPacketType.GwEnterZoneRes:
-                        {
-                            GwEnterZoneRes r = GwEnterZoneRes.Parse(f.Data);
-                            if (!r.Success) { Fail(now, "입장 실패: " + r.Reason); break; }
-                            World.Clear();
-                            World.InitSelf(r.SpawnX, r.SpawnY, Data.ResolveHeroId(Config.HeroId), now);
-                            State = SessionState.InZone; StatusText = "존 " + r.ZoneId + " 입장 완료";
-                            break;
-                        }
+                    {
+                        GwEnterZoneRes r = GwEnterZoneRes.Parse(f.Data);
+                        if (!r.Success) { Fail(now, "입장 실패: " + r.Reason); break; }
+                        bool again = _wasInZone;
+                        World.Clear();
+                        World.InitSelf(r.SpawnX, r.SpawnY, Data.ResolveHeroId(Config.HeroId), now);
+                        World.Ping.Reset();
+                        State = SessionState.InZone; StatusText = "존 " + r.ZoneId + " 입장 완료";
+                        _wasInZone = true; InZoneSinceMs = now;
+                        if (again) { ++ReconnectCount; World.AddLog(now, 0, "재접속 성공"); }
+                        Reconnect.Reset();
+                        break;
+                    }
                     case GatewayPacketType.GwZoneLostNotify:
                         Fail(now, "존 연결 끊김 (zone " + GwZoneLostNotify.Parse(f.Data).ZoneId + ")");
+                        ScheduleReconnect(now);
                         break;
                     case GatewayPacketType.GwLeaveZoneRes:
                         World.AddLog(now, 0, "존 퇴장 응답");
@@ -154,7 +234,14 @@ namespace GameViewer.Core
             {
                 World.MalformedPacketCount++;
             }
+            catch (Exception e)
+            {
+                // 파싱은 됐지만 처리 중 예기치 못한 오류가 난 패킷 하나 때문에 타이머 틱(=창)이 죽지 않게 버리고, 처음 한 번만 로그를 남긴다
+                World.MalformedPacketCount++;
+                if (!_dispatchFailLogged) { _dispatchFailLogged = true; World.AddLog(now, 2, "패킷 처리 오류(type " + f.Type + "): " + e.GetType().Name + " " + e.Message); }
+            }
         }
+        private bool _dispatchFailLogged;
 
         private void Fail(long now, string text)
         {
@@ -250,7 +337,9 @@ namespace GameViewer.Core
         {
             World.Clear();
             World.InitSelf(spawnX, spawnY, Data.ResolveHeroId(Config.HeroId), now);
+            World.Ping.Reset();
             State = SessionState.InZone; StatusText = statusText;
+            _wasInZone = true; InZoneSinceMs = now;
         }
 
         /// <summary>서버에서 온 것처럼 존 패킷 한 개를 월드에 적용한다.</summary>

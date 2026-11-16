@@ -21,12 +21,13 @@ namespace GameViewer.App.Render
         /// <summary>나무 한 그루. (wx,wy)는 줄기 밑동의 월드 좌표, r 은 수관 반경(unit).</summary>
         public void Draw(Graphics g, ViewState v, float wx, float wy, float r, uint seed, bool dark)
         {
+            r *= 0.86f + ((seed >> 5) & 15) / 15f * 0.34f;          // 같은 데이터 반지름이라도 보이는 크기는 조금씩 다르게
             float sx = v.ToScreenX(wx), sy = v.ToScreenY(wy);
             float pr = v.Px(r);
             if (sx < -pr * 2 || sy < -pr * 3.2f || sx > v.Width + pr * 2 || sy > v.Height + pr * 2) return;
 
             AssetSet asset = AssetSprites.FindTree();
-            if (asset != null) { DrawAsset(g, v, asset, sx, sy, pr, r, seed, dark); return; }
+            if (asset != null && seed % 3 != 0) { DrawAsset(g, v, asset, sx, sy, pr, r, seed, dark); return; }       // 3그루 중 1그루는 활엽수(아래 그림)
 
             // 반경은 0.3 단위, 확대는 2px 단위로 묶어 비트맵 종류를 제한한다
             float rq = (float)(Math.Max(1, Math.Round(r / 0.3)) * 0.3);
@@ -38,7 +39,7 @@ namespace GameViewer.App.Render
             long key = (2L << 40) | ((long)(rq * 10) << 24) | (variant << 16) | ((dark ? 1L : 0L) << 12) | (long)(ppu * 2);
             SpriteCache.Entry e = _cache.Get(key, w, h, ax, ay, _paint);
             float k = (float)(v.Scale / ppu);
-            g.FillEllipse(_res.Brush(dark ? 40 : 60, 0, 0, 0), sx - pr * 1.0f, sy - pr * 0.25f, pr * 2.0f, pr * 0.8f);
+            DrawShadow(g, sx, sy, pr, dark);
             g.DrawImage(e.Bmp, sx - ax * k, sy - ay * k, w * k, h * k);
         }
 
@@ -54,9 +55,22 @@ namespace GameViewer.App.Render
             long key = (3L << 40) | ((long)(rq * 10) << 24) | ((long)variant << 16) | (long)(ppu * 2);
             SpriteCache.Entry e = _cache.Get(key, w, h, ax, ay, _paint);
             if (dark) e = _cache.GetDerived(key | (3L << 44), e, 3);
+            else
+            {
+                uint tone = (seed >> 9) % 8;
+                if (tone < 2) e = _cache.GetDerived(key | (4L << 44), e, 4);          // 단풍
+                else if (tone == 2) e = _cache.GetDerived(key | (5L << 44), e, 5);    // 새순
+            }
             float k = (float)(v.Scale / ppu);
-            g.FillEllipse(_res.Brush(dark ? 40 : 60, 0, 0, 0), sx - pr * 1.0f, sy - pr * 0.25f, pr * 2.0f, pr * 0.8f);
+            DrawShadow(g, sx, sy, pr, dark);
             g.DrawImage(e.Bmp, sx - ax * k, sy - ay * k, w * k, h * k);
+        }
+
+        /// <summary>나무 밑 그림자: 바깥은 옅게, 안쪽은 진하게 두 겹으로 가장자리를 부드럽게 한다.</summary>
+        private void DrawShadow(Graphics g, float sx, float sy, float pr, bool dark)
+        {
+            // 키가 큰 나무라 오른쪽 아래로 길게 드리운다(반경의 약 1.3배). 색과 짙기는 존 분위기를 따른다.
+            ShadowStyle.Object(g, _res, sx, sy, pr, pr * 1.3f, dark ? 30f : 44f);
         }
 
         private void PaintTree(Graphics g)
@@ -76,6 +90,8 @@ namespace GameViewer.App.Render
             Color deep = _pdark ? Color.FromArgb(18, 56 + tone, 30) : Color.FromArgb(26, 78 + tone, 36);
             Color mid = _pdark ? Color.FromArgb(34, 88 + tone, 46) : Color.FromArgb(48, 120 + tone, 54);
             Color light = _pdark ? Color.FromArgb(58, 118 + tone, 62) : Color.FromArgb(104, 170 + tone, 78);
+            if (!_pdark && _pseed == 4) { deep = Color.FromArgb(128, 58, 26); mid = Color.FromArgb(206, 112, 40); light = Color.FromArgb(246, 184, 72); }       // 단풍든 활엽수
+            else if (!_pdark && _pseed == 3) { deep = Color.FromArgb(40, 104, 44); mid = Color.FromArgb(104, 164, 52); light = Color.FromArgb(176, 214, 84); }   // 새순 돋은 활엽수
             Color ol = Color.FromArgb(120, 10, 30, 16);
             // 줄기
             P.Poly(g, new PointF[] { new PointF(-0.15f * r, -1.0f * r), new PointF(0.15f * r, -1.0f * r), new PointF(0.24f * r, 0f), new PointF(-0.24f * r, 0f) }, Color.FromArgb(110, 80, 52), Color.FromArgb(58, 38, 24), Color.FromArgb(140, 30, 20, 14), 0.03f * r);

@@ -12,7 +12,9 @@
 ## 빌드와 실행
     dotnet build XlsxConverter.csproj -c Release
     dotnet run --project XlsxConverter.csproj -- <GameData 폴더 | file.xlsx> --out ../GameData [--cpp-out dir] [--cs-out dir [--cs-namespace N]]
-        [--proto-cs-out dir [--proto-cs-namespace N]] [--proto-sizes-out file] [--sheets A B] [--incremental]
+        [--cs-client-proto-out dir [--cs-client-proto-namespace N]] [--cs-server-proto-out dir [--cs-server-proto-namespace N]] [--proto-sizes-out file] [--sheets A B] [--incremental]
+
+패킷 프로토콜 C# 출력은 두 가지다. `--cs-client-proto-out`은 클라이언트(뷰어)용 `Build`/`Parse` 클래스, `--cs-server-proto-out`은 서버용 `IPacket` 구조체(`Write`/`TryRead`, Cs 열과 무관하게 모든 패킷)와 `ProtocolTypes.gen.cs`를 만든다. 서버용은 같은 네임스페이스에 손으로 쓰는 `IPacket`, `PacketIO`가 있어야 한다. 출력 폴더는 `--cs-out`, `--cs-client-proto-out`과 서로 달라야 한다.
 
 종료 코드: 0 성공, 1 변환 실패(데이터 오류), 2 사용법/파일 오류.
 

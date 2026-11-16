@@ -81,7 +81,7 @@ namespace GameViewer.Tests
             T.Eq(0, d.Warnings.Count, "no warnings: " + string.Join("; ", d.Warnings.ToArray()));
             T.Eq(4, d.Heroes.Count, "heroes");
             T.Eq("전사", d.HeroName(1), "hero name (Korean)");
-            T.Eq(10, d.Monsters.Count, "monsters");
+            T.Eq(5, d.Monsters.Count, "monsters");
             T.Eq(14, d.Skills.Count, "skills");
             T.Check(d.Skill(2).IsArea && d.Skill(2).Radius == 4.0, "skill 2 area radius 4");
             T.Check(!d.Skill(1).IsArea, "skill 1 single");
@@ -96,7 +96,7 @@ namespace GameViewer.Tests
             T.Check(SkillFxTable.DotColor(11) != SkillFxTable.DotColor(1) && SkillFxTable.DotColor(2) != SkillFxTable.DotColor(1), "poison/bleed embers differ from burn");
             T.Eq(3, d.Blocks.Count, "blocks for zone 1");
             T.Check(d.Blocks[1].IsCircle && d.Blocks[1].R == 5.0f, "circle block");
-            T.Eq(11, d.Spawns.Count, "spawns of zone 1 only (fixture has 14 rows over zones 1 and 2)");
+            T.Eq(6, d.Spawns.Count, "spawns of zone 1 only (fixture has 7 rows over zones 1 and 2)");
             GameData other = GameData.Load(Program.Dir("GameData"), 99);
             T.Eq(0, other.Blocks.Count, "other zone has no blocks");
             T.Eq("#77", d.SkillName(77), "unknown id fallback name");
@@ -122,6 +122,11 @@ namespace GameViewer.Tests
             c = ViewerConfig.FromArgs(new string[] { "--single" }, out err, out exit);
             T.Check(c != null && !c.MultiInstance, "--single");
             T.Check(c.ToJson().Contains("\"MultiInstance\": false"), "MultiInstance is saved");
+            // 시작 화면의 영웅 선택: 기본은 보여주고, --skip-select 면 건너뛰며 설정 파일에도 저장된다
+            c = ViewerConfig.FromArgs(new string[0], out err, out exit);
+            T.Check(c != null && !c.SkipHeroSelect && c.ToJson().Contains("\"SkipHeroSelect\": false"), "hero select is shown by default");
+            c = ViewerConfig.FromArgs(new string[] { "--skip-select", "--hero", "3" }, out err, out exit);
+            T.Check(c != null && c.SkipHeroSelect && c.HeroId == 3u && c.ToJson().Contains("\"SkipHeroSelect\": true"), "--skip-select");
 
             c = ViewerConfig.FromArgs(new string[] { "--port", "70000" }, out err, out exit);
             T.Check(c == null && err != null, "port out of range rejected");

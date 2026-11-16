@@ -23,7 +23,11 @@ namespace GameViewer.App.Render
         {
             if (s.State != SessionState.InZone) return;
             WorldModel w = s.World;
-            if (w.Self != null && !w.Self.Dead) DrawLowHp(g, w.Self, v, now);
+            if (v.Settings.ShowScreenFx)
+            {
+                if (w.Self != null && !w.Self.Dead) DrawLowHp(g, w.Self, v, now);
+                DrawHitFlash(g, w, v, now);
+            }
             DrawThreats(g, s, v, now);
             DrawStreak(g, w, v, now);
         }
@@ -56,6 +60,46 @@ namespace GameViewer.App.Render
                 if (fa > 3) g.FillRectangle(_res.Brush(fa, 200, 10, 10), 0, 0, v.Width, v.Height);
                 _res.OutlinedText(g, "체력 위험!", _res.Big, Color.FromArgb(Resources.Clamp(150 + (int)(100 * pulse)), 255, 90, 80), v.Width / 2f, v.Height * 0.74f, _center);
             }
+        }
+
+        // ------------------------------------------------------------------ 피격 번쩍임
+
+        /// <summary>내가 맞은 순간 화면 가장자리가 붉게 번쩍인다. 센 타격일수록 진하고 오래 가며, 때린 쪽 가장자리가 더 붉다.</summary>
+        private void DrawHitFlash(Graphics g, WorldModel w, ViewState v, long now)
+        {
+            long age = now - w.SelfHitMs;
+            int life = 180 + (int)(260 * Math.Min(1f, w.SelfHitRatio * 4f));
+            if (age < 0 || age >= life || w.Self == null) return;
+            float k = 1f - age / (float)life;
+            float power = 0.35f + 0.65f * Math.Min(1f, w.SelfHitRatio * 4f);
+            float fb = v.Settings.FeedbackScale;
+            int baseA = (int)(115f * power * k * fb);
+            int e = (int)(Math.Min(v.Width, v.Height) * (0.10f + 0.12f * power));
+            float dx = -w.Self.HitDirX, dy = -w.Self.HitDirY;        // 화면에서 공격자가 있는 쪽
+            bool known = dx != 0f || dy != 0f;
+            Color clear = Color.FromArgb(0, 200, 10, 14);
+            for (int side = 0; side < 4; ++side)
+            {
+                float f = 1f;
+                if (known)
+                {
+                    float dot = side == 0 ? -dy : (side == 1 ? dy : (side == 2 ? -dx : dx));     // 0 위 1 아래 2 왼쪽 3 오른쪽
+                    f = 0.35f + 0.65f * Math.Max(0f, dot);
+                }
+                Color edge = Color.FromArgb(Resources.Clamp((int)(baseA * f)), 214, 10, 14);
+                if (edge.A < 4) continue;
+                Rectangle r; LinearGradientMode mode; Color c0, c1;
+                switch (side)
+                {
+                    case 0: r = new Rectangle(0, 0, v.Width, e + 1); mode = LinearGradientMode.Vertical; c0 = edge; c1 = clear; break;
+                    case 1: r = new Rectangle(0, v.Height - e - 1, v.Width, e + 1); mode = LinearGradientMode.Vertical; c0 = clear; c1 = edge; break;
+                    case 2: r = new Rectangle(0, 0, e + 1, v.Height); mode = LinearGradientMode.Horizontal; c0 = edge; c1 = clear; break;
+                    default: r = new Rectangle(v.Width - e - 1, 0, e + 1, v.Height); mode = LinearGradientMode.Horizontal; c0 = clear; c1 = edge; break;
+                }
+                using (LinearGradientBrush b = new LinearGradientBrush(r, c0, c1, mode))
+                    g.FillRectangle(b, r.X, r.Y, side < 2 ? r.Width : e, side < 2 ? e : r.Height);
+            }
+            if (w.SelfHitRatio >= 0.12f && fb > 0f) g.FillRectangle(_res.Brush((int)(26f * k * fb), 230, 20, 20), 0, 0, v.Width, v.Height);     // 큰 타격: 화면 전체가 살짝 붉게
         }
 
         // ------------------------------------------------------------------ 화면 밖 위협

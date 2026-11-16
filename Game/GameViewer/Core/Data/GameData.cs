@@ -59,6 +59,7 @@ namespace GameViewer.Core.Data
         public readonly Dictionary<uint, List<uint>> HeroSkills = new Dictionary<uint, List<uint>>();
         public readonly List<BlockRow> Blocks = new List<BlockRow>();      // 선택한 존의 것만
         public readonly List<SpawnRow> Spawns = new List<SpawnRow>();      // 선택한 존의 것만
+        public readonly List<GameViewer.Core.Logic.ZoneGate> Gates = new List<GameViewer.Core.Logic.ZoneGate>();   // 선택한 존의 관문(ZoneLink 표, 선택 사항)
         public readonly Dictionary<uint, BossRow> Bosses = new Dictionary<uint, BossRow>();       // 몬스터 ID -> 보스 (Boss/BossPhase 시트. 없으면 비어 있음)
         public readonly List<string> Warnings = new List<string>();
 
@@ -148,6 +149,18 @@ namespace GameViewer.Core.Data
                 r.MonsterId = U(o, "MonsterId"); r.Count = U(o, "Count");
                 r.X = (float)MiniJson.Num(o, "X", 0); r.Y = (float)MiniJson.Num(o, "Y", 0); r.Radius = (float)MiniJson.Num(o, "Radius", 0);
                 d.Spawns.Add(r);
+            }
+            // 존 사이 관문(ZoneLink)도 선택 사항이다
+            foreach (Dictionary<string, object> o in Rows(d, readTable, "ZoneLink", true))
+            {
+                if (U(o, "ZoneId") != zoneId) continue;
+                string e = MiniJson.Str(o, "Edge", "E");
+                GameViewer.Core.Logic.ZoneGate g = new GameViewer.Core.Logic.ZoneGate();
+                g.Edge = e.Length > 0 ? char.ToUpperInvariant(e[0]) : 'E';
+                if ("WENS".IndexOf(g.Edge) < 0) continue;
+                g.Pos = (float)MiniJson.Num(o, "Pos", 500); g.Width = (float)MiniJson.Num(o, "Width", 24);
+                g.TargetZone = U(o, "TargetZone"); g.TargetX = (float)MiniJson.Num(o, "TargetX", 500); g.TargetY = (float)MiniJson.Num(o, "TargetY", 500);
+                if (g.TargetZone != 0) d.Gates.Add(g);
             }
             // 보스 정의는 선택 사항이다 (서버가 보스 없이 구동할 수도 있으므로 파일이 없어도 경고하지 않는다).
             Dictionary<uint, BossRow> byId = new Dictionary<uint, BossRow>();

@@ -3,7 +3,7 @@
 // XlsxConverter가 GameData 엑셀의 Enum 시트로부터 만듭니다.
 // </auto-generated>
 
-namespace Game.Data
+namespace Game.Generated
 {
 	public enum ESkillShape : byte
 	{
@@ -27,6 +27,7 @@ namespace Game.Data
 		Stun = 2,	// 기절: 지속시간 동안 이동, 기본 공격, 스킬 시전을 할 수 없다 (걸린 순간 이동과 시전 중단)
 		Shield = 3,	// 보호막: 지속시간 동안 받는 피해를 amount(HealPercent/FlatHeal)만큼 대신 흡수한다
 		Hot = 4,	// 지속 치유: TickMs마다 amount(HealPercent/FlatHeal)만큼 체력을 회복한다
+		Root = 5,	// 속박: 지속시간 동안 이동할 수 없다 (기본 공격과 스킬 시전은 가능. 걸린 순간 이동만 멈춘다)
 	}
 
 	public enum EStatusTarget : byte

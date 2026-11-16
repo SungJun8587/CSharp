@@ -10,7 +10,6 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using GameViewer.App.Render;
 using GameViewer.Core;
-using GameViewer.Core.Data;
 
 namespace GameViewer.App
 {
@@ -65,25 +64,15 @@ namespace GameViewer.App
                 cfg.CharId += (ulong)slot;
             }
 
-            string dataDir = cfg.DataDir;
-            if (!Path.IsPathRooted(dataDir)) dataDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, dataDir);
-            if (!Directory.Exists(dataDir) && Directory.Exists(cfg.DataDir)) dataDir = Path.GetFullPath(cfg.DataDir);
+            // 뒷배경은 작아서 바로 읽고(로딩 화면에서도 쓴다), GameData 와 이미지 에셋은 창이 뜬 뒤 백그라운드에서 읽으며 로딩바로 보여준다.
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            System.Collections.Generic.List<string> backWarn = new System.Collections.Generic.List<string>();
+            Backdrop.Load(Path.Combine(baseDir, "Assets"), backWarn);
+            foreach (string w in backWarn) Console.Error.WriteLine("assets: " + w);
+            StartupLoader loader = new StartupLoader(cfg, baseDir);
+            loader.Start();
 
-            GameData data = GameData.Load(dataDir, cfg.ZoneId);
-            if (data.Warnings.Count > 0 && data.Heroes.Count == 0)
-            {
-                DialogResult r = MessageBox.Show("GameData 를 읽지 못했습니다 (이름/사거리/스킬 정보 없이 실행됩니다).\r\n\r\n폴더: " + dataDir + "\r\n" + string.Join("\r\n", data.Warnings.ToArray()) + "\r\n\r\n계속할까요?",
-                    "GameViewer", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                if (r != DialogResult.Yes) return 1;
-            }
-
-            // Assets/sprites.json 에 지정된 종류는 이미지로, 나머지는 코드로 그린 그림으로 그린다.
-            System.Collections.Generic.List<string> assetWarn = new System.Collections.Generic.List<string>();
-            AssetSprites.Load(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets"), assetWarn);
-            Backdrop.Load(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets"), assetWarn);       // 영웅 선택 화면 뒷배경 (선택)
-            foreach (string w in assetWarn) Console.Error.WriteLine("assets: " + w);
-
-            Application.Run(new MainForm(cfg, data, demo));
+            Application.Run(new MainForm(cfg, loader, demo));
             return 0;
         }
     }

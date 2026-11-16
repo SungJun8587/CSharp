@@ -23,11 +23,22 @@ namespace GameViewer.App
 
         public bool Enabled = true;
         public bool Failed { get { return _failed; } }
+        private float _gain = 1f;
+
+        /// <summary>전체 크기 0..1. 플레이어는 볼륨을 못 바꾸므로 소리 샘플 자체를 줄여서 다시 만든다(5% 단위로 바뀔 때만).</summary>
+        public void SetGain(float g)
+        {
+            g = Math.Max(0f, Math.Min(1f, g));
+            if (Math.Abs(g - _gain) < 0.025f) return;
+            _gain = g;
+            foreach (SoundPlayer[] ps in _pool.Values) foreach (SoundPlayer p in ps) if (p != null) p.Dispose();
+            _pool.Clear(); _next.Clear();
+        }
 
         /// <summary>gain 이 크면 원래 소리, 작으면 줄인 소리(플레이어는 볼륨을 못 바꾸므로 두 단계를 따로 만든다).</summary>
         public void Play(SfxKind kind, float gain)
         {
-            if (!Enabled || _failed) return;
+            if (!Enabled || _failed || _gain <= 0f) return;
             int level = gain >= 0.7f ? 0 : 1;
             int key = (int)kind * 2 + level;
             long now = _clock.ElapsedMilliseconds;
@@ -40,7 +51,8 @@ namespace GameViewer.App
                 if (!_pool.TryGetValue(key, out players))
                 {
                     float[] samples = SfxSynth.Make(kind, SfxSynth.DefaultRate);
-                    if (level == 1) for (int i = 0; i < samples.Length; ++i) samples[i] *= 0.4f;
+                    float k = _gain * (level == 1 ? 0.4f : 1f);
+                    if (k != 1f) for (int i = 0; i < samples.Length; ++i) samples[i] *= k;
                     byte[] wav = SfxSynth.ToWav16(samples, SfxSynth.DefaultRate);
                     players = new SoundPlayer[PoolSize];
                     for (int i = 0; i < PoolSize; ++i) { players[i] = new SoundPlayer(new MemoryStream(wav)); players[i].Load(); }

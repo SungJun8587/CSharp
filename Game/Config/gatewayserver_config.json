@@ -1,0 +1,15 @@
+{
+  "Name": "GatewayServer",
+  "IP": "0.0.0.0",
+  "Port": 7000,
+  "MaxSessionCount": 5000,
+  "WorkerThreadCnt": 0,
+  "ZoneIP": "127.0.0.1",
+  "ZonePort": 7100,
+  "ZoneMaxSessionCount": 64,
+  "ZoneWorkerThreadCnt": 2,
+  "HeartbeatIntervalMs": 2000,
+  "HeartbeatTimeoutMs": 10000,
+  "ClientMaxPacketsPerSec": 120,
+  "ClientMaxSendQueueBytes": 1048576
+}

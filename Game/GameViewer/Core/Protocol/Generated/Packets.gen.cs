@@ -16,6 +16,9 @@ namespace GameViewer.Core.Protocol
 		public const int ZcMoveReqSize = 20;
 		public const int ZcAttackReqSize = 12;
 		public const int ZcSkillReqSize = 24;
+		public const int ZcPingReqSize = 16;
+		public const int ZcPickupReqSize = 12;
+		public const int ZcChatReqSize = 141;
 
 		public static byte[] GwLoginReq(ulong charId)
 		{
@@ -62,6 +65,30 @@ namespace GameViewer.Core.Protocol
 			w.U64(targetId);
 			w.F32(x);
 			w.F32(y);
+			return w.Finish();
+		}
+
+		public static byte[] ZcPingReq(uint seq, ulong clientMs)
+		{
+			PacketWriter w = new PacketWriter((ushort)ZonePacketType.ZcPingReq, ZcPingReqSize);
+			w.U32(seq);
+			w.U64(clientMs);
+			return w.Finish();
+		}
+
+		public static byte[] ZcPickupReq(ulong entityId)
+		{
+			PacketWriter w = new PacketWriter((ushort)ZonePacketType.ZcPickupReq, ZcPickupReqSize);
+			w.U64(entityId);
+			return w.Finish();
+		}
+
+		public static byte[] ZcChatReq(ChatChannel channel, ulong targetId, string text)
+		{
+			PacketWriter w = new PacketWriter((ushort)ZonePacketType.ZcChatReq, ZcChatReqSize);
+			w.U8((byte)channel);
+			w.U64(targetId);
+			w.Str(text, ProtocolConst.ChatTextBytes);
 			return w.Finish();
 		}
 	}
@@ -717,6 +744,167 @@ namespace GameViewer.Core.Protocol
 			w.U64(CasterId);
 			w.U32(DurationMs);
 			w.U8(Applied ? (byte)1 : (byte)0);
+			return w.Finish();
+		}
+	}
+
+	public sealed class ZcPongNotify
+	{
+		public const int Size = 24;
+		public uint Seq;
+		public ulong ClientMs, ServerTimeMs;
+
+		public static ZcPongNotify Parse(byte[] d)
+		{
+			PacketReader r = new PacketReader(d, ProtocolConst.HeaderSize);
+			ZcPongNotify p = new ZcPongNotify();
+			p.Seq = r.U32();
+			p.ClientMs = r.U64();
+			p.ServerTimeMs = r.U64();
+			return p;
+		}
+
+		// 서버 쪽 레이아웃으로 직렬화한다 (테스트의 가짜 서버와 오프라인 데모가 쓴다)
+		public byte[] ToBytes()
+		{
+			PacketWriter w = new PacketWriter((ushort)ZonePacketType.ZcPongNotify, Size);
+			w.U32(Seq);
+			w.U64(ClientMs);
+			w.U64(ServerTimeMs);
+			return w.Finish();
+		}
+	}
+
+	public sealed class ZcStatNotify
+	{
+		public const int Size = 20;
+		public int Hp, MaxHp, Mp, MaxMp;
+
+		public static ZcStatNotify Parse(byte[] d)
+		{
+			PacketReader r = new PacketReader(d, ProtocolConst.HeaderSize);
+			ZcStatNotify p = new ZcStatNotify();
+			p.Hp = r.I32();
+			p.MaxHp = r.I32();
+			p.Mp = r.I32();
+			p.MaxMp = r.I32();
+			return p;
+		}
+
+		// 서버 쪽 레이아웃으로 직렬화한다 (테스트의 가짜 서버와 오프라인 데모가 쓴다)
+		public byte[] ToBytes()
+		{
+			PacketWriter w = new PacketWriter((ushort)ZonePacketType.ZcStatNotify, Size);
+			w.U32(unchecked((uint)Hp));
+			w.U32(unchecked((uint)MaxHp));
+			w.U32(unchecked((uint)Mp));
+			w.U32(unchecked((uint)MaxMp));
+			return w.Finish();
+		}
+	}
+
+	public sealed class ZcPickupRejectNotify
+	{
+		public const int Size = 13;
+		public ulong EntityId;
+		public PickupRejectReason Reason;
+
+		public static ZcPickupRejectNotify Parse(byte[] d)
+		{
+			PacketReader r = new PacketReader(d, ProtocolConst.HeaderSize);
+			ZcPickupRejectNotify p = new ZcPickupRejectNotify();
+			p.EntityId = r.U64();
+			p.Reason = (PickupRejectReason)r.U8();
+			return p;
+		}
+
+		// 서버 쪽 레이아웃으로 직렬화한다 (테스트의 가짜 서버와 오프라인 데모가 쓴다)
+		public byte[] ToBytes()
+		{
+			PacketWriter w = new PacketWriter((ushort)ZonePacketType.ZcPickupRejectNotify, Size);
+			w.U64(EntityId);
+			w.U8((byte)Reason);
+			return w.Finish();
+		}
+	}
+
+	public sealed class ZcItemGainNotify
+	{
+		public const int Size = 16;
+		public uint ItemId, Count, Total;
+
+		public static ZcItemGainNotify Parse(byte[] d)
+		{
+			PacketReader r = new PacketReader(d, ProtocolConst.HeaderSize);
+			ZcItemGainNotify p = new ZcItemGainNotify();
+			p.ItemId = r.U32();
+			p.Count = r.U32();
+			p.Total = r.U32();
+			return p;
+		}
+
+		// 서버 쪽 레이아웃으로 직렬화한다 (테스트의 가짜 서버와 오프라인 데모가 쓴다)
+		public byte[] ToBytes()
+		{
+			PacketWriter w = new PacketWriter((ushort)ZonePacketType.ZcItemGainNotify, Size);
+			w.U32(ItemId);
+			w.U32(Count);
+			w.U32(Total);
+			return w.Finish();
+		}
+	}
+
+	public sealed class ZcChatNotify
+	{
+		public const int Size = 149;
+		public ChatChannel Channel;
+		public ulong SenderId, TargetId;
+		public string Text = string.Empty;
+
+		public static ZcChatNotify Parse(byte[] d)
+		{
+			PacketReader r = new PacketReader(d, ProtocolConst.HeaderSize);
+			ZcChatNotify p = new ZcChatNotify();
+			p.Channel = (ChatChannel)r.U8();
+			p.SenderId = r.U64();
+			p.TargetId = r.U64();
+			p.Text = r.Str(ProtocolConst.ChatTextBytes);
+			return p;
+		}
+
+		// 서버 쪽 레이아웃으로 직렬화한다 (테스트의 가짜 서버와 오프라인 데모가 쓴다)
+		public byte[] ToBytes()
+		{
+			PacketWriter w = new PacketWriter((ushort)ZonePacketType.ZcChatNotify, Size);
+			w.U8((byte)Channel);
+			w.U64(SenderId);
+			w.U64(TargetId);
+			w.Str(Text, ProtocolConst.ChatTextBytes);
+			return w.Finish();
+		}
+	}
+
+	public sealed class ZcChatRejectNotify
+	{
+		public const int Size = 6;
+		public byte Channel;
+		public ChatRejectReason Reason;
+
+		public static ZcChatRejectNotify Parse(byte[] d)
+		{
+			PacketReader r = new PacketReader(d, ProtocolConst.HeaderSize);
+			ZcChatRejectNotify p = new ZcChatRejectNotify();
+			p.Channel = r.U8();
+			p.Reason = (ChatRejectReason)r.U8();
+			return p;
+		}
+
+		// 서버 쪽 레이아웃으로 직렬화한다 (테스트의 가짜 서버와 오프라인 데모가 쓴다)
+		public byte[] ToBytes()
+		{
+			PacketWriter w = new PacketWriter((ushort)ZonePacketType.ZcChatRejectNotify, Size);
+			w.U8((byte)Channel);
+			w.U8((byte)Reason);
 			return w.Finish();
 		}
 	}

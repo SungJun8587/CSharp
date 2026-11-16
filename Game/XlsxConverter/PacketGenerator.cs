@@ -165,22 +165,31 @@ namespace XlsxConverter
         private static string CsFieldType(PacketField f)
         {
             if (f.EnumName.Length > 0) return CodeGenCommon.CsEnumName(f.EnumName);
+            if (f.Type == "char") return "string";      // 고정 길이 UTF-8 문자열 필드
             return TypeOf(f).CsType!;
         }
 
+        /// <summary>char 배열 필드의 C# 쪽 바이트 길이 식. 숫자면 그대로, PacketConst 이름이면 ProtocolConst의 상수.</summary>
+        private static string CsLenExpr(PacketField f)
+            => f.Len.Length > 0 && char.IsDigit(f.Len[0]) ? f.Len : "ProtocolConst." + CodeGenCommon.CsConstName(f.Len);
+
         private static string CsReadExpr(PacketField f)
         {
+            if (f.Type == "char") return "r.Str(" + CsLenExpr(f) + ")";
             string raw = TypeOf(f).CsRead!;
             return f.EnumName.Length == 0 ? raw : "(" + CsFieldType(f) + ")" + raw;
         }
 
         private static string CsWriteStmt(PacketField f, string value)
         {
+            if (f.Type == "char") return "w.Str(" + value + ", " + CsLenExpr(f) + ");";
             PacketTypeInfo ti = TypeOf(f);
             string pattern = (f.EnumName.Length > 0 && ti.CsWriteEnum != null) ? ti.CsWriteEnum : ti.CsWrite!;
             int pos = pattern.IndexOf("{v}", StringComparison.Ordinal);
             return pattern.Remove(pos, 3).Insert(pos, value);      // 패턴마다 {v}는 하나다. (식이 값을 두 번 평가하지 않도록 표를 만든다)
         }
+
+        private const int PacketHeaderBytes = 4;      // PacketHeader { uint16 size; uint16 type; }
 
         private static string CsHeader(string file, string desc) => CodeGenCommon.CsBanner(file, CodeGenCommon.SourceNote(desc));
 
@@ -274,6 +283,13 @@ namespace XlsxConverter
                         errors.Add("PacketField: " + p.Name + "." + f.Name + ": C# 멤버 이름 " + m + "이(가) 겹칩니다");
                         continue;
                     }
+                    if (f.Type == "char")
+                    {
+                        // 문자열은 null이 될 수 없도록 초기값을 주고, 한 줄에 하나씩 선언한다.
+                        if (run.Length > 0) { s += "\t\tpublic " + runType + " " + run + ";\n"; run = string.Empty; runType = string.Empty; }
+                        s += "\t\tpublic string " + m + " = string.Empty;\n";
+                        continue;
+                    }
                     if (t != runType)
                     {
                         if (run.Length > 0) { s += "\t\tpublic " + runType + " " + run + ";\n"; run = string.Empty; }
@@ -293,6 +309,96 @@ namespace XlsxConverter
                 s += "\t\t\treturn w.Finish();\n\t\t}\n\t}\n";
             }
             return s + "}\n";
+        }
+
+        // ---------------------------------------------------------------- C# 서버
+
+        /// <summary>서버 쪽 C# 필드 형식. enum으로 선언한 필드도 원래 정수 형식이다. (서버 코드는 열거형 값을 정수로 비교한다)</summary>
+        private static string CsServerType(PacketField f)
+        {
+            if (f.Type == "char") return "string";
+            if (f.Type == "bool8") return "byte";
+            return TypeOf(f).CsType!;
+        }
+
+        /// <summary>packet 안 오프셋 off에 필드를 쓰는 문장. s는 패킷 전체 Span.</summary>
+        private static string CsServerWrite(PacketField f, string member, int off)
+        {
+            string o = Inv(off);
+            switch (f.Type)
+            {
+                case "uint8":
+                case "bool8": return "s[" + o + "] = " + member + ";";
+                case "uint16": return "BinaryPrimitives.WriteUInt16LittleEndian(s.Slice(" + o + "), " + member + ");";
+                case "uint32": return "BinaryPrimitives.WriteUInt32LittleEndian(s.Slice(" + o + "), " + member + ");";
+                case "int32": return "BinaryPrimitives.WriteInt32LittleEndian(s.Slice(" + o + "), " + member + ");";
+                case "uint64": return "BinaryPrimitives.WriteUInt64LittleEndian(s.Slice(" + o + "), " + member + ");";
+                case "float": return "BinaryPrimitives.WriteSingleLittleEndian(s.Slice(" + o + "), " + member + ");";
+                default: return "PacketIO.WriteString(s.Slice(" + o + ", " + CsLenExpr(f) + "), " + member + ");";   // char
+            }
+        }
+
+        private static string CsServerRead(PacketField f, int off)
+        {
+            string o = Inv(off);
+            switch (f.Type)
+            {
+                case "uint8":
+                case "bool8": return "p[" + o + "]";
+                case "uint16": return "BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(" + o + "))";
+                case "uint32": return "BinaryPrimitives.ReadUInt32LittleEndian(p.Slice(" + o + "))";
+                case "int32": return "BinaryPrimitives.ReadInt32LittleEndian(p.Slice(" + o + "))";
+                case "uint64": return "BinaryPrimitives.ReadUInt64LittleEndian(p.Slice(" + o + "))";
+                case "float": return "BinaryPrimitives.ReadSingleLittleEndian(p.Slice(" + o + "))";
+                default: return "PacketIO.ReadString(p.Slice(" + o + ", " + CsLenExpr(f) + "))";   // char
+            }
+        }
+
+        private static string GenCsServerPackets(PacketSchema schema, string ns)
+        {
+            CodeBuilder s = CodeGenCommon.CsBanner("Packets.gen.cs",
+                CodeGenCommon.SourceNote("Packet, PacketField") + "\n" +
+                "서버 쪽 패킷 구조체 (Cs 열과 무관하게 모든 패킷). 모든 필드는 리틀 엔디안, 패킹(1바이트 정렬)이며 헤더 [size:u16 (헤더 포함)][type:u16]로 시작한다.\n" +
+                "IPacket, PacketIO는 같은 네임스페이스에 손으로 쓰는 파일이 둔다.");
+            s += "\nusing System;\nusing System.Buffers.Binary;\n\nnamespace " + ns + ";\n";
+
+            foreach (PacketDef p in schema.Packets)
+            {
+                PacketGroup g = schema.FindGroup(p.Group)!;
+                string n = p.Name;
+                s += "\n/// <summary>" + n + " (" + g.CsEnum + "). 와이어 크기는 Size.</summary>\n";
+                s += "public struct " + n + " : IPacket\n{\n";
+                s += "    public const int Size = " + Inv(p.Size) + ";\n";
+                s += "    static int IPacket.PacketSize => Size;\n";
+                s += "    public const " + g.CsEnum + " Type = " + g.CsEnum + "." + CodeGenCommon.CsIdent(n) + ";\n";
+                foreach (PacketField f in p.Fields)
+                    s += "    public " + CsServerType(f) + " " + CodeGenCommon.Pascal(f.Name) + ";\n";
+
+                s += "\n    /// <summary>헤더와 필드를 packet 앞에 쓴다. packet은 Size 이상이어야 한다.</summary>\n";
+                s += "    public readonly int Write(Span<byte> p)\n    {\n";
+                s += "        Span<byte> s = p;\n";
+                s += "        PacketIO.WriteHeader(s, Size, (ushort)Type);\n";
+                int off = PacketHeaderBytes;
+                foreach (PacketField f in p.Fields)
+                {
+                    s += "        " + CsServerWrite(f, CodeGenCommon.Pascal(f.Name), off) + "\n";
+                    off += f.Bytes;
+                }
+                s += "        return Size;\n    }\n";
+
+                s += "\n    /// <summary>packet(헤더 포함)에서 읽는다. 크기가 모자라면 false.</summary>\n";
+                s += "    public static bool TryRead(ReadOnlySpan<byte> p, out " + n + " v)\n    {\n";
+                s += "        if (p.Length < Size)\n        {\n            v = default;\n            return false;\n        }\n";
+                s += "        v = new " + n + "\n        {\n";
+                off = PacketHeaderBytes;
+                foreach (PacketField f in p.Fields)
+                {
+                    s += "            " + CodeGenCommon.Pascal(f.Name) + " = " + CsServerRead(f, off) + ",\n";
+                    off += f.Bytes;
+                }
+                s += "        };\n        return true;\n    }\n}\n";
+            }
+            return s;
         }
 
         // ---------------------------------------------------------------- 공개
@@ -317,7 +423,7 @@ namespace XlsxConverter
             int before = errors.Count;
             if (!CodeGenCommon.IsValidNamespace(ns))
             {
-                errors.Add("패킷 C# 네임스페이스 '" + ns + "': 형식이 아닙니다 (--proto-cs-namespace, 없으면 --cs-namespace)");
+                errors.Add("패킷 C# 네임스페이스 '" + ns + "': 형식이 아닙니다 (--cs-client-proto-namespace, 없으면 --cs-namespace)");
                 return false;
             }
 
@@ -347,6 +453,47 @@ namespace XlsxConverter
             output.Add(new GeneratedFile("ProtocolTypes.gen.cs", GenCsTypes(schema, ns)));
             output.Add(new GeneratedFile("Packets.gen.cs", GenCsPackets(schema, ns, errors)));
             return errors.Count == before;
+        }
+
+        /// <summary>서버 쪽 ProtocolTypes.gen.cs(상수, enum, 패킷 번호)와 Packets.gen.cs(IPacket 구조체: Write/TryRead)를 output에 덧붙입니다.</summary>
+        /// <param name="otherTypeNames">같은 네임스페이스에 만들어지는 다른 C# 형식 이름들(시트 클래스 등). 없으면 null</param>
+        public static bool GenerateServerCs(PacketSchema schema, string ns, List<GeneratedFile> output, List<string> errors, ISet<string>? otherTypeNames)
+        {
+            if (schema.IsEmpty) return true;
+            int before = errors.Count;
+            if (!CodeGenCommon.IsValidNamespace(ns))
+            {
+                errors.Add("서버 패킷 C# 네임스페이스 '" + ns + "': 형식이 아닙니다 (--cs-server-proto-namespace, 없으면 --cs-namespace)");
+                return false;
+            }
+
+            // 같은 네임스페이스의 형식 이름끼리 겹치면 C# 컴파일이 깨진다. 손으로 쓰는 IPacket, PacketIO도 이름을 점유한다.
+            var names = new HashSet<string>(StringComparer.Ordinal) { "ProtocolConst", "IPacket", "PacketIO" };
+            void Add(string name, string what)
+            {
+                if (!names.Add(name))
+                    errors.Add(what + " " + name + ": C# 형식 이름이 서버 패킷 프로토콜의 다른 형식(ProtocolConst, IPacket, PacketIO, enum, 패킷 구조체)과 겹칩니다");
+                else if (otherTypeNames != null && otherTypeNames.Contains(name))
+                    errors.Add(what + " " + name + ": C# 형식 이름이 같은 네임스페이스(" + ns + ")의 시트 클래스/GameConsts/Enum 시트의 enum과 겹칩니다");
+            }
+            foreach (EnumDef e in schema.Enums) Add(CodeGenCommon.CsEnumName(e.Name), "PacketEnum");
+            foreach (PacketGroup g in schema.Groups) Add(g.CsEnum, "PacketGroup");
+            foreach (PacketDef p in schema.Packets)
+            {
+                if (CodeGenCommon.IsCsKeyword(p.Name)) { errors.Add("Packet " + p.Name + ": C# 예약어라 구조체 이름으로 쓸 수 없습니다"); continue; }
+                Add(p.Name, "Packet");
+                var members = new HashSet<string>(StringComparer.Ordinal) { "Size", "Type", "Write", "TryRead", "PacketSize", p.Name };
+                foreach (PacketField f in p.Fields)
+                {
+                    string m = CodeGenCommon.Pascal(f.Name);
+                    if (!members.Add(m))
+                        errors.Add("PacketField: " + p.Name + "." + f.Name + ": C# 멤버 이름 " + m + "이(가) 겹칩니다");
+                }
+            }
+            if (errors.Count != before) return false;
+            output.Add(new GeneratedFile("ProtocolTypes.gen.cs", GenCsTypes(schema, ns)));
+            output.Add(new GeneratedFile("Packets.gen.cs", GenCsServerPackets(schema, ns)));
+            return true;
         }
 
         /// <summary>"&lt;구조체&gt; &lt;바이트&gt;" 목록. (C# 테스트가 C++ sizeof와 대조하는 입력)</summary>

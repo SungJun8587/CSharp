@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Game.ZoneServer</RootNamespace>
+    <AssemblyName>Game.ZoneServer</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../GameCommon/ZoneCommon/Game.Protocol.csproj" />
+    <ProjectReference Include="../GameCommon/ZoneCore/Game.ZoneCore.csproj" />
+    <ProjectReference Include="../ServerCommon/Game.ServerCommon.csproj" />
+    <ProjectReference Include="../../Library/Core/Net/Core.Net.csproj" />
+    <ProjectReference Include="../../Library/Core/Util/Core.Util.csproj" />
+  </ItemGroup>
+
+</Project>

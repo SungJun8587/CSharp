@@ -9,6 +9,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using GameViewer.Core;
 using GameViewer.Core.Data;
+using GameViewer.Core.Logic;
 using GameViewer.Core.World;
 
 namespace GameViewer.App.Render
@@ -18,6 +19,7 @@ namespace GameViewer.App.Render
         private readonly Resources _res;
         private readonly SkillEffects _skill;
         private readonly AttackEffects _attack;
+        private readonly MaterialFx _mat;
         internal AttackEffects Attack { get { return _attack; } }
         private readonly SpriteCache _glows = new SpriteCache(200);
         private readonly SpriteCache.PaintFn _glowPaint;
@@ -29,6 +31,7 @@ namespace GameViewer.App.Render
             _res = res;
             _skill = new SkillEffects(res, this);
             _attack = new AttackEffects(res, this);
+            _mat = new MaterialFx(res, this);
             _glowPaint = delegate (Graphics g) { P.Glow(g, 0, 0, _gs / 2f - 1, _gc, _ga); };
         }
 
@@ -61,27 +64,27 @@ namespace GameViewer.App.Render
                 {
                     case EffectKind.Telegraph: DrawTelegraph(g, w, fx, v, now, sx, sy); break;
                     case EffectKind.Ring:
-                        {
-                            SkillFxInfo info = fx.SkillId != 0 ? SkillFxTable.For(w.Data, fx.SkillId) : null;
-                            if (info != null && info.Style != SkillFxStyle.Default && _skill.RingGround(g, info, fx, v, now, fx.X, fx.Y, fx.Radius)) break;
-                            DrawBurstGround(g, fx, v, now, sx, sy);
-                            break;
-                        }
+                    {
+                        SkillFxInfo info = fx.SkillId != 0 ? SkillFxTable.For(w.Data, fx.SkillId) : null;
+                        if (info != null && info.Style != SkillFxStyle.Default && _skill.RingGround(g, info, fx, v, now, fx.X, fx.Y, fx.Radius)) break;
+                        DrawBurstGround(g, fx, v, now, sx, sy);
+                        break;
+                    }
                     case EffectKind.Slash:
-                        {
-                            if (fx.Variant != 1 || fx.SkillId == 0 || fx.Radius <= 0f) break;
-                            SkillFxInfo info = SkillFxTable.For(w.Data, fx.SkillId);
-                            if (info != null) _skill.SlashGround(g, info, w, fx, v, now);
-                            break;
-                        }
+                    {
+                        if (fx.Variant != 1 || fx.SkillId == 0 || fx.Radius <= 0f) break;
+                        SkillFxInfo info = SkillFxTable.For(w.Data, fx.SkillId);
+                        if (info != null) _skill.SlashGround(g, info, w, fx, v, now);
+                        break;
+                    }
                     case EffectKind.RespawnRing:
-                        {
-                            float p = fx.Progress(now);
-                            float r = v.Px(2.8f) * (0.3f + 0.7f * p);
-                            g.DrawEllipse(_res.Pen((int)(220 * (1f - p)), 120, 240, 255, 3f), sx - r, sy - r * 0.7f, r * 2, r * 1.4f);
-                            Glow(g, Color.FromArgb(120, 230, 255), sx, sy, r * 1.1f, r * 0.8f, 0.6f * (1f - p));
-                            break;
-                        }
+                    {
+                        float p = fx.Progress(now);
+                        float r = v.Px(2.8f) * (0.3f + 0.7f * p);
+                        g.DrawEllipse(_res.Pen((int)(220 * (1f - p)), 120, 240, 255, 3f), sx - r, sy - r * 0.7f, r * 2, r * 1.4f);
+                        Glow(g, Color.FromArgb(120, 230, 255), sx, sy, r * 1.1f, r * 0.8f, 0.6f * (1f - p));
+                        break;
+                    }
                 }
             }
         }
@@ -145,62 +148,72 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 공중
 
+        /// <summary>DrawAir 의 연출 종류별 누적 시간(ms, 인덱스 = EffectKind, 마지막 칸 = 떠오르는 글자). 성능 확인용.</summary>
+        public readonly double[] KindMs = new double[24];
+        private static double Ms() { return System.Diagnostics.Stopwatch.GetTimestamp() * 1000.0 / System.Diagnostics.Stopwatch.Frequency; }
+
         public void DrawAir(Graphics g, ViewerSession s, ViewState v, long now)
         {
             WorldModel w = s.World;
             for (int i = 0; i < w.Effects.Count; ++i)
             {
                 ViewEffect fx = w.Effects[i];
+                double t0 = Ms();
+                try {
                 float p = fx.Progress(now);
                 float sx = v.ToScreenX(fx.X), sy = v.ToScreenY(fx.Y);
                 switch (fx.Kind)
                 {
                     case EffectKind.Projectile: DrawProjectile(g, s, fx, v, now); break;
                     case EffectKind.Slash:
-                        {
-                            SkillFxInfo info = fx.Variant == 1 && fx.SkillId != 0 ? SkillFxTable.For(w.Data, fx.SkillId) : null;
-                            if (info != null && info.Style != SkillFxStyle.Default && _skill.Slash(g, info, w, fx, v, now)) break;
-                            if (fx.Variant != 1 && _attack.MeleeSlash(g, w, fx, v, now)) break;
-                            DrawSlash(g, w, fx, v, now, p, sx, sy);
-                            break;
-                        }
+                    {
+                        SkillFxInfo info = fx.Variant == 1 && fx.SkillId != 0 ? SkillFxTable.For(w.Data, fx.SkillId) : null;
+                        if (info != null && info.Style != SkillFxStyle.Default && _skill.Slash(g, info, w, fx, v, now)) break;
+                        if (fx.Variant != 1 && _attack.MeleeSlash(g, w, fx, v, now)) break;
+                        DrawSlash(g, w, fx, v, now, p, sx, sy);
+                        break;
+                    }
                     case EffectKind.Tracer:
-                        {
-                            Entity c = w.Find(fx.EntityId);
-                            if (c == null) break;
-                            if (_attack.Tracer(g, w, fx, v, now)) break;
-                            float ax, ay; c.PosAt(now, out ax, out ay);
-                            float x0 = v.ToScreenX(ax), y0 = v.ToScreenY(ay) - v.Px(1.5f), y1 = sy - v.Px(1.1f);
-                            g.DrawLine(_res.Pen((int)(120 * (1f - p)), 255, 240, 170, 5f), x0, y0, sx, y1);
-                            g.DrawLine(_res.Pen((int)(240 * (1f - p)), 255, 250, 210, 2f), x0, y0, sx, y1);
-                            break;
-                        }
+                    {
+                        Entity c = w.Find(fx.EntityId);
+                        if (c == null) break;
+                        if (_attack.Tracer(g, w, fx, v, now)) break;
+                        float ax, ay; c.PosAt(now, out ax, out ay);
+                        float x0 = v.ToScreenX(ax), y0 = v.ToScreenY(ay) - v.Px(1.5f), y1 = sy - v.Px(1.1f);
+                        g.DrawLine(_res.Pen((int)(120 * (1f - p)), 255, 240, 170, 5f), x0, y0, sx, y1);
+                        g.DrawLine(_res.Pen((int)(240 * (1f - p)), 255, 250, 210, 2f), x0, y0, sx, y1);
+                        break;
+                    }
                     case EffectKind.Spark:
-                        {
-                            SkillFxInfo info = fx.SkillId != 0 ? SkillFxTable.For(w.Data, fx.SkillId) : null;
-                            if (info != null && _skill.Impact(g, info, fx, v, now, p, sx, sy)) break;
-                            _attack.Hit(g, w, fx, v, p, sx, sy);
-                            break;
-                        }
+                    {
+                        SkillFxInfo info = fx.SkillId != 0 ? SkillFxTable.For(w.Data, fx.SkillId) : null;
+                        if (info != null && _skill.Impact(g, info, fx, v, now, p, sx, sy)) break;
+                        _attack.Hit(g, w, fx, v, p, sx, sy);
+                        break;
+                    }
                     case EffectKind.Ring:
-                        {
-                            SkillFxInfo info = fx.SkillId != 0 ? SkillFxTable.For(w.Data, fx.SkillId) : null;
-                            if (info != null && info.Style != SkillFxStyle.Default && _skill.RingAir(g, info, fx, v, now, fx.X, fx.Y, fx.Radius)) break;
-                            DrawBurstDust(g, fx, v, p, sx, sy);
-                            break;
-                        }
-                    case EffectKind.DeathPuff: DrawDeath(g, fx, v, p, sx, sy); break;
+                    {
+                        SkillFxInfo info = fx.SkillId != 0 ? SkillFxTable.For(w.Data, fx.SkillId) : null;
+                        if (info != null && info.Style != SkillFxStyle.Default && _skill.RingAir(g, info, fx, v, now, fx.X, fx.Y, fx.Radius)) break;
+                        DrawBurstDust(g, fx, v, p, sx, sy);
+                        break;
+                    }
+                    case EffectKind.DeathPuff: DrawDeath(g, w, fx, v, p, sx, sy); break;
+                    case EffectKind.BossDeath: DrawBossDeath(g, w, fx, v, p, sx, sy); break;
                     case EffectKind.Heal: DrawHealSparkles(g, fx, v, w, now, p); break;
                     case EffectKind.Banner: break;      // HUD 에서 그린다
                 }
+                } finally { KindMs[(int)fx.Kind] += Ms() - t0; }
             }
             // 글자는 모든 연출 위에 (겹쳐도 읽히게 마지막에)
+            double tt = Ms();
             for (int i = 0; i < w.Effects.Count; ++i)
             {
                 ViewEffect fx = w.Effects[i];
                 if (fx.Kind != EffectKind.Damage && fx.Kind != EffectKind.Heal && fx.Kind != EffectKind.Text) continue;
                 DrawFloatingText(g, w, fx, v, fx.Progress(now), v.ToScreenX(fx.X), v.ToScreenY(fx.Y), now);
             }
+            KindMs[23] += Ms() - tt;
         }
 
         private void DrawSlash(Graphics g, WorldModel w, ViewEffect fx, ViewState v, long now, float p, float sx, float sy)
@@ -240,8 +253,67 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void DrawDeath(Graphics g, ViewEffect fx, ViewState v, float p, float sx, float sy)
+        /// <summary>세로 빛기둥: 가운데가 밝고 양옆으로 사라지며, 위로 갈수록 옅어진다. 보스 연출에서만 쓰므로 브러시를 그때그때 만든다.</summary>
+        public void Beam(Graphics g, Color c, float x, float bottomY, float topY, float halfW, float alpha)
         {
+            if (alpha <= 0.01f || halfW < 1f) return;
+            alpha = Math.Min(1f, alpha);
+            const int Segs = 8;
+            float segH = (bottomY - topY) / Segs;
+            for (int i = 0; i < Segs; ++i)
+                BeamSeg(g, c, x, topY + (Segs - 1 - i) * segH, segH + 1f, halfW, alpha * (1f - (float)i / Segs));      // 위로 갈수록 옅게
+        }
+
+        private static void BeamSeg(Graphics g, Color c, float x, float top, float h, float halfW, float alpha)
+        {
+            RectangleF r = new RectangleF(x - halfW, top, halfW * 2, h);
+            using (System.Drawing.Drawing2D.LinearGradientBrush b = new System.Drawing.Drawing2D.LinearGradientBrush(r, Color.Transparent, Color.Transparent, 0f))
+            {
+                System.Drawing.Drawing2D.ColorBlend cb = new System.Drawing.Drawing2D.ColorBlend(5);
+                cb.Positions = new float[] { 0f, 0.3f, 0.5f, 0.7f, 1f };
+                cb.Colors = new Color[] { Color.FromArgb(0, c), Color.FromArgb((int)(150 * alpha), c), Color.FromArgb((int)(235 * alpha), c), Color.FromArgb((int)(150 * alpha), c), Color.FromArgb(0, c) };
+                b.InterpolationColors = cb;
+                g.FillRectangle(b, r);
+            }
+        }
+
+        /// <summary>보스 사망: 몸이 터지는 섬광, 하늘로 솟는 빛기둥, 사방으로 퍼지는 충격 고리와 불씨.</summary>
+        private void DrawBossDeath(Graphics g, WorldModel w, ViewEffect fx, ViewState v, float p, float sx, float sy)
+        {
+            Entity e = w.Find(fx.EntityId);
+            float hh = e != null ? CreatureRenderer.LookOf(e).H : 3f, hw = e != null ? CreatureRenderer.LookOf(e).HalfW : 1.5f;
+            float fl = BossFx.DeathFlash(p), pl = BossFx.DeathPillar(p);
+            if (fl > 0f) { Glow(g, Color.FromArgb(255, 240, 200), sx, sy - v.Px(hh * 0.5f), v.Px(hw) * (1.6f + 3.0f * p), v.Px(hh) * (1.0f + 1.6f * p), Math.Min(1f, fl * 1.2f)); g.FillRectangle(_res.Brush((int)(120 * fl), 255, 245, 220), 0, 0, 4000, 4000); }
+            if (pl > 0f)
+            {
+                float ph = v.Px(hh * 6f), pw = v.Px(hw) * (0.7f + 0.5f * pl);
+                Beam(g, Color.FromArgb(255, 205, 110), sx, sy, sy - ph, pw * 1.5f, pl);
+                Beam(g, Color.FromArgb(255, 252, 235), sx, sy, sy - ph, pw * 0.55f, pl);
+                Glow(g, Color.FromArgb(255, 252, 235), sx, sy - ph * 0.5f, pw * 0.8f, ph * 0.5f, 1.0f * pl);
+                Glow(g, Color.FromArgb(255, 240, 200), sx, sy - v.Px(hh * 0.3f), pw * 2.4f, v.Px(hh) * 0.8f, 0.8f * pl);
+            }
+            for (int k = 0; k < 3; ++k)
+            {
+                float q = (p - 0.06f - k * 0.10f) / 0.6f;
+                if (q <= 0f || q >= 1f) continue;
+                float rr = v.Px(hw) * (0.8f + 4.2f * q);
+                g.DrawEllipse(_res.Pen((int)(230 * (1f - q)), 255, 220 - k * 30, 140 - k * 25, 5f * (1f - q) + 1f), sx - rr, sy - rr * 0.25f, rr * 2, rr * 0.5f);
+            }
+            for (int k = 0; k < 18; ++k)
+            {
+                float ang = Rnd(fx, k) * 6.2832f, sp = 0.5f + Rnd(fx, k + 40) * 0.9f;
+                float q = Math.Max(0f, p - 0.08f) / 0.92f;
+                float px = sx + (float)Math.Cos(ang) * v.Px(hw * 2.4f) * sp * q;
+                float py = sy - v.Px(hh * 0.5f) + (float)Math.Sin(ang) * v.Px(hh * 1.2f) * sp * q - v.Px(1.2f) * q + v.Px(2f) * q * q;
+                float r = v.Px(0.18f) * (1f - q);
+                Glow(g, Color.FromArgb(255, 190, 90), px, py, r * 3f, r * 3f, 0.9f * (1f - q));
+            }
+        }
+
+        private void DrawDeath(Graphics g, WorldModel w, ViewEffect fx, ViewState v, float p, float sx, float sy)
+        {
+            Entity de = w.Find(fx.EntityId);
+            if (de != null && de.IsMonster) _mat.Burst(g, GameViewer.Core.Logic.HitMaterial.Of(de.TemplateId, true), MaterialFx.Seed(fx), sx, sy, p, v, de.IsBoss ? 3.5f : 2.2f);
             for (int k = 0; k < 4; ++k)
             {
                 float r = v.Px(0.6f + p * (0.8f + k * 0.25f));
@@ -325,7 +397,8 @@ namespace GameViewer.App.Render
         private void DrawFloatingText(Graphics g, WorldModel w, ViewEffect fx, ViewState v, float p, float sx, float sy, long now)
         {
             if (sx < -60 || sx > v.Width + 60 || sy < -60 || sy > v.Height + 140) return;
-            string text; Color color; Font font = _res.Bold;
+            if (fx.Kind == EffectKind.Damage && !v.Settings.ShowDamageNumbers) return;
+            string text; Color color; Font font = _res.Bold; bool heavyTag = false;
             Entity tgt = fx.EntityId != 0 ? w.Find(fx.EntityId) : null;
             float topY = tgt != null ? CreatureRenderer.LookOf(tgt).H : 2.2f;
             if (fx.Kind == EffectKind.Damage)
@@ -338,12 +411,14 @@ namespace GameViewer.App.Render
                     case 3: color = Color.FromArgb(255, 235, 110); break;
                     default: color = Color.White; break;
                 }
-                bool heavy = tgt != null && tgt.MaxHp > 0 && fx.Value * 100 >= tgt.MaxHp * 12;
+                int tier = DamageStyle.Tier(fx.Value, tgt != null ? tgt.MaxHp : 0);
+                bool heavy = tier >= 2;
+                heavyTag = heavy && fx.Variant == 3;
+                if (tier >= 3 && fx.Variant == 3) color = Color.FromArgb(255, 150, 60);
                 if (heavy) font = _res.Huge; else if (fx.Value >= 100) font = _res.Big;
-                if (p < 0.12f && !heavy && font == _res.Bold) font = _res.Big;       // 맞는 순간 살짝 커졌다가 줄어든다
                 if (heavy) text = fx.Value + "!";
             }
-            else if (fx.Kind == EffectKind.Heal) { text = "+" + fx.Value; color = Color.FromArgb(110, 255, 140); }
+            else if (fx.Kind == EffectKind.Heal) { text = "+" + fx.Value; color = Color.FromArgb(110, 255, 140); if (tgt != null && tgt.MaxHp > 0 && fx.Value * 100 >= tgt.MaxHp * 15) font = _res.Big; }
             else { text = fx.Text ?? ""; color = Color.FromArgb(170, 220, 255); font = _res.Small; }
 
             float rise = v.Px(fx.Kind == EffectKind.Text ? 1.0f : 1.8f) * (1f - (1f - p) * (1f - p));
@@ -354,7 +429,34 @@ namespace GameViewer.App.Render
                 Glow(g, fx.Variant == 2 ? Color.FromArgb(255, 70, 60) : Color.FromArgb(255, 210, 90), sx + jitter, sy - v.Px(topY * 0.75f) - rise, gr, gr, 0.9f * (1f - p / 0.35f));
             }
             int a = p < 0.65f ? 255 : (int)(255 * (1f - (p - 0.65f) / 0.35f));
-            _res.OutlinedText(g, text, font, Color.FromArgb(Resources.Clamp(a), color), sx + jitter, sy - v.Px(topY * 0.75f) - rise, _res.Center);
+            float px = sx + jitter, py = sy - v.Px(topY * 0.75f) - rise;
+            if (fx.Kind == EffectKind.Heal)
+            {
+                float hs = DamageStyle.HealScale(fx.Value, tgt != null ? tgt.MaxHp : 0) * (1f + 0.3f * Math.Max(0f, 1f - p * 6f));
+                GraphicsState gh = g.Save();
+                g.TranslateTransform(px, py - v.Px(0.3f) * (float)Math.Sin(p * Math.PI));
+                g.ScaleTransform(hs, hs);
+                _res.OutlinedText(g, text, font, Color.FromArgb(Resources.Clamp(a), color), 0f, 0f, _res.Center);
+                g.Restore(gh);
+                return;
+            }
+            if (fx.Kind == EffectKind.Damage)
+            {
+                // 크기는 대상 최대 체력 대비 피해 비율에 따라 연속적으로 커지고, 맞는 순간 확 커졌다 줄어든다
+                int dtier = DamageStyle.Tier(fx.Value, tgt != null ? tgt.MaxHp : 0);
+                float scale = DamageStyle.Scale(fx.Value, tgt != null ? tgt.MaxHp : 0, dtier);
+                px += DamageStyle.Shake(dtier, p) * (fx.Variant == 2 ? 1.3f : 1f);
+                if (fx.Variant == 1) scale *= 0.85f;                                         // 지속 피해는 조금 작게
+                scale *= 1f + 0.45f * Math.Max(0f, 1f - p * 7f);
+                GraphicsState gs = g.Save();
+                g.TranslateTransform(px, py);
+                g.ScaleTransform(scale, scale);
+                if (heavyTag) _res.OutlinedText(g, DamageStyle.Tag(dtier), _res.Small, Color.FromArgb(Resources.Clamp(a), 255, 190, 90), 0f, -15f, _res.Center);
+                _res.OutlinedText(g, text, font, Color.FromArgb(Resources.Clamp(a), color), 0f, 0f, _res.Center);
+                g.Restore(gs);
+                return;
+            }
+            _res.OutlinedText(g, text, font, Color.FromArgb(Resources.Clamp(a), color), px, py, _res.Center);
         }
 
         // ------------------------------------------------------------------ 상태 오라

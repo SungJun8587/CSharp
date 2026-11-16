@@ -10,12 +10,33 @@ namespace GameViewer.Tests
     {
         const long Now = 100000;
 
+        // 종류별 동작은 이미지 목록에서 등록하는 표(MonsterTraits)가 정한다. 테스트는 쓰는 번호를 직접 등록한다.
+        static AttackPoseTests()
+        {
+            MonsterTraits.Clear();
+            MonsterTraits.Set(1, AttackStyle.Hop, false, true);
+            MonsterTraits.Set(2, AttackStyle.Lunge, false, false);
+            MonsterTraits.Set(101, AttackStyle.Slam, false, false);
+        }
+
         static Entity Mon(uint tpl, float faceX)
         {
             Entity e = new Entity(); e.Id = 0x8000000000000001UL; e.Type = (byte)EntityType.Monster; e.TemplateId = tpl; e.FaceX = faceX; e.FaceY = 0; e.Hp = e.MaxHp = 100;
             return e;
         }
         static Entity Hero(float faceX) { Entity e = Mon(1, faceX); e.Id = 1; e.Type = (byte)EntityType.Player; return e; }
+
+        public static void Traits()
+        {
+            AttackStyle s;
+            T.Check(MonsterTraits.TryParseStyle("Hop", out s) && s == AttackStyle.Hop && MonsterTraits.TryParseStyle("slam", out s) && s == AttackStyle.Slam, "style names parse (case-insensitive)");
+            T.Check(!MonsterTraits.TryParseStyle("fly", out s) && !MonsterTraits.TryParseStyle(null, out s), "unknown style name is rejected");
+            MonsterTraits.Set(40, AttackStyle.Lunge, true, true);
+            T.Check(MonsterTraits.IsFlying(40) && MonsterTraits.AnimatesIdle(40) && !MonsterTraits.IsFlying(1) && !MonsterTraits.IsFlying(41), "flying/idle flags by kind");
+            MonsterTraits.Clear();
+            T.Check(AttackPose.StyleOf(Mon(1, 1)) == AttackStyle.Lunge, "cleared table falls back to lunge");
+            MonsterTraits.Set(1, AttackStyle.Hop, false, true); MonsterTraits.Set(2, AttackStyle.Lunge, false, false); MonsterTraits.Set(101, AttackStyle.Slam, false, false);
+        }
 
         public static void Strike()
         {
@@ -47,16 +68,17 @@ namespace GameViewer.Tests
         public static void Styles()
         {
             T.Check(AttackPose.StyleOf(Mon(1, 1)) == AttackStyle.Hop, "slime hops");
-            T.Check(AttackPose.StyleOf(Mon(2, 1)) == AttackStyle.Lunge, "wolf lunges");
-            T.Check(AttackPose.StyleOf(Mon(8, 1)) == AttackStyle.Slam, "heavy slams");
+            T.Check(AttackPose.StyleOf(Mon(2, 1)) == AttackStyle.Lunge, "lunger");
+            T.Check(AttackPose.StyleOf(Mon(99, 1)) == AttackStyle.Lunge, "unregistered kind lunges");
+            T.Check(AttackPose.StyleOf(Mon(101, 1)) == AttackStyle.Slam, "registered slammer slams");
             T.Check(AttackPose.StyleOf(Hero(1)) == AttackStyle.Lunge, "hero lunges");
             Entity h = Mon(1, 1); h.AttackAnimMs = Now;
             float maxLift = 0; for (int t = 0; t < 440; t += 10) maxLift = Math.Max(maxLift, AttackPose.Compute(h, Now + t).Lift);
             T.Check(maxLift > 0.5f, "hop leaves the ground");
-            Entity s = Mon(8, 1); s.AttackAnimMs = Now;
+            Entity s = Mon(101, 1); s.AttackAnimMs = Now;
             BodyPose ps = AttackPose.Compute(s, Now + AttackPose.StrikeMs);
             T.Check(ps.ScaleY < 0.9f && ps.ScaleX > 1.05f, "slam squashes");
-            Entity b = Mon(8, 1); b.Boss = new GameViewer.Core.Data.BossRow(); b.AttackAnimMs = Now;
+            Entity b = Mon(101, 1); b.Boss = new GameViewer.Core.Data.BossRow(); b.AttackAnimMs = Now;
             T.Check(AttackPose.Compute(b, Now + AttackPose.StrikeMs).OffX > ps.OffX, "boss reaches further");
             T.Check(AttackPose.DurationMs(b) > AttackPose.DurationMs(s), "boss moves slower");
         }
@@ -68,7 +90,7 @@ namespace GameViewer.Tests
             BodyPose early = AttackPose.Compute(e, Now + 100), late = AttackPose.Compute(e, Now + 540);
             T.Check(early.OffX < 0f && late.OffX < early.OffX - 0.05f, "casting pulls back more over time");
             T.Check(late.Lean < -5f, "casting leans back");
-            Entity sl = Mon(8, 1); sl.CastSkillId = 36; sl.CastStartMs = Now; sl.CastTimeMs = 900;
+            Entity sl = Mon(101, 1); sl.CastSkillId = 36; sl.CastStartMs = Now; sl.CastTimeMs = 900;
             T.Check(AttackPose.Compute(sl, Now + 700).Lift > 0.15f, "heavy rears up while casting");
             Entity sq = Mon(1, 1); sq.CastSkillId = 30; sq.CastStartMs = Now; sq.CastTimeMs = 700;
             T.Check(AttackPose.Compute(sq, Now + 650).ScaleY < 0.85f, "slime crouches while casting");
@@ -84,6 +106,30 @@ namespace GameViewer.Tests
             T.Check(pa.OffX < -0.1f && pa.Lean < 0f, "ranged shot kicks back");
         }
 
+        public static void BakedFrames()
+        {
+            Entity e = Mon(2, 1);
+            T.Check(AttackPose.BakedFrame(e, Now, 5) == -1, "idle: no baked frame");
+            T.Check(AttackPose.BakedFrame(Hero(1), Now, 5) == -1, "heroes are not baked monsters");
+            e.AttackAnimMs = Now;
+            T.Check(AttackPose.BakedFrame(e, Now + AttackPose.StrikeMs, 5) == 4, "peak uses the last pose");
+            int prev = 0; bool mono = true;
+            for (int t = 0; t < AttackPose.DurationMs(e); t += 5)
+            {
+                int k = AttackPose.BakedFrame(e, Now + t, 5);
+                if (k < -1 || k > 4) mono = false;
+            }
+            T.Check(mono && prev == 0, "poses stay in range");
+            T.Check(AttackPose.BakedFrame(e, Now + AttackPose.DurationMs(e) + 5, 5) == -1, "back to idle after the strike");
+            Entity sk = Mon(2, 1); sk.CastSkillId = 1; sk.CastStartMs = Now; sk.CastTimeMs = 800;
+            T.Check(AttackPose.BakedFrame(sk, Now + 100, 5) == -1 && AttackPose.BakedFrame(sk, Now + 400, 5) == 0, "casting: wind-up pose once charged");
+            Entity sl = Mon(1, 1); sl.AttackAnimMs = Now;
+            int rise = AttackPose.BakedFrame(sl, Now + 120, 5), land = AttackPose.BakedFrame(sl, Now + 0.7f * AttackPose.DurationMs(sl) > 0 ? Now + (long)(0.7f * AttackPose.DurationMs(sl)) : Now, 5);
+            T.Check(rise == 3 && land == 4, "hop style: stretched in the air, splat on landing");
+            BodyPose baked = AttackPose.Compute(e, Now + AttackPose.StrikeMs, true), plain = AttackPose.Compute(e, Now + AttackPose.StrikeMs, false);
+            T.Check(baked.Lean == 0f && baked.ScaleX == 1f && baked.ScaleY == 1f && baked.OffX < plain.OffX, "baked body: lean/squash left to the sprite, travel halved");
+        }
+
         public static void HitReaction()
         {
             Entity e = Mon(2, -1);
@@ -92,11 +138,22 @@ namespace GameViewer.Tests
             T.Check(p.OffX > 0.1f && p.Lean > 3f && p.ScaleY < 1f, "pushed away from the attacker");
             T.Check(AttackPose.Compute(e, Now + 400).IsIdentity, "recoil ends");
             e.HitDirX = 0; T.Check(AttackPose.Compute(e, Now + 10).IsIdentity, "unknown direction: flash only");
-            Entity b = Mon(8, 1); b.Boss = new GameViewer.Core.Data.BossRow(); b.HitFlashMs = Now; b.HitDirX = 1;
-            Entity m = Mon(8, 1); m.HitFlashMs = Now; m.HitDirX = 1;
+            Entity b = Mon(101, 1); b.Boss = new GameViewer.Core.Data.BossRow(); b.HitFlashMs = Now; b.HitDirX = 1;
+            Entity m = Mon(101, 1); m.HitFlashMs = Now; m.HitDirX = 1;
             T.Check(AttackPose.Compute(b, Now + 10).OffX < AttackPose.Compute(m, Now + 10).OffX, "boss barely flinches");
             Entity d = Mon(2, 1); d.Dead = true; d.AttackAnimMs = Now; d.HitFlashMs = Now; d.HitDirX = 1;
             T.Check(AttackPose.Compute(d, Now + 30).IsIdentity, "dead bodies do not move");
+            Entity weak = Mon(2, 1); weak.HitFlashMs = Now; weak.HitDirX = 1; weak.HitPower = 0.2f;
+            Entity strong = Mon(2, 1); strong.HitFlashMs = Now; strong.HitDirX = 1; strong.HitPower = 1f;
+            T.Check(AttackPose.Compute(strong, Now + 10).OffX > AttackPose.Compute(weak, Now + 10).OffX * 1.5f, "harder hit pushes farther");
+            T.Check(AttackPose.HitReactMs(strong) > AttackPose.HitReactMs(weak) && AttackPose.HitReactMs(strong) < 400f, "harder hit lasts longer, still ends");
+            T.Check(AttackPose.FlashMs(strong) > AttackPose.FlashMs(weak), "harder hit flashes longer");
+            T.Check(AttackPose.Compute(strong, Now + 380).IsIdentity, "strongest recoil ends in time");
+            Entity dm = Mon(2, 1); dm.Dead = true; dm.HitPower = 1f;
+            Entity dw = Mon(2, 1); dw.Dead = true; dw.HitPower = 0.2f;
+            T.Check(AttackPose.DeathSlide(dm, 380f) > AttackPose.DeathSlide(dw, 380f) && AttackPose.DeathSlide(dm, 0f) == 0f && AttackPose.DeathSlide(dm, 10000f) == AttackPose.DeathSlide(dm, 380f), "death slide scales with the killing blow and settles");
+            Entity bs = Mon(101, 1); bs.Boss = new GameViewer.Core.Data.BossRow(); bs.Dead = true; bs.HitPower = 1f;
+            T.Check(AttackPose.DeathSlide(bs, 380f) == 0f, "bosses do not slide");
         }
 
         public static void SwipeAndWorld()

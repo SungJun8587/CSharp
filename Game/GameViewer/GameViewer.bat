@@ -12,6 +12,7 @@
 ::      --hero <id>           : 영웅 ID, 0=서버 기본 영웅(기본 1)
 ::      --data <dir>          : GameData JSON 폴더(서버의 GameDataDir 와 같은 폴더, 기본 GameData)
 ::      --auto                : 접속하자마자 자동 전투
+::      --skip-select         : 시작 화면의 영웅 선택을 건너뛰고 --hero 영웅으로 바로 시작
 ::      --scale <n>           : 화면 배율 px/unit(기본 20)
 ::      --width <n> --height <n> : 창 크기
 ::      --demo                : 서버 없이 로컬 시뮬레이션으로 실행(화면/조작 확인용)
@@ -21,8 +22,8 @@
 ::        A 자동전투, F 시점고정, 휠 확대/축소, Space 내 위치, F5 재접속, F1 도움말, L 로그
 SET DATA=%~dp0..\GameData
 :: (위 줄) 서버가 읽는 GameData 폴더(XlsxConverter 출력)로 고치세요. 예) SET DATA=D:\Game\GameData
-SET EXE=%~dp0App\bin\Release\net48\GameViewer.App.exe
-IF NOT EXIST "%EXE%" SET EXE=%~dp0App\bin\Debug\net48\GameViewer.App.exe
+SET EXE=%~dp0Bin\Release\GameViewer.App.exe
+IF NOT EXIST "%EXE%" SET EXE=%~dp0Bin\Debug\GameViewer.App.exe
 IF NOT EXIST "%EXE%" (
     ECHO GameViewer.App.exe 가 없습니다. GameViewer.sln 을 먼저 빌드하세요.
     PAUSE

@@ -7,9 +7,13 @@
   "HeroId": 1,
   "DataDir": "GameData",
   "Auto": false,
+  "SkipHeroSelect": false,
   "PixelsPerUnit": 20,
   "WindowWidth": 1280,
   "WindowHeight": 800,
   "ConnectTimeoutMs": 3000,
-  "MoveIntervalMs": 120
+  "MoveIntervalMs": 120,
+  "Servers": [
+    {"Name": "로컬 서버", "Host": "127.0.0.1", "Port": 7000}
+  ]
 }

@@ -51,6 +51,12 @@ public abstract class PacketSession : Session
     /// <param name="packet">헤더를 포함한 전체 패킷. 반환 이후에는 무효이므로 보관하지 말 것.</param>
     protected abstract void OnRecvPacket(ReadOnlySpan<byte> packet);
 
+    /// <summary>
+    /// 이 세션이 받아들이는 패킷 최대 크기(헤더 포함). 헤더의 size 가 이 값을 넘으면 본문을 기다리지 않고 바로 연결을 끊는다.
+    /// 기본값은 프로토콜 한계(ushort)이며, 신뢰할 수 없는 상대와 맺는 세션은 더 작게 재정의한다.
+    /// </summary>
+    protected virtual int MaxRecvPacketSize => PacketHeader.MaxPacketSize;
+
     protected sealed override int OnRecv(ReadOnlySpan<byte> buffer)
     {
         int processed = 0;
@@ -62,8 +68,8 @@ public abstract class PacketSession : Session
                 break;
 
             int packetSize = PacketHeader.ReadSize(buffer.Slice(processed));
-            if (packetSize < PacketHeader.HeaderSize)
-                return -1; // 잘못된 헤더
+            if (packetSize < PacketHeader.HeaderSize || packetSize > MaxRecvPacketSize)
+                return -1; // 잘못된 헤더이거나 허용 크기 초과
 
             if (dataSize < packetSize)
                 break; // 패킷이 아직 다 도착하지 않음

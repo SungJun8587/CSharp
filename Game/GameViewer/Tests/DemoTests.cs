@@ -33,6 +33,22 @@ namespace GameViewer.Tests
             return null;
         }
 
+        public static void GateArrival()
+        {
+            ViewerConfig cfg = new ViewerConfig(); cfg.DataDir = Program.Dir("GameData"); cfg.HeroId = 1; cfg.CharId = 5000; cfg.ZoneId = 2;
+            GameData d = GameData.Load(cfg.DataDir, 2);
+            T.Check(d.Gates.Count >= 3, "zone 2 has gates from ZoneLink");
+            ViewerSession s = new ViewerSession(cfg, d);
+            DemoDirector demo = new DemoDirector(s);
+            demo.SetArrival(986, 500);
+            long now = 60000; demo.Start(now);
+            for (int i = 0; i < 30; ++i) { now += 16; s.Update(now); demo.Update(now); }
+            Entity me = s.World.Self;
+            T.Check(me != null && me.X > 975 && Math.Abs(me.Y - 500) < 12, "hero arrives beside the gate");
+            T.Check(ZoneGates.Entered(d.Gates, me.X, me.Y, d.WorldMinX, d.WorldMinY, d.WorldMaxX, d.WorldMaxY, 3f) == null, "arrival point is not inside a gate (no bounce back)");
+            T.Check(s.World.Entities.Count > 5, "monsters spawn near the arrival point");
+        }
+
         public static void SimulationRuns()
         {
             DemoDirector demo; long now = 50000;

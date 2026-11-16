@@ -11,4 +11,8 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
+  <!-- 락 클래스의 데드락 프로파일러 호출(DeadLockProfiler)은 Debug 빌드에만 들어간다. 릴리스에서도 쓰려면 <DefineConstants>에 USE_DEADLOCK_PROFILER를 추가한다. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DefineConstants>$(DefineConstants);USE_DEADLOCK_PROFILER</DefineConstants>
+  </PropertyGroup>
 </Project>

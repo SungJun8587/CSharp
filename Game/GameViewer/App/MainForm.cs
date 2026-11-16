@@ -5,7 +5,6 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 using GameViewer.Core;
-using GameViewer.Core.Data;
 
 namespace GameViewer.App
 {
@@ -16,7 +15,7 @@ namespace GameViewer.App
         private readonly ViewerConfig _cfg;
         private readonly bool _demo;
 
-        public MainForm(ViewerConfig cfg, GameData data, bool demo)
+        public MainForm(ViewerConfig cfg, StartupLoader loader, bool demo)
         {
             _cfg = cfg; _demo = demo;
             Text = BuildTitle();
@@ -35,17 +34,28 @@ namespace GameViewer.App
             BackColor = Color.Black;
             MinimumSize = new Size(640, 480);
 
-            _canvas = new GameCanvas(cfg, data, demo);
+            _canvas = new GameCanvas(cfg, loader, demo);
             _canvas.Dock = DockStyle.Fill;
             Controls.Add(_canvas);
 
-            _timer.Interval = 16;
-            _timer.Tick += delegate { _canvas.Tick(); if ((_ticks++ & 31) == 0) Text = BuildTitle(); };
+            // Windows 의 폼 타이머는 약 15.6ms 단위로만 깨어나서 Interval 16 이면 31ms(약 32fps)로 굳는다.
+            // 짧게(8ms) 걸어 두고, 너무 일찍 들어온 틱은 건너뛰어 약 16ms 간격(60fps 상한)을 지킨다.
+            _timer.Interval = 8;
+            _paceSw.Start();
+            _timer.Tick += delegate
+            {
+                long t = _paceSw.ElapsedMilliseconds;
+                if (t - _lastTickMs < 14) return;
+                _lastTickMs = t;
+                _canvas.Tick(); if ((_ticks++ & 31) == 0) Text = BuildTitle();
+            };
             _timer.Start();
             Shown += delegate { _canvas.Focus(); };
         }
 
         private int _ticks;
+        private readonly System.Diagnostics.Stopwatch _paceSw = new System.Diagnostics.Stopwatch();
+        private long _lastTickMs = -100;
 
         private string BuildTitle()
         {

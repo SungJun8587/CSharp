@@ -44,6 +44,9 @@ namespace GameViewer.Core.Logic
         private float _cx, _cy;
         private Sim _self;
 
+        private bool _hasArrival; private float _arrX, _arrY;
+        /// <summary>존 관문으로 넘어온 경우: 영웅이 나타날 지점. 주변 몬스터/아군도 이 근처에 둔다.</summary>
+        public void SetArrival(float x, float y) { _hasArrival = true; _arrX = x; _arrY = y; }
         public float CenterX { get { return _cx; } }
         public float CenterY { get { return _cy; } }
 
@@ -64,9 +67,14 @@ namespace GameViewer.Core.Logic
                 _cx = sx / _d.Blocks.Count; _cy = sy / _d.Blocks.Count;
             }
             else { _cx = 500; _cy = 500; }
+            if (_hasArrival)
+            {
+                _cx = Math.Max(_d.WorldMinX + 26f, Math.Min(_d.WorldMaxX - 26f, _arrX));
+                _cy = Math.Max(_d.WorldMinY + 26f, Math.Min(_d.WorldMaxY - 26f, _arrY)) - 6f;
+            }
 
             uint selfHero = _d.ResolveHeroId(_s.Config.HeroId);
-            float px = _cx, py = _cy + 6;
+            float px = _hasArrival ? _arrX : _cx, py = _hasArrival ? _arrY : _cy + 6;
             FindFree(ref px, ref py, 3, 1.5f);
             _s.EnterOffline(px, py, "데모 모드 (서버 없이 로컬 시뮬레이션)", now);
             _s.SendOverride = OnClientPacket;
@@ -583,42 +591,50 @@ namespace GameViewer.Core.Logic
             switch ((ZonePacketType)type)
             {
                 case ZonePacketType.ZcMoveReq:
-                    {
-                        r.F32(); r.F32();
-                        float dx = r.F32(), dy = r.F32();
-                        if (IsBlocked(dx, dy, 0.4f)) { Emit(ServerPackets.Correct(CorrectPosReason.Blocked, me.X, me.Y), now); return true; }
-                        MoveTo(me, dx, dy, now);
-                        return true;
-                    }
+                {
+                    r.F32(); r.F32();
+                    float dx = r.F32(), dy = r.F32();
+                    if (IsBlocked(dx, dy, 0.4f)) { Emit(ServerPackets.Correct(CorrectPosReason.Blocked, me.X, me.Y), now); return true; }
+                    MoveTo(me, dx, dy, now);
+                    return true;
+                }
+                case ZonePacketType.ZcPingReq:
+                {
+                    // 서버가 없으므로 30~70ms 의 가짜 왕복 지연 뒤에 응답한다 (데모 틱 100ms 단위로 반올림된다)
+                    uint seq = r.U32(); ulong cms = r.U64();
+                    long due = now + 30 + _rnd.Next(41);
+                    Schedule(due, delegate () { Emit(new ZcPongNotify { Seq = seq, ClientMs = cms, ServerTimeMs = (ulong)due }.ToBytes(), due); });
+                    return true;
+                }
                 case ZonePacketType.ZcAttackReq:
-                    {
-                        Sim t = Find(r.U64());
-                        if (t == null || t.Dead || Dist(me, t) > me.AtkRange + 0.3f) { Emit(ServerPackets.AttackReject(t != null ? t.Id : 0, AttackRejectReason.OutOfRange), now); return true; }
-                        if (me.Casting) { Emit(ServerPackets.AttackReject(t.Id, AttackRejectReason.Casting), now); return true; }
-                        if (now < me.NextAtk) return true;
-                        me.NextAtk = now + me.AtkInterval;
-                        BasicAttack(me, t, now);
-                        return true;
-                    }
+                {
+                    Sim t = Find(r.U64());
+                    if (t == null || t.Dead || Dist(me, t) > me.AtkRange + 0.3f) { Emit(ServerPackets.AttackReject(t != null ? t.Id : 0, AttackRejectReason.OutOfRange), now); return true; }
+                    if (me.Casting) { Emit(ServerPackets.AttackReject(t.Id, AttackRejectReason.Casting), now); return true; }
+                    if (now < me.NextAtk) return true;
+                    me.NextAtk = now + me.AtkInterval;
+                    BasicAttack(me, t, now);
+                    return true;
+                }
                 case ZonePacketType.ZcSkillReq:
+                {
+                    uint skillId = r.U32(); ulong targetId = r.U64(); float x = r.F32(), y = r.F32();
+                    SkillRow sk = _d.Skill(skillId);
+                    if (sk == null || !me.Skills.Contains(skillId)) { Emit(ServerPackets.SkillReject(skillId, SkillRejectReason.UnknownSkill), now); return true; }
+                    if (me.Casting) { Emit(ServerPackets.SkillReject(skillId, SkillRejectReason.Casting), now); return true; }
+                    if (!SkillReadyAt(me, sk, now)) { Emit(ServerPackets.SkillReject(skillId, SkillRejectReason.Cooldown), now); return true; }
+                    if (sk.IsSingle)
                     {
-                        uint skillId = r.U32(); ulong targetId = r.U64(); float x = r.F32(), y = r.F32();
-                        SkillRow sk = _d.Skill(skillId);
-                        if (sk == null || !me.Skills.Contains(skillId)) { Emit(ServerPackets.SkillReject(skillId, SkillRejectReason.UnknownSkill), now); return true; }
-                        if (me.Casting) { Emit(ServerPackets.SkillReject(skillId, SkillRejectReason.Casting), now); return true; }
-                        if (!SkillReadyAt(me, sk, now)) { Emit(ServerPackets.SkillReject(skillId, SkillRejectReason.Cooldown), now); return true; }
-                        if (sk.IsSingle)
-                        {
-                            Sim t = Find(targetId);
-                            if (t == null || t.Dead || (sk.IsAlly ? t.Type != me.Type : t.Type == me.Type)) { Emit(ServerPackets.SkillReject(skillId, SkillRejectReason.InvalidTarget), now); return true; }
-                            if (Dist(me, t) > sk.Range) { Emit(ServerPackets.SkillReject(skillId, SkillRejectReason.OutOfRange), now); return true; }
-                        }
-                        else if (sk.IsAimed) { if (Dist(me.X, me.Y, x, y) < 0.01f) { Emit(ServerPackets.SkillReject(skillId, SkillRejectReason.InvalidTarget), now); return true; } }
-                        else if (sk.IsArea && Dist(me.X, me.Y, x, y) > sk.Range + 0.01f && sk.Range > 1.5f) { Emit(ServerPackets.SkillReject(skillId, SkillRejectReason.OutOfRange), now); return true; }
-                        if (sk.CastTimeMs > 0) StopNow(me, now);
-                        CastSkill(me, sk, targetId, x, y, now);
-                        return true;
+                        Sim t = Find(targetId);
+                        if (t == null || t.Dead || (sk.IsAlly ? t.Type != me.Type : t.Type == me.Type)) { Emit(ServerPackets.SkillReject(skillId, SkillRejectReason.InvalidTarget), now); return true; }
+                        if (Dist(me, t) > sk.Range) { Emit(ServerPackets.SkillReject(skillId, SkillRejectReason.OutOfRange), now); return true; }
                     }
+                    else if (sk.IsAimed) { if (Dist(me.X, me.Y, x, y) < 0.01f) { Emit(ServerPackets.SkillReject(skillId, SkillRejectReason.InvalidTarget), now); return true; } }
+                    else if (sk.IsArea && Dist(me.X, me.Y, x, y) > sk.Range + 0.01f && sk.Range > 1.5f) { Emit(ServerPackets.SkillReject(skillId, SkillRejectReason.OutOfRange), now); return true; }
+                    if (sk.CastTimeMs > 0) StopNow(me, now);
+                    CastSkill(me, sk, targetId, x, y, now);
+                    return true;
+                }
                 default:
                     return true;
             }

@@ -3,7 +3,7 @@
 // XlsxConverter가 GameData 엑셀의 Const 시트로부터 만듭니다.
 // </auto-generated>
 
-namespace Game.Data
+namespace Game.Generated
 {
 	public static class GameConsts
 	{
@@ -11,5 +11,14 @@ namespace Game.Data
 		public const uint MaxStatusesPerEntity = 8;	// 엔티티 한 명에게 동시에 걸릴 수 있는 상태 효과 수
 		public const uint MaxBossAdds = 12;	// 보스 한 마리가 동시에 데리고 있을 수 있는 소환 몬스터 수
 		public const uint MaxBossActionsPerPhase = 16;	// 보스 페이즈 하나에 넣을 수 있는 행동(BossAction) 수
+		public const double PickupRange = 3.0;	// 지면 아이템을 주울 수 있는 최대 거리(units). 위치 허용 오차가 더해진다
+		public const uint DropOwnerMs = 10000;	// 드롭 직후 처치자만 주울 수 있는 시간(ms). 지나면 누구나 주울 수 있다
+		public const uint DropLifetimeMs = 60000;	// 지면 아이템이 사라지기까지의 시간(ms)
+		public const double DropScatterRadius = 1.5;	// 드롭 아이템이 몬스터 위치 주변에 흩어지는 반경(units)
+		public const uint MaxGroundItems = 512;	// 존 하나에 동시에 떨어져 있을 수 있는 지면 아이템 수 (가득 차면 새 드롭은 생기지 않는다)
+		public const uint MaxInventorySlots = 24;	// 플레이어가 동시에 가질 수 있는 아이템 종류 수
+		public const uint MaxItemStack = 9999;	// 아이템 한 종류의 최대 보유 수량
+		public const double MaxKnockbackDistance = 20.0;	// 스킬 한 번의 밀치기/끌어당기기 거리 상한(units)
+		public const uint ChatZoneCooldownMs = 5000;	// 존 전체 채팅(Zone 채널) 재사용 대기(ms). 플레이어마다 따로 센다
 	}
 }

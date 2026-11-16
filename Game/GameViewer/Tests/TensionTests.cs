@@ -5,8 +5,8 @@ using GameViewer.Core.Audio;
 using GameViewer.Core.Data;
 using GameViewer.Core.Logic;
 using GameViewer.Core.Protocol;
-using GameViewer.Core.World;
 using Pk = GameViewer.Core.Protocol.ServerPackets;
+using GameViewer.Core.World;
 
 namespace GameViewer.Tests
 {
@@ -102,7 +102,7 @@ namespace GameViewer.Tests
             SpawnMon(w, Mon + 3, 45, 10, 80, 10, now);         // 화면 밖이지만 다른 곳으로 감 -> 제외
             SpawnMon(w, Mon + 4, 100, 10, 12, 10, now);        // 너무 멂 -> 제외
             SpawnMon(w, Mon + 5, 10, 30, 10, 12, now);         // 위에서 달려옴, 더 가까움 -> 위협(먼저)
-            Apply(w, Pk.Spawn(Boss, EntityType.Monster, 38, 10, 12, 10, 4f, true, 1000, 1000, false, 9), now);   // 보스는 따로 표시하므로 제외
+            Apply(w, Pk.Spawn(Boss, EntityType.Monster, 38, 10, 12, 10, 4f, true, 1000, 1000, false, 101), now);   // 보스는 따로 표시하므로 제외
             Tension.Threats(w, 10, 10, now, 34f, 20f, 12f, list, 10);
             T.Eq(2, list.Count, "two real threats");
             T.Check(list.Count == 2 && list[0].Id == Mon + 5 && list[1].Id == Mon + 1, "nearest first");
@@ -118,11 +118,11 @@ namespace GameViewer.Tests
         {
             WorldModel w = NewWorld();
             long now = 1000;
-            Apply(w, Pk.Spawn(Boss, EntityType.Monster, 50, 50, 50, 50, 3, false, 1000, 1000, false, 9), now);
+            Apply(w, Pk.Spawn(Boss, EntityType.Monster, 50, 50, 50, 50, 3, false, 1000, 1000, false, 101), now);
             T.Eq(1, Count(w, EffectKind.Banner, 1), "spawn warns once");
-            Apply(w, Pk.Spawn(Boss, EntityType.Monster, 50, 50, 50, 50, 3, false, 1000, 1000, false, 9), now + 500);
+            Apply(w, Pk.Spawn(Boss, EntityType.Monster, 50, 50, 50, 50, 3, false, 1000, 1000, false, 101), now + 500);
             T.Eq(1, Count(w, EffectKind.Banner, 1), "re-sent spawn (view re-entry) does not warn again");
-            T.Check(w.Effects.Exists(delegate (ViewEffect f) { return f.Kind == EffectKind.Banner && f.Variant == 1 && f.Text.Contains("오우거"); }), "warning names the boss");
+            T.Check(w.Effects.Exists(delegate (ViewEffect f) { return f.Kind == EffectKind.Banner && f.Variant == 1 && f.Text.Contains("거대 슬라임"); }), "warning names the boss");
             // 처치 후 부활하면 다시 경고
             Apply(w, Pk.Death(Boss, Self), now + 1000);
             Apply(w, Pk.Respawn(Boss, 50, 50, 1000, 1000, 0), now + 5000);

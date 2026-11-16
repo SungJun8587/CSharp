@@ -134,7 +134,8 @@ namespace XlsxConverter
             s += "out=" + AbsolutePath(opt.OutDir) + "\n";
             if (opt.HasCppOut) s += "cpp=" + AbsolutePath(opt.CppOutDir) + "\n";
             if (opt.HasCsOut) s += "cs=" + AbsolutePath(opt.CsOutDir) + "\nns=" + opt.CsNamespace + "\n";
-            if (opt.HasProtoCsOut) s += "pcs=" + AbsolutePath(opt.ProtoCsOutDir) + "\npns=" + opt.ProtoCsNamespace + "\n";
+            if (opt.HasCsClientProtoOut) s += "pcs=" + AbsolutePath(opt.CsClientProtoOutDir) + "\npns=" + opt.CsClientProtoNamespace + "\n";
+            if (opt.HasCsServerProtoOut) s += "spo=" + AbsolutePath(opt.CsServerProtoOutDir) + "\nsns=" + opt.CsServerProtoNamespace + "\n";
             if (opt.HasProtoSizesOut) s += "psz=" + AbsolutePath(opt.ProtoSizesOut) + "\n";
             if (opt.HasSheets) foreach (string n in opt.Sheets) s += "sheet=" + n + "\n";
             return s + "--\n";

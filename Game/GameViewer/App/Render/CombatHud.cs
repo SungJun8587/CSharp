@@ -15,7 +15,8 @@ namespace GameViewer.App.Render
     public sealed class CombatHud
     {
         private readonly Resources _res;
-        public CombatHud(Resources res) { _res = res; }
+        private readonly LiveHud _live;
+        public CombatHud(Resources res) { _res = res; _live = new LiveHud(res); }
 
         /// <summary>화면에 크게 보여줄 보스. 선택한 보스가 우선, 없으면 내게 가장 가까운 살아 있는 보스(45 이내).</summary>
         public static Entity ActiveBoss(ViewerSession s, ViewState v, long now)
@@ -70,38 +71,57 @@ namespace GameViewer.App.Render
             if (enraged)
             {
                 float pulse = 0.6f + 0.4f * (float)Math.Sin(now / 130.0);
-                g.FillRectangle(_res.Brush((int)(210 * pulse), 220, 30, 24), x + w - 150, y - 26, 62, 20);
+                using (GraphicsPath bp = P.RoundPath(x + w - 150, y - 26, 62, 20, 8)) g.FillPath(_res.Brush((int)(220 * pulse), 220, 30, 24), bp);
                 g.DrawString("격노", _res.Bold, _res.Brush(Color.White), new RectangleF(x + w - 150, y - 26, 62, 20), _res.Center);
             }
 
-            // 바 본체
-            using (GraphicsPath back = P.RoundPath(x - 3, y - 3, w + 6, h + 6, 5))
+            // 바 본체: 금빛(격노 시 붉은) 프레임 + 알약형 체력바
+            Color accent = enraged ? Color.FromArgb(240, 70, 56) : Color.FromArgb(222, 188, 112);
+            if (enraged)
             {
-                g.FillPath(_res.Brush(215, 14, 12, 14), back);
-                g.DrawPath(_res.Pen(enraged ? Color.FromArgb(240, 230, 60, 50) : Color.FromArgb(200, 214, 188, 120), 2f), back);
+                int ga = 50 + (int)(60 * (0.5 + 0.5 * Math.Sin(now / 130.0)));
+                using (GraphicsPath gl = P.RoundPath(x - 9, y - 9, w + 18, h + 18, 14)) g.DrawPath(_res.Pen(ga, 255, 60, 40, 6f), gl);
             }
-            if (ghost > ratio) g.FillRectangle(_res.Brush(235, 255, 250, 235), x + w * ratio, y, w * (ghost - ratio), h);
-            Color c1 = enraged ? Color.FromArgb(240, 70, 50) : Color.FromArgb(214, 70, 60);
-            Color c2 = enraged ? Color.FromArgb(120, 20, 20) : Color.FromArgb(116, 24, 30);
-            if (ratio > 0.001f)
-                using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(x, y, w * ratio + 1, h + 1), c1, c2, LinearGradientMode.Vertical))
-                    g.FillRectangle(b, x, y, w * ratio, h);
-            g.FillRectangle(_res.Brush(50, 255, 255, 255), x, y, w * ratio, 5);
-            WorldRenderer.DrawPhaseTicks(g, boss, x, y, w, h);
+            Ui.Frame(g, _res, x - 6, y - 6, w + 12, h + 12, 10, accent);
+            Color c1 = enraged ? Color.FromArgb(255, 96, 66) : Color.FromArgb(236, 92, 78);
+            Color c2 = enraged ? Color.FromArgb(132, 18, 18) : Color.FromArgb(118, 22, 32);
+            Ui.HpBar(g, _res, x, y, w, h, ratio, ghost, c1, c2, true);
+            WorldRenderer.DrawPhaseTicks(g, boss, x, y + 2, w, h - 4);
+            DrawPhaseLabels(g, boss, x, y, w, h);
+            // 좌우 장식 마름모
+            PointF[] dl = { new PointF(x - 14, y + h / 2), new PointF(x - 6, y + h / 2 - 6), new PointF(x + 2, y + h / 2), new PointF(x - 6, y + h / 2 + 6) };
+            PointF[] dr = { new PointF(x + w + 14, y + h / 2), new PointF(x + w + 6, y + h / 2 - 6), new PointF(x + w - 2, y + h / 2), new PointF(x + w + 6, y + h / 2 + 6) };
+            g.FillPolygon(_res.Brush(accent), dl); g.FillPolygon(_res.Brush(accent), dr);
             string txt = boss.Hp.ToString("N0") + " / " + boss.MaxHp.ToString("N0") + "  (" + (ratio * 100f).ToString("0") + "%)";
-            _res.OutlinedText(g, txt, _res.Small, Color.White, x + w / 2, y + 2, _center2);
+            _res.OutlinedText(g, txt, _res.Small, Color.White, x + w / 2, y + 3, _center2);
 
             // 시전 중이면 어떤 스킬인지, 몇 초 남았는지
             if (boss.Casting && boss.CastTimeMs > 0)
             {
                 float p = Math.Max(0f, Math.Min(1f, (now - boss.CastStartMs) / (float)boss.CastTimeMs));
-                float cy = y + h + 10, cw = w * 0.62f, cx = x + (w - cw) / 2;
-                g.FillRectangle(_res.Brush(215, 14, 12, 14), cx - 2, cy - 2, cw + 4, 14);
-                g.FillRectangle(_res.Brush(Color.FromArgb(255, 150, 60)), cx, cy, cw * p, 10);
-                g.FillRectangle(_res.Brush(60, 255, 255, 255), cx, cy, cw * p, 3);
+                float cy = y + h + 12, cw = w * 0.62f, cx = x + (w - cw) / 2;
+                Ui.HpBar(g, _res, cx, cy, cw, 12, p, p, Color.FromArgb(255, 190, 90), Color.FromArgb(214, 84, 26), true);
                 float left = Math.Max(0f, (boss.CastTimeMs - (now - boss.CastStartMs)) / 1000f);
                 _res.OutlinedText(g, s.Data.SkillName(boss.CastSkillId) + "  " + left.ToString("0.0") + "s", _res.Normal, Color.FromArgb(255, 226, 190), x + w / 2, cy + 14, _center2);
             }
+        }
+
+        /// <summary>바 아래에 페이즈 경계(P2, P3 ...)를 표시하고, 도달한 것은 금색, 남은 것은 회색으로 보여준다. 왼쪽에는 다음 페이즈까지의 체력 구간을 적는다.</summary>
+        private void DrawPhaseLabels(Graphics g, Entity boss, float x, float y, float w, float h)
+        {
+            if (boss.Boss == null || boss.Boss.Phases.Count == 0) return;
+            uint nextPct = 0; int nextPhase = 0;
+            for (int i = 0; i < boss.Boss.Phases.Count; ++i)
+            {
+                BossPhaseRow ph = boss.Boss.Phases[i];
+                if (ph.Phase <= 1 || ph.HpBelowPercent == 0 || ph.HpBelowPercent >= 100) continue;
+                bool reached = boss.BossPhase >= (int)ph.Phase;
+                float tx = x + w * ph.HpBelowPercent / 100f;
+                _res.OutlinedText(g, "P" + ph.Phase, _res.Small, reached ? Color.FromArgb(255, 214, 110) : Color.FromArgb(170, 176, 184), tx, y + h + 1, _center2);
+                if (!reached && (nextPhase == 0 || (int)ph.Phase < nextPhase)) { nextPhase = (int)ph.Phase; nextPct = ph.HpBelowPercent; }
+            }
+            string note = nextPhase > 0 ? "다음 P" + nextPhase + "  체력 " + nextPct + "% 이하" : "최종 페이즈";
+            _res.OutlinedText(g, note, _res.Small, nextPhase > 0 ? Color.FromArgb(230, 220, 200) : Color.FromArgb(255, 150, 130), x, y + h + 1, _left);
         }
 
         // ------------------------------------------------------------------ 대상 창 / 파티 창
@@ -111,33 +131,24 @@ namespace GameViewer.App.Render
             Entity t = s.World.Find(v.SelectedId);
             if (t == null) return;
             float x = 10, y = 150, w = 250, h = 62;
-            Panel(g, x, y, w, h);
+            Ui.Frame(g, _res, x, y, w, h, 10, t.IsBoss ? Color.FromArgb(222, 188, 112) : (t.IsMonster ? Color.FromArgb(214, 110, 96) : Color.FromArgb(120, 170, 230)));
             string name = s.World.NameOf(t);
             Color nc = t.IsBoss ? Color.FromArgb(255, 214, 90) : (t.IsMonster ? Color.FromArgb(255, 200, 200) : Color.FromArgb(190, 225, 255));
-            g.DrawString((t.IsBoss ? "★ " : "") + name + (t.Dead ? " (사망)" : ""), _res.Bold, _res.Brush(nc), x + 8, y + 4);
+            _res.OutlinedText(g, (t.IsBoss ? "★ " : "") + name + (t.Dead ? " (사망)" : ""), _res.Bold, nc, x + 12, y + 5, _left);
             float ratio = t.MaxHp > 0 ? Math.Max(0f, Math.Min(1f, t.Hp / (float)t.MaxHp)) : 0f;
             float ghost = t.MaxHp > 0 ? Math.Max(ratio, Math.Min(1f, t.GhostHp / (float)t.MaxHp)) : ratio;
-            g.FillRectangle(_res.Brush(Color.FromArgb(50, 20, 20)), x + 8, y + 26, w - 16, 12);
-            if (ghost > ratio) g.FillRectangle(_res.Brush(230, 255, 255, 255), x + 8 + (w - 16) * ratio, y + 26, (w - 16) * (ghost - ratio), 12);
-            g.FillRectangle(_res.Brush(WorldRenderer.HpColor(ratio)), x + 8, y + 26, (w - 16) * ratio, 12);
-            g.FillRectangle(_res.Brush(50, 255, 255, 255), x + 8, y + 26, (w - 16) * ratio, 3);
-            _res.OutlinedText(g, t.Hp + " / " + t.MaxHp, _res.Small, Color.White, x + w / 2, y + 26, _center2);
+            Color tt, tb;
+            if (t.IsMonster) Ui.FoeColors(out tt, out tb); else Ui.HpColors(ratio, out tt, out tb);
+            Ui.HpBar(g, _res, x + 10, y + 26, w - 20, 14, ratio, ghost, tt, tb, true);
+            _res.OutlinedText(g, t.Hp.ToString("N0") + " / " + t.MaxHp.ToString("N0"), _res.Small, Color.White, x + w / 2, y + 26, _center2);
             float sx, sy;
             if (s.SelfPos(now, out sx, out sy))
             {
                 float tx, ty; t.PosAt(now, out tx, out ty);
                 float d = (float)Math.Sqrt((tx - sx) * (tx - sx) + (ty - sy) * (ty - sy));
-                g.DrawString("거리 " + d.ToString("0.0"), _res.Small, _res.Brush(Color.FromArgb(190, 210, 190)), x + 8, y + 42);
+                g.DrawString("거리 " + d.ToString("0.0"), _res.Small, _res.Brush(Color.FromArgb(190, 210, 190)), x + 12, y + 43);
             }
-            float ix = x + 80;
-            foreach (KeyValuePair<uint, StatusInstance> st in t.Statuses)
-            {
-                if (ix > x + w - 40) break;
-                float left = Math.Max(0f, (st.Value.ExpireMs - now) / 1000f);
-                string label = s.Data.StatusName(st.Key) + " " + left.ToString("0.0");
-                g.DrawString(label, _res.Small, _res.Brush(Color.FromArgb(180, 220, 255)), ix, y + 42);
-                ix += g.MeasureString(label, _res.Small).Width + 4;
-            }
+            _live.DrawStatusRow(g, s.Data, t, x + 84, y + 41, 18f, 7, now, false);
         }
 
         private void DrawPartyFrames(Graphics g, ViewerSession s, ViewState v, long now)
@@ -150,17 +161,19 @@ namespace GameViewer.App.Render
             list.Sort(delegate (Entity a, Entity b) { return a.Id.CompareTo(b.Id); });
             float x = 10, y = v.ShowLog ? 224 : 224;
             int n = Math.Min(5, list.Count);
-            Panel(g, x, y, 250, 8 + n * 24);
+            Ui.Frame(g, _res, x, y, 250, 10 + n * 24, 10, Color.FromArgb(120, 170, 230));
             for (int i = 0; i < n; ++i)
             {
                 Entity e = list[i];
-                float yy = y + 4 + i * 24;
+                float yy = y + 5 + i * 24;
                 float ratio = e.MaxHp > 0 ? Math.Max(0f, Math.Min(1f, e.Hp / (float)e.MaxHp)) : 0f;
+                float ghost = e.MaxHp > 0 ? Math.Max(ratio, Math.Min(1f, e.GhostHp / (float)e.MaxHp)) : ratio;
                 Color nc = e.Dead ? Color.FromArgb(140, 140, 140) : Color.FromArgb(190, 225, 255);
-                g.DrawString(w.NameOf(e), _res.Small, _res.Brush(nc), x + 8, yy);
-                g.FillRectangle(_res.Brush(Color.FromArgb(50, 20, 20)), x + 110, yy + 3, 130, 10);
-                g.FillRectangle(_res.Brush(e.Dead ? Color.FromArgb(90, 90, 90) : WorldRenderer.HpColor(ratio)), x + 110, yy + 3, 130 * ratio, 10);
-                if (e.Casting) g.FillRectangle(_res.Brush(Color.FromArgb(190, 120, 255)), x + 110, yy + 14, 130 * Math.Max(0f, Math.Min(1f, (now - e.CastStartMs) / (float)Math.Max(1u, e.CastTimeMs))), 3);
+                _res.OutlinedText(g, w.NameOf(e), _res.Small, nc, x + 12, yy + 2, _left);
+                Color pt, pb;
+                if (e.Dead) { pt = Color.FromArgb(120, 120, 124); pb = Color.FromArgb(50, 50, 56); } else Ui.HpColors(ratio, out pt, out pb);
+                Ui.HpBar(g, _res, x + 108, yy + 3, 132, 11, ratio, ghost, pt, pb, true);
+                if (e.Casting) Ui.HpBar(g, _res, x + 108, yy + 15, 132, 4, Math.Max(0f, Math.Min(1f, (now - e.CastStartMs) / (float)Math.Max(1u, e.CastTimeMs))), 0f, Color.FromArgb(214, 170, 255), Color.FromArgb(112, 60, 190), false);
             }
         }
 

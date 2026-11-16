@@ -226,8 +226,8 @@ namespace XlsxConverter.Tests
             File.WriteAllText(Path.Combine(data, "~$A_Main.xlsx"), "lock");          // 임시 파일은 건너뛴다
             Directory.CreateDirectory(Path.Combine(data, "sub"));
 
-            string json = Path.Combine(root, "json"), cpp = Path.Combine(root, "cpp"), cs = Path.Combine(root, "cs"), pcs = Path.Combine(root, "pcs"), sizes = Path.Combine(root, "meta", "sizes.txt");
-            string[] a = { data, "--out", json, "--cpp-out", cpp, "--cs-out", cs, "--cs-namespace", "Game.Rows", "--proto-cs-out", pcs, "--proto-cs-namespace", "Game.Proto", "--proto-sizes-out", sizes };
+            string json = Path.Combine(root, "json"), cpp = Path.Combine(root, "cpp"), cs = Path.Combine(root, "cs"), pcs = Path.Combine(root, "pcs"), spo = Path.Combine(root, "spo"), sizes = Path.Combine(root, "meta", "sizes.txt");
+            string[] a = { data, "--out", json, "--cpp-out", cpp, "--cs-out", cs, "--cs-namespace", "Game.Rows", "--cs-client-proto-out", pcs, "--cs-client-proto-namespace", "Game.Proto", "--cs-server-proto-out", spo, "--cs-server-proto-namespace", "Game.ServerProto", "--proto-sizes-out", sizes };
 
             var r = Run(a);
             Check(r.Code == 0, "pipeline exit 0", r.Err + r.Out);
@@ -244,6 +244,8 @@ namespace XlsxConverter.Tests
                 Check(File.Exists(Path.Combine(cs, f)) && HasBom(Path.Combine(cs, f)), "cs file with BOM: " + f);
             foreach (string f in new[] { "ProtocolTypes.gen.cs", "Packets.gen.cs" })
                 Check(File.Exists(Path.Combine(pcs, f)) && HasBom(Path.Combine(pcs, f)), "proto cs file with BOM: " + f);
+            foreach (string f in new[] { "ProtocolTypes.gen.cs", "Packets.gen.cs" })
+                Check(File.Exists(Path.Combine(spo, f)) && HasBom(Path.Combine(spo, f)), "server proto cs file with BOM: " + f);
             Eq("GwLoginReqPacket 10\nGwLoginAckPacket 13\nGwNotePacket 20\n", Read(sizes), "sizes file");
 
             string monsterH = Read(Path.Combine(cpp, "Monster.gen.h"));
@@ -262,6 +264,13 @@ namespace XlsxConverter.Tests
             Check(monsterCs.Contains("namespace Game.Rows") && monsterCs.Contains("public SkillShape Shape { get; set; } = SkillShape.Circle;") && monsterCs.Contains("if( this.Id < 1u ) errors.Add(where + \".Id=\" + this.Id + \" (허용 범위 1..)\");") && monsterCs.Contains("public string Note { get; set; } = string.Empty;"), "Monster.gen.cs", monsterCs);
             string pk = Read(Path.Combine(pcs, "Packets.gen.cs"));
             Check(pk.Contains("namespace Game.Proto") && pk.Contains("public static byte[] GwLoginReq(uint accountId, ushort version)") && pk.Contains("p.Result = (EGwResult)r.U8();".Replace("EGwResult", "GwResult")) && pk.Contains("public GwResult Result;"), "Packets.gen.cs", pk);
+
+            // 서버 패킷: Cs 열과 무관하게 모든 패킷이 IPacket 구조체로 나온다. enum 필드도 원래 정수 형식, char 배열은 고정 길이 UTF-8 문자열 필드.
+            string sv = Read(Path.Combine(spo, "Packets.gen.cs"));
+            Check(sv.Contains("namespace Game.ServerProto;") && sv.Contains("public struct GwLoginReq : IPacket") && sv.Contains("public const int Size = 10;") && sv.Contains("public const GatewayPacketType Type = GatewayPacketType.GwLoginReq;"), "server Packets.gen.cs struct", sv);
+            Check(sv.Contains("public byte Result;") && sv.Contains("s[4] = Result;") && sv.Contains("BinaryPrimitives.WriteUInt64LittleEndian(s.Slice(5), SessionId);") && sv.Contains("Result = p[4],"), "server Packets.gen.cs fields", sv);
+            Check(sv.Contains("public string Name;") && sv.Contains("PacketIO.WriteString(s.Slice(4, ProtocolConst.MaxNameLen), Name);") && sv.Contains("Name = PacketIO.ReadString(p.Slice(4, ProtocolConst.MaxNameLen)),"), "server Packets.gen.cs char field", sv);
+            Check(Read(Path.Combine(spo, "ProtocolTypes.gen.cs")).Contains("namespace Game.ServerProto"), "server ProtocolTypes.gen.cs namespace");
 
             string? keep = Environment.GetEnvironmentVariable("KEEP_GEN");
             if (!string.IsNullOrEmpty(keep))
@@ -390,8 +399,12 @@ namespace XlsxConverter.Tests
             Check(r.Code == 2 && r.Err.Contains("--incremental은 --sheets와 함께 쓸 수 없습니다"), "incremental + sheets", r.Err);
             r = Run("a.xlsx", "--out", "o", "--cpp-out", "c", "--sheets", "A");
             Check(r.Code == 2 && r.Err.Contains("--sheets와 함께 쓸 수 없습니다"), "codegen + sheets", r.Err);
-            r = Run("a.xlsx", "--out", "o", "--cs-out", "c", "--proto-cs-out", "c/");
-            Check(r.Code == 2 && r.Err.Contains("--proto-cs-out은 --cs-out과 다른 폴더여야 합니다"), "same cs folders", r.Err);
+            r = Run("a.xlsx", "--out", "o", "--cs-out", "c", "--cs-client-proto-out", "c/");
+            Check(r.Code == 2 && r.Err.Contains("--cs-client-proto-out은 --cs-out과 다른 폴더여야 합니다"), "same cs folders", r.Err);
+            r = Run("a.xlsx", "--out", "o", "--cs-out", "c", "--cs-server-proto-out", "c/");
+            Check(r.Code == 2 && r.Err.Contains("--cs-server-proto-out은 --cs-out, --cs-client-proto-out과 다른 폴더여야 합니다"), "server proto same folder", r.Err);
+            r = Run("a.xlsx", "--out", "o", "--cs-server-proto-out", "c", "--sheets", "A");
+            Check(r.Code == 2 && r.Err.Contains("--sheets와 함께 쓸 수 없습니다"), "server proto + sheets", r.Err);
             r = Run("a.xlsx", "--out");
             Check(r.Code == 2 && r.Err.StartsWith("알 수 없는 인자: --out"), "option without value", r.Err);
         }
@@ -492,7 +505,7 @@ namespace XlsxConverter.Tests
             XlsxWriter.Write(xlsx, sheets.ToArray());
             Console.WriteLine("write xlsx: " + sw.ElapsedMilliseconds + " ms, " + new FileInfo(xlsx).Length / 1024 + " KB");
 
-            string[] a = { xlsx, "--out", Path.Combine(root, "json"), "--cpp-out", Path.Combine(root, "cpp"), "--cs-out", Path.Combine(root, "cs"), "--proto-cs-out", Path.Combine(root, "pcs"), "--proto-sizes-out", Path.Combine(root, "sizes.txt") };
+            string[] a = { xlsx, "--out", Path.Combine(root, "json"), "--cpp-out", Path.Combine(root, "cpp"), "--cs-out", Path.Combine(root, "cs"), "--cs-client-proto-out", Path.Combine(root, "pcs"), "--proto-sizes-out", Path.Combine(root, "sizes.txt") };
             for (int run = 1; run <= 3; ++run)
             {
                 sw.Restart();

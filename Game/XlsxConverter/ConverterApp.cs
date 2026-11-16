@@ -25,7 +25,8 @@ namespace XlsxConverter
     ///       --cpp-out &lt;dir&gt;        &lt;시트&gt;.gen.h + GeneratedCommon.h (+ 패킷 정의 시트가 있으면 ZonePacketTypes.gen.h, ZonePacketStructs.gen.h)
     ///       --cs-out &lt;dir&gt;         &lt;시트&gt;.gen.cs (&lt;시트&gt;Row, &lt;시트&gt;Table 클래스)
     ///       --cs-namespace &lt;name&gt;  C# 네임스페이스 (기본 GameDataRows)
-    ///       --proto-cs-out &lt;dir&gt;, --proto-cs-namespace &lt;name&gt;, --proto-sizes-out &lt;file&gt;  패킷 프로토콜 C# 코드와 크기 목록
+    ///       --cs-server-proto-out &lt;dir&gt;, --cs-server-proto-namespace &lt;name&gt;  서버 패킷 C# 구조체(IPacket)
+    ///       --cs-client-proto-out &lt;dir&gt;, --cs-client-proto-namespace &lt;name&gt;, --proto-sizes-out &lt;file&gt;  패킷 프로토콜 C# 코드와 크기 목록
     ///     생성 코드는 BOM 있는 UTF-8로 쓴다. JSON은 BOM 없는 UTF-8이다.
     ///   - --incremental: 엑셀의 수정 시각/크기가 마지막 실행 때와 같고 출력 파일이 모두 있으면 엑셀을 열지 않고 끝낸다. (Pre-Build 이벤트용)
     ///       엑셀이 다른 프로그램에 열려 읽을 수 없으면 경고만 내고 기존 출력을 그대로 쓴다. (이전 실행과 같은 인자일 때만)
@@ -138,7 +139,7 @@ namespace XlsxConverter
                     names = data;
 
                     // 패킷 정의 시트: 코드 생성에만 쓴다. 하나라도 있으면 다섯 시트를 모두 읽는다.
-                    if (opt.HasCppOut || opt.HasCsOut || opt.HasProtoCsOut || opt.HasProtoSizesOut)
+                    if (opt.HasCppOut || opt.HasCsOut || opt.HasCsClientProtoOut || opt.HasCsServerProtoOut || opt.HasProtoSizesOut)
                     {
                         var packetSheets = new Dictionary<string, Rows>(StringComparer.Ordinal);
                         foreach (string n in all)
@@ -185,25 +186,34 @@ namespace XlsxConverter
                 }
 
                 var protoCsFiles = new List<GeneratedFile>();
+                var serverProtoFiles = new List<GeneratedFile>();
                 string protoSizes = string.Empty;
                 if (errors.Count == 0 && !packetSchema.IsEmpty)
                 {
                     if (opt.HasCppOut)
                         PacketGenerator.Generate(packetSchema, cppFiles, errors);
-                    if (opt.HasProtoCsOut)
+                    if (opt.HasCsClientProtoOut)
                     {
                         // 시트 클래스와 패킷 프로토콜이 같은 C# 네임스페이스에 만들어지면 형식 이름이 겹치지 않는지 확인한다.
-                        string protoNs = opt.ProtoCsNamespace.Length == 0 ? opt.CsNamespace : opt.ProtoCsNamespace;
+                        string protoNs = opt.CsClientProtoNamespace.Length == 0 ? opt.CsNamespace : opt.CsClientProtoNamespace;
                         HashSet<string>? rowTypes = null;
                         if (opt.HasCsOut && protoNs == opt.CsNamespace)
                             rowTypes = RowGenerator.CsTypeNames(schemas, defs);
                         PacketGenerator.GenerateCs(packetSchema, protoNs, protoCsFiles, errors, rowTypes);
                     }
+                    if (opt.HasCsServerProtoOut)
+                    {
+                        string serverNs = opt.CsServerProtoNamespace.Length == 0 ? opt.CsNamespace : opt.CsServerProtoNamespace;
+                        HashSet<string>? rowTypes = null;
+                        if (opt.HasCsOut && serverNs == opt.CsNamespace)
+                            rowTypes = RowGenerator.CsTypeNames(schemas, defs);
+                        PacketGenerator.GenerateServerCs(packetSchema, serverNs, serverProtoFiles, errors, rowTypes);
+                    }
                     if (opt.HasProtoSizesOut)
                         protoSizes = PacketGenerator.Sizes(packetSchema);
                 }
-                if (errors.Count == 0 && packetSchema.IsEmpty && (opt.HasProtoCsOut || opt.HasProtoSizesOut))
-                    errors.Add("--proto-*를 줬지만 엑셀(들)에 패킷 정의 시트(PacketEnum, PacketConst, PacketGroup, Packet, PacketField)가 없습니다");
+                if (errors.Count == 0 && packetSchema.IsEmpty && (opt.HasCsClientProtoOut || opt.HasCsServerProtoOut || opt.HasProtoSizesOut))
+                    errors.Add("--cs-client-proto-out/--cs-server-proto-out/--proto-sizes-out를 줬지만 엑셀(들)에 패킷 정의 시트(PacketEnum, PacketConst, PacketGroup, Packet, PacketField)가 없습니다");
 
                 if (errors.Count > 0)
                 {
@@ -236,8 +246,10 @@ namespace XlsxConverter
                     FileOutput.WriteGeneratedSet(opt.CppOutDir, cppFiles, ".h", stdout);
                 if (opt.HasCsOut)
                     FileOutput.WriteGeneratedSet(opt.CsOutDir, csFiles, ".cs", stdout);
-                if (opt.HasProtoCsOut)
-                    FileOutput.WriteGeneratedSet(opt.ProtoCsOutDir, protoCsFiles, ".cs", stdout);
+                if (opt.HasCsClientProtoOut)
+                    FileOutput.WriteGeneratedSet(opt.CsClientProtoOutDir, protoCsFiles, ".cs", stdout);
+                if (opt.HasCsServerProtoOut)
+                    FileOutput.WriteGeneratedSet(opt.CsServerProtoOutDir, serverProtoFiles, ".cs", stdout);
                 if (opt.HasProtoSizesOut)
                 {
                     string? sizesDir = Path.GetDirectoryName(opt.ProtoSizesOut);
@@ -251,7 +263,8 @@ namespace XlsxConverter
                 {
                     foreach (GeneratedFile f in cppFiles) produced.Add(Stamp.AbsolutePath(Path.Combine(opt.CppOutDir, f.Name)));
                     foreach (GeneratedFile f in csFiles) produced.Add(Stamp.AbsolutePath(Path.Combine(opt.CsOutDir, f.Name)));
-                    foreach (GeneratedFile f in protoCsFiles) produced.Add(Stamp.AbsolutePath(Path.Combine(opt.ProtoCsOutDir, f.Name)));
+                    foreach (GeneratedFile f in protoCsFiles) produced.Add(Stamp.AbsolutePath(Path.Combine(opt.CsClientProtoOutDir, f.Name)));
+                    foreach (GeneratedFile f in serverProtoFiles) produced.Add(Stamp.AbsolutePath(Path.Combine(opt.CsServerProtoOutDir, f.Name)));
                     if (opt.HasProtoSizesOut) produced.Add(Stamp.AbsolutePath(opt.ProtoSizesOut));
 
                     Stamp.RemoveStaleJson(opt, previous, producedJson, stdout);

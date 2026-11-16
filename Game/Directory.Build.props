@@ -1,0 +1,10 @@
+﻿<Project>
+
+  <!-- Game의 모든 프로젝트(라이브러리, 데모)의 빌드 결과를 Game\Bin\<구성>\ 한 곳에 모은다. 중간 산출물(obj)은 프로젝트별로 그대로 둔다. -->
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>$(MSBuildThisFileDirectory)Bin\$(Configuration)\</OutputPath>
+  </PropertyGroup>
+
+</Project>

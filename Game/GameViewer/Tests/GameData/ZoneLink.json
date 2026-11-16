@@ -1,0 +1,238 @@
+{
+  "ZoneLink": [
+    {
+      "ZoneId": 1,
+      "Edge": "E",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 2,
+      "TargetX": 14.0,
+      "TargetY": 500.0
+    },
+    {
+      "ZoneId": 2,
+      "Edge": "W",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 1,
+      "TargetX": 986.0,
+      "TargetY": 500.0
+    },
+    {
+      "ZoneId": 1,
+      "Edge": "S",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 6,
+      "TargetX": 500.0,
+      "TargetY": 14.0
+    },
+    {
+      "ZoneId": 6,
+      "Edge": "N",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 1,
+      "TargetX": 500.0,
+      "TargetY": 986.0
+    },
+    {
+      "ZoneId": 2,
+      "Edge": "E",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 3,
+      "TargetX": 14.0,
+      "TargetY": 500.0
+    },
+    {
+      "ZoneId": 3,
+      "Edge": "W",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 2,
+      "TargetX": 986.0,
+      "TargetY": 500.0
+    },
+    {
+      "ZoneId": 2,
+      "Edge": "S",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 7,
+      "TargetX": 500.0,
+      "TargetY": 14.0
+    },
+    {
+      "ZoneId": 7,
+      "Edge": "N",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 2,
+      "TargetX": 500.0,
+      "TargetY": 986.0
+    },
+    {
+      "ZoneId": 3,
+      "Edge": "E",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 4,
+      "TargetX": 14.0,
+      "TargetY": 500.0
+    },
+    {
+      "ZoneId": 4,
+      "Edge": "W",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 3,
+      "TargetX": 986.0,
+      "TargetY": 500.0
+    },
+    {
+      "ZoneId": 3,
+      "Edge": "S",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 8,
+      "TargetX": 500.0,
+      "TargetY": 14.0
+    },
+    {
+      "ZoneId": 8,
+      "Edge": "N",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 3,
+      "TargetX": 500.0,
+      "TargetY": 986.0
+    },
+    {
+      "ZoneId": 4,
+      "Edge": "E",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 5,
+      "TargetX": 14.0,
+      "TargetY": 500.0
+    },
+    {
+      "ZoneId": 5,
+      "Edge": "W",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 4,
+      "TargetX": 986.0,
+      "TargetY": 500.0
+    },
+    {
+      "ZoneId": 4,
+      "Edge": "S",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 9,
+      "TargetX": 500.0,
+      "TargetY": 14.0
+    },
+    {
+      "ZoneId": 9,
+      "Edge": "N",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 4,
+      "TargetX": 500.0,
+      "TargetY": 986.0
+    },
+    {
+      "ZoneId": 5,
+      "Edge": "S",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 10,
+      "TargetX": 500.0,
+      "TargetY": 14.0
+    },
+    {
+      "ZoneId": 10,
+      "Edge": "N",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 5,
+      "TargetX": 500.0,
+      "TargetY": 986.0
+    },
+    {
+      "ZoneId": 6,
+      "Edge": "E",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 7,
+      "TargetX": 14.0,
+      "TargetY": 500.0
+    },
+    {
+      "ZoneId": 7,
+      "Edge": "W",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 6,
+      "TargetX": 986.0,
+      "TargetY": 500.0
+    },
+    {
+      "ZoneId": 7,
+      "Edge": "E",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 8,
+      "TargetX": 14.0,
+      "TargetY": 500.0
+    },
+    {
+      "ZoneId": 8,
+      "Edge": "W",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 7,
+      "TargetX": 986.0,
+      "TargetY": 500.0
+    },
+    {
+      "ZoneId": 8,
+      "Edge": "E",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 9,
+      "TargetX": 14.0,
+      "TargetY": 500.0
+    },
+    {
+      "ZoneId": 9,
+      "Edge": "W",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 8,
+      "TargetX": 986.0,
+      "TargetY": 500.0
+    },
+    {
+      "ZoneId": 9,
+      "Edge": "E",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 10,
+      "TargetX": 14.0,
+      "TargetY": 500.0
+    },
+    {
+      "ZoneId": 10,
+      "Edge": "W",
+      "Pos": 500.0,
+      "Width": 24.0,
+      "TargetZone": 9,
+      "TargetX": 986.0,
+      "TargetY": 500.0
+    }
+  ]
+}

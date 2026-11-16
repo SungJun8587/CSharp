@@ -8,8 +8,8 @@ using GameViewer.Core;
 using GameViewer.Core.Data;
 using GameViewer.Core.Logic;
 using GameViewer.Core.Protocol;
-using GameViewer.Core.World;
 using Pk = GameViewer.Core.Protocol.ServerPackets;
+using GameViewer.Core.World;
 
 namespace GameViewer.Tests
 {

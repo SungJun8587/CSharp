@@ -1,0 +1,39 @@
+{
+  "Drop": [
+    {
+      "MonsterId": 1,
+      "ItemId": 1001,
+      "ChancePermille": 600,
+      "MinCount": 1,
+      "MaxCount": 3
+    },
+    {
+      "MonsterId": 2,
+      "ItemId": 1002,
+      "ChancePermille": 400,
+      "MinCount": 1,
+      "MaxCount": 2
+    },
+    {
+      "MonsterId": 3,
+      "ItemId": 1003,
+      "ChancePermille": 300,
+      "MinCount": 1,
+      "MaxCount": 1
+    },
+    {
+      "MonsterId": 4,
+      "ItemId": 1004,
+      "ChancePermille": 250,
+      "MinCount": 1,
+      "MaxCount": 2
+    },
+    {
+      "MonsterId": 10,
+      "ItemId": 2001,
+      "ChancePermille": 1000,
+      "MinCount": 1,
+      "MaxCount": 1
+    }
+  ]
+}

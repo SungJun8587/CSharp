@@ -6,7 +6,7 @@ namespace XlsxConverter
     /// <summary>
     /// PacketField 시트의 Type 하나에 대한 모든 매핑. 타입을 추가/변경할 때는 이 표만 고친다. (와이어 크기, C++/C# 타입, C# 읽기/쓰기 식)
     /// CsWrite/CsWriteEnum의 {v}는 값 식으로 치환된다. CsWriteEnum은 enum으로 선언한 필드의 쓰기 식이며 null이면 CsWrite와 같다.
-    /// char 배열은 C# 생성을 지원하지 않으므로 C# 항목이 null이다.
+    /// char 배열은 고정 길이 UTF-8 문자열(C# string)이며 길이가 필드마다 달라 표 대신 PacketGenerator가 직접 만든다. 그래서 C# 항목이 null이다.
     /// </summary>
     public sealed class PacketTypeInfo
     {

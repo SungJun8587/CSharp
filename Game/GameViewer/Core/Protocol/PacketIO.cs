@@ -2,6 +2,7 @@
 // PacketIO.cs : 리틀 엔디언 패킹 패킷 읽기/쓰기 도우미 (#pragma pack(1) 구조체와 1:1)
 //***************************************************************************
 using System;
+using System.Text;
 
 namespace GameViewer.Core.Protocol
 {
@@ -28,6 +29,18 @@ namespace GameViewer.Core.Protocol
         {
             if (_p + n > _b.Length)
                 throw new PacketFormatException("packet too short");
+        }
+
+        /// <summary>고정 길이 UTF-8 문자열 필드(첫 NUL까지)를 읽고 필드 전체를 건너뛴다.</summary>
+        public string Str(int fieldBytes)
+        {
+            Need(fieldBytes);
+            int n = 0;
+            while (n < fieldBytes && _b[_p + n] != 0)
+                ++n;
+            string s = Encoding.UTF8.GetString(_b, _p, n);
+            _p += fieldBytes;
+            return s;
         }
 
         public byte U8() { Need(1); return _b[_p++]; }
@@ -64,6 +77,17 @@ namespace GameViewer.Core.Protocol
             _b = new byte[totalSize];
             U16((ushort)totalSize);
             U16(type);
+        }
+
+        /// <summary>고정 길이 UTF-8 문자열 필드를 쓴다. 마지막 바이트는 NUL로 남기고, 넘치면 문자 경계에서 자른다.</summary>
+        public void Str(string v, int fieldBytes)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(v ?? string.Empty);
+            int len = Math.Min(bytes.Length, fieldBytes - 1);
+            while (len > 0 && len < bytes.Length && (bytes[len] & 0xC0) == 0x80)
+                --len;
+            Array.Copy(bytes, 0, _b, _p, len);
+            _p += fieldBytes;
         }
 
         public void U8(byte v) { _b[_p++] = v; }

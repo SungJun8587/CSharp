@@ -7,6 +7,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using GameViewer.Core.Data;
+using GameViewer.Core.Net;
 
 namespace GameViewer.Core
 {
@@ -21,11 +22,24 @@ namespace GameViewer.Core
         public uint HeroId = 1;             // 0 = 서버 기본 영웅
         public string DataDir = "GameData"; // XlsxConverter 출력(Hero/Monster/Skill/Status/HeroSkill/Block/Spawn .json) 폴더
         public bool Auto = false;           // 시작하자마자 자동 전투
+        public bool SkipHeroSelect = false; // true 면 시작 화면의 영웅 선택을 건너뛰고 HeroId 로 바로 접속한다
         public double PixelsPerUnit = 20;   // 화면 배율(월드 1 unit = N 픽셀)
         public int WindowWidth = 1280;
         public int WindowHeight = 800;
         public int ConnectTimeoutMs = 3000;
         public int MoveIntervalMs = 120;    // 이동 요청 최소 간격
+        public bool HostPortExplicit = false;   // 명령행으로 --host/--port 를 줬는가(그러면 마지막으로 고른 서버를 쓰지 않는다)
+        public List<ServerEntry> Servers = new List<ServerEntry>();     // 시작 화면에서 고를 서버 목록(비어 있으면 Host:Port 하나)
+
+        /// <summary>시작 화면의 서버 목록. 설정의 목록에 지금 Host:Port 가 없으면(명령행으로 지정) "직접 지정" 으로 끝에 덧붙인다. 목록이 비면 Host:Port 하나.</summary>
+        public List<ServerEntry> ServerEntries()
+        {
+            List<ServerEntry> l = new List<ServerEntry>(Servers);
+            bool has = false;
+            for (int i = 0; i < l.Count; ++i) if (l[i].Host == Host && l[i].Port == Port) has = true;
+            if (!has) l.Add(new ServerEntry(l.Count == 0 ? "기본 서버" : "직접 지정", Host, Port));
+            return l;
+        }
 
         public const string Usage =
 @"GameViewer.App.exe [옵션...]
@@ -39,6 +53,7 @@ namespace GameViewer.Core
   --hero <id>           영웅 ID, 0=서버 기본 영웅 (기본 1)
   --data <dir>          GameData JSON 폴더 (기본 GameData)
   --auto                시작하자마자 자동 전투
+  --skip-select         시작 화면의 영웅 선택을 건너뛰고 --hero 영웅으로 바로 시작
   --scale <n>           화면 배율 px/unit (기본 20)
   --width <n> --height <n>   창 크기
   --help                도움말";
@@ -69,14 +84,15 @@ namespace GameViewer.Core
                     case "--config": ++i; break;
                     case "--help": case "-h": case "/?": Console.WriteLine(Usage); exitNow = true; return c;
                     case "--auto": c.Auto = true; break;
+                    case "--skip-select": c.SkipHeroSelect = true; break;
                     case "--single": c.MultiInstance = false; break;
                     case "--dump-config":
                         if (v == null) { error = "--dump-config needs a file"; return null; }
                         File.WriteAllText(v, new ViewerConfig().ToJson(), new UTF8Encoding(true));
                         Console.WriteLine("saved: " + v); exitNow = true; return c;
-                    case "--host": if (!Take(v, a, ref error)) return null; c.Host = v; ++i; break;
+                    case "--host": if (!Take(v, a, ref error)) return null; c.Host = v; c.HostPortExplicit = true; ++i; break;
                     case "--data": if (!Take(v, a, ref error)) return null; c.DataDir = v; ++i; break;
-                    case "--port": if (!Num(v, a, 1, 65535, ref error)) return null; c.Port = int.Parse(v); ++i; break;
+                    case "--port": if (!Num(v, a, 1, 65535, ref error)) return null; c.Port = int.Parse(v); c.HostPortExplicit = true; ++i; break;
                     case "--zone": if (!Num(v, a, 1, int.MaxValue, ref error)) return null; c.ZoneId = uint.Parse(v); ++i; break;
                     case "--hero": if (!Num(v, a, 0, int.MaxValue, ref error)) return null; c.HeroId = uint.Parse(v); ++i; break;
                     case "--char-id": if (!Num(v, a, 1, long.MaxValue, ref error)) return null; c.CharId = ulong.Parse(v); c.MultiInstance = false; ++i; break;
@@ -122,11 +138,26 @@ namespace GameViewer.Core
                 HeroId = (uint)MiniJson.Num(o, "HeroId", HeroId);
                 DataDir = MiniJson.Str(o, "DataDir", DataDir);
                 Auto = MiniJson.Bool(o, "Auto", Auto);
+                SkipHeroSelect = MiniJson.Bool(o, "SkipHeroSelect", SkipHeroSelect);
                 PixelsPerUnit = MiniJson.Num(o, "PixelsPerUnit", PixelsPerUnit);
                 WindowWidth = (int)MiniJson.Num(o, "WindowWidth", WindowWidth);
                 WindowHeight = (int)MiniJson.Num(o, "WindowHeight", WindowHeight);
                 ConnectTimeoutMs = (int)MiniJson.Num(o, "ConnectTimeoutMs", ConnectTimeoutMs);
                 MoveIntervalMs = (int)MiniJson.Num(o, "MoveIntervalMs", MoveIntervalMs);
+                object so;
+                if (o.TryGetValue("Servers", out so) && MiniJson.AsArray(so) != null)
+                {
+                    List<ServerEntry> list = new List<ServerEntry>();
+                    foreach (object it in MiniJson.AsArray(so))
+                    {
+                        Dictionary<string, object> e = MiniJson.AsObject(it);
+                        if (e == null) continue;
+                        string h = MiniJson.Str(e, "Host", ""); int pt = (int)MiniJson.Num(e, "Port", 0);
+                        if (h.Length == 0 || pt < 1 || pt > 65535) return path + ": Servers entry needs Host and Port 1..65535";
+                        list.Add(new ServerEntry(MiniJson.Str(e, "Name", h + ":" + pt), h, pt));
+                    }
+                    Servers = list;
+                }
                 if (Port < 1 || Port > 65535) return path + ": Port out of range";
                 if (PixelsPerUnit < 2 || PixelsPerUnit > 80) return path + ": PixelsPerUnit must be 2..80";
                 if (WindowWidth < 320 || WindowHeight < 240) return path + ": window too small";
@@ -151,11 +182,16 @@ namespace GameViewer.Core
             sb.Append("  \"HeroId\": " + HeroId.ToString(ci) + ",\r\n");
             sb.Append("  \"DataDir\": \"" + DataDir.Replace("\\", "\\\\") + "\",\r\n");
             sb.Append("  \"Auto\": " + (Auto ? "true" : "false") + ",\r\n");
+            sb.Append("  \"SkipHeroSelect\": " + (SkipHeroSelect ? "true" : "false") + ",\r\n");
             sb.Append("  \"PixelsPerUnit\": " + PixelsPerUnit.ToString(ci) + ",\r\n");
             sb.Append("  \"WindowWidth\": " + WindowWidth.ToString(ci) + ",\r\n");
             sb.Append("  \"WindowHeight\": " + WindowHeight.ToString(ci) + ",\r\n");
             sb.Append("  \"ConnectTimeoutMs\": " + ConnectTimeoutMs.ToString(ci) + ",\r\n");
-            sb.Append("  \"MoveIntervalMs\": " + MoveIntervalMs.ToString(ci) + "\r\n");
+            sb.Append("  \"MoveIntervalMs\": " + MoveIntervalMs.ToString(ci) + ",\r\n");
+            sb.Append("  \"Servers\": [");
+            for (int i = 0; i < Servers.Count; ++i)
+                sb.Append((i > 0 ? ", " : "") + "{\"Name\": \"" + Servers[i].Name.Replace("\"", "\\\"") + "\", \"Host\": \"" + Servers[i].Host + "\", \"Port\": " + Servers[i].Port.ToString(ci) + "}");
+            sb.Append("]\r\n");
             sb.Append("}\r\n");
             return sb.ToString();
         }

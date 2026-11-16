@@ -182,7 +182,7 @@ namespace GameViewer.App.Render
             return e;
         }
 
-        /// <summary>mode 1: 흰색으로 번쩍임, 2: 시체(회색조로 어둡게), 3: 색을 유지한 채 어둡게.</summary>
+        /// <summary>mode 1: 흰색으로 번쩍임, 2: 시체(회색조로 어둡게), 3: 색을 유지한 채 어둡게, 4: 가을 단풍색, 5: 밝은 새순색.</summary>
         public static Bitmap Tint(Bitmap src, int mode)
         {
             int w = src.Width, h = src.Height;
@@ -202,6 +202,8 @@ namespace GameViewer.App.Render
                     if (a == 0) continue;
                     if (mode == 1) { r = Col.Cl(r + 120); gg = Col.Cl(gg + 120); b = Col.Cl(b + 120); }
                     else if (mode == 3) { r = r * 56 / 100; gg = gg * 64 / 100; b = b * 62 / 100; }      // 어둡게(월드 바깥 숲)
+                    else if (mode == 4) { int nr = Col.Cl(gg * 118 / 100 + 26), ng = Col.Cl(r * 55 / 100 + gg * 42 / 100), nb = b * 45 / 100; r = nr; gg = ng; b = nb; }      // 가을 단풍: 초록 -> 주황/황금
+                    else if (mode == 5) { r = Col.Cl(r * 112 / 100 + 14); gg = Col.Cl(gg * 106 / 100 + 10); b = b * 82 / 100; }                  // 새순: 밝고 노란 연두
                     else
                     {
                         int l = (r * 30 + gg * 59 + b * 11) / 100;

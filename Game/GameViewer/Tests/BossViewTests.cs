@@ -5,8 +5,8 @@ using GameViewer.Core;
 using GameViewer.Core.Data;
 using GameViewer.Core.Logic;
 using GameViewer.Core.Protocol;
-using GameViewer.Core.World;
 using Pk = GameViewer.Core.Protocol.ServerPackets;
+using GameViewer.Core.World;
 
 namespace GameViewer.Tests
 {
@@ -31,10 +31,10 @@ namespace GameViewer.Tests
         {
             GameData d = GameData.Load(Program.Dir("GameData"), 1);
             T.Eq(0, d.Warnings.Count, "no warnings with boss files: " + string.Join("; ", d.Warnings.ToArray()));
-            BossRow b = d.BossOf(9);
-            T.Check(b != null && b.Name == "\uc624\uc6b0\uac70", "boss by monster id");
+            BossRow b = d.BossOf(101);
+            T.Check(b != null && b.Name == "\uac70\ub300 \uc2ac\ub77c\uc784", "boss by monster id");
             T.Check(d.BossOf(1) == null, "normal monster is not a boss");
-            T.Eq(3, b.Phases.Count, "ogre phases");
+            T.Eq(3, b.Phases.Count, "boss phases");
             T.Eq(1, b.PhaseFor(1000, 1000), "100% -> phase 1");
             T.Eq(1, b.PhaseFor(601, 1000), "60.1% -> phase 1");
             T.Eq(2, b.PhaseFor(600, 1000), "60% -> phase 2 (server rule: hp*100 <= below*max)");
@@ -60,7 +60,7 @@ namespace GameViewer.Tests
         {
             WorldModel w = NewWorld();
             long now = 1000;
-            Apply(w, Pk.Spawn(Boss, EntityType.Monster, 50, 50, 50, 50, 3, false, 1000, 1000, false, 9), now);
+            Apply(w, Pk.Spawn(Boss, EntityType.Monster, 50, 50, 50, 50, 3, false, 1000, 1000, false, 101), now);
             Entity e = w.Find(Boss);
             T.Check(e.IsBoss && e.BossPhase == 1, "boss flagged on spawn, phase 1");
 

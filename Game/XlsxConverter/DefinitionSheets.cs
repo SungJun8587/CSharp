@@ -472,9 +472,6 @@ namespace XlsxConverter
                 foreach (PacketField f in p.Fields) size += f.Bytes;
                 p.Size = size;
                 if (p.Size > 65535) errors.Add(PacketSheet + ": " + p.Name + ": 패킷 크기가 65535를 넘습니다");
-                if (p.Cs != "None")
-                    foreach (PacketField f in p.Fields)
-                        if (f.Type == "char") errors.Add(PacketFieldSheet + ": " + p.Name + "." + f.Name + ": char 배열은 C# 생성(Cs=" + p.Cs + ")을 지원하지 않습니다. Cs를 None으로 하세요");
             }
             if (schema.Packets.Count > 0 && schema.Groups.Count == 0) errors.Add(PacketGroupSheet + ": Packet 시트가 있으면 PacketGroup 시트도 있어야 합니다");
             return errors.Count == before;

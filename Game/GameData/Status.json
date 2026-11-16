@@ -184,6 +184,19 @@
       "AttackPercent": 40,
       "DefensePercent": 0,
       "SpeedPercent": 0
+    },
+    {
+      "Id": 15,
+      "Name": "결박",
+      "Kind": "Root",
+      "Target": "Hit",
+      "DurationMs": 2000,
+      "TickMs": 0,
+      "DamagePercent": 0,
+      "FlatDamage": 0,
+      "AttackPercent": 0,
+      "DefensePercent": 0,
+      "SpeedPercent": 0
     }
   ]
 }

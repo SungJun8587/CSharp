@@ -1,6 +1,7 @@
 ﻿using System;
 using GameViewer.Core.Audio;
 using GameViewer.Core.Data;
+using GameViewer.Core.Protocol;
 using GameViewer.Core.World;
 
 namespace GameViewer.Tests
@@ -67,6 +68,23 @@ namespace GameViewer.Tests
             T.Check(SfxRules.TryMap(banner, w, 0, 0, out k, out g) && k == SfxKind.Banner && g == 1f, "banner ignores distance");
             ViewEffect ring = new ViewEffect { Kind = EffectKind.Ring, X = 3, Y = 0 };
             T.Check(SfxRules.TryMap(ring, w, 0, 0, out k, out g) && k == SfxKind.Boom, "area skill boom");
+            // 영웅/몬스터별 소리: 시전자 개체 종류에 따라 달라진다
+            string[] nm = { "warrior", "archer", "mage", "lancer" };
+            SfxKind[] want = { SfxKind.SlashWarrior, SfxKind.ShotArcher, SfxKind.SpellMage, SfxKind.ThrustLancer };
+            for (int i = 0; i < 4; ++i)
+            {
+                Entity h = new Entity { Id = (ulong)(7000 + i), Type = (byte)EntityType.Player, TemplateId = (uint)(i + 1) };
+                w.Entities[h.Id] = h;
+                ViewEffect sl = new ViewEffect { Kind = EffectKind.Slash, EntityId = h.Id, X = 2, Y = 0 };
+                T.Check(SfxRules.TryMap(sl, w, 0, 0, out k, out g) && k == want[i], nm[i] + " slash sound");
+                T.Check(SfxSynth.Make(want[i], SfxSynth.DefaultRate).Length > 100, nm[i] + " synth");
+            }
+            Entity mob = new Entity { Id = 7100, Type = (byte)EntityType.Monster, TemplateId = 1, Hp = 0, MaxHp = 100 };
+            w.Entities[mob.Id] = mob;
+            ViewEffect md = new ViewEffect { Kind = EffectKind.DeathPuff, EntityId = mob.Id, X = 1, Y = 0 };
+            T.Check(SfxRules.TryMap(md, w, 0, 0, out k, out g) && k == SfxKind.DeathMonster, "monster death sound");
+            ViewEffect mh = new ViewEffect { Kind = EffectKind.Damage, EntityId = mob.Id, Variant = 3, Value = 2, X = 1, Y = 0 };
+            T.Check(SfxRules.TryMap(mh, w, 0, 0, out k, out g) && k == SfxKind.HitMonster, "monster hit sound");
         }
     }
 }

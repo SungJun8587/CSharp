@@ -25,15 +25,10 @@ namespace GameViewer.App.Render
         private static Color Cc(int rgb, int a) { return Color.FromArgb(a < 0 ? 0 : (a > 255 ? 255 : (a & 0xF0) | (a >> 4)), (rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255); }
         private Pen Pn(int rgb, int a, float width) { return _res.Pen(Cc(rgb, a), (float)Math.Round(Math.Max(0.5f, width) * 2f) / 2f); }
         private SolidBrush Br(int rgb, int a) { return _res.Brush(Cc(rgb, a)); }
-        private static int Mix(int a, int b, float t)
-        {
-            t = t < 0f ? 0f : (t > 1f ? 1f : t);
-            int r = (int)(((a >> 16) & 255) * (1f - t) + ((b >> 16) & 255) * t), g = (int)(((a >> 8) & 255) * (1f - t) + ((b >> 8) & 255) * t), bl = (int)((a & 255) * (1f - t) + (b & 255) * t);
-            return (r << 16) | (g << 8) | bl;
-        }
+        private static int Mix(int a, int b, float t) { return GameViewer.Core.Logic.Mx.MixRgb(a, b, t); }
         private static float Rn(ViewEffect fx, int i) { return Noise.Hash01(i * 7 + (int)(fx.StartMs & 0x7FFF), (int)(fx.EntityId & 0xFF) + i * 3, 0x77u); }
-        private static float Ease(float p) { return 1f - (1f - p) * (1f - p); }
-        private static float Clamp01(float v) { return v < 0f ? 0f : (v > 1f ? 1f : v); }
+        private static float Ease(float p) { return GameViewer.Core.Logic.Mx.Ease(p); }
+        private static float Clamp01(float v) { return GameViewer.Core.Logic.Mx.Clamp01(v); }
         private void Glow(Graphics g, int rgb, float cx, float cy, float r, float k) { _fx.Glow(g, Color.FromArgb(255, (rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255), cx, cy, r, r, k); }
 
         /// <summary>네 갈래 반짝이.</summary>
@@ -63,106 +58,113 @@ namespace GameViewer.App.Render
             switch (info.Style)
             {
                 case SkillFxStyle.Whirl:
+                {
+                    float R = Math.Max(full, v.Px(2.6f));
+                    Glow(g, c1, sx, sy, R * 1.15f, 0.55f * fade);
+                    g.DrawEllipse(Pn(c1, (int)(150 * fade), 2f), sx - R, sy - R * 0.8f, R * 2, R * 1.6f);
+                    for (int k = 0; k < 3; ++k)
                     {
-                        float R = Math.Max(full, v.Px(2.6f));
-                        Glow(g, c1, sx, sy, R * 1.15f, 0.55f * fade);
-                        g.DrawEllipse(Pn(c1, (int)(150 * fade), 2f), sx - R, sy - R * 0.8f, R * 2, R * 1.6f);
-                        for (int k = 0; k < 3; ++k)
-                        {
-                            float rad = R * (0.5f + 0.2f * k) * (0.75f + 0.25f * e);
-                            float start = p * 900f * (k % 2 == 0 ? 1 : -1) + k * 120f;
-                            int a = (int)(235 * fade);
-                            g.DrawArc(Pn(Mix(c1, c2, k * 0.35f), a, 7f - k * 1.5f), sx - rad, sy - rad * 0.8f, rad * 2, rad * 1.6f, start, 85f);
-                            g.DrawArc(Pn(c2, a, 2f), sx - rad, sy - rad * 0.8f, rad * 2, rad * 1.6f, start + 25f, 55f);
-                        }
-                        return true;
+                        float rad = R * (0.5f + 0.2f * k) * (0.75f + 0.25f * e);
+                        float start = p * 900f * (k % 2 == 0 ? 1 : -1) + k * 120f;
+                        int a = (int)(235 * fade);
+                        g.DrawArc(Pn(Mix(c1, c2, k * 0.35f), a, 7f - k * 1.5f), sx - rad, sy - rad * 0.8f, rad * 2, rad * 1.6f, start, 85f);
+                        g.DrawArc(Pn(c2, a, 2f), sx - rad, sy - rad * 0.8f, rad * 2, rad * 1.6f, start + 25f, 55f);
                     }
+                    return true;
+                }
                 case SkillFxStyle.Blast:
+                {
+                    float R = Math.Max(full, v.Px(3f));
+                    float scorch = Clamp01(p * 6f);
+                    g.FillEllipse(Br(0x201208, (int)(150 * (1f - p * p) * scorch)), sx - R * 0.78f * (0.6f + 0.4f * scorch), sy - R * 0.62f * (0.6f + 0.4f * scorch), R * 1.56f * (0.6f + 0.4f * scorch), R * 1.24f * (0.6f + 0.4f * scorch));
+                    Glow(g, c1, sx, sy, R * (0.8f + 0.7f * e), 0.95f * fade);
+                    float r1 = R * e;
+                    g.DrawEllipse(Pn(c2, (int)(240 * fade), 6f * fade + 1.5f), sx - r1, sy - r1 * 0.8f, r1 * 2, r1 * 1.6f);
+                    float q = Clamp01((p - 0.14f) / 0.86f);
+                    if (q > 0f) { float r2 = R * Ease(q) * 0.85f; g.DrawEllipse(Pn(c1, (int)(190 * (1f - q)), 4f * (1f - q) + 1f), sx - r2, sy - r2 * 0.8f, r2 * 2, r2 * 1.6f); }
+                    for (int k = 0; k < 14; ++k)
                     {
-                        float R = Math.Max(full, v.Px(3f));
-                        float scorch = Clamp01(p * 6f);
-                        g.FillEllipse(Br(0x201208, (int)(150 * (1f - p * p) * scorch)), sx - R * 0.78f * (0.6f + 0.4f * scorch), sy - R * 0.62f * (0.6f + 0.4f * scorch), R * 1.56f * (0.6f + 0.4f * scorch), R * 1.24f * (0.6f + 0.4f * scorch));
-                        Glow(g, c1, sx, sy, R * (0.8f + 0.7f * e), 0.95f * fade);
-                        float r1 = R * e;
-                        g.DrawEllipse(Pn(c2, (int)(240 * fade), 6f * fade + 1.5f), sx - r1, sy - r1 * 0.8f, r1 * 2, r1 * 1.6f);
-                        float q = Clamp01((p - 0.14f) / 0.86f);
-                        if (q > 0f) { float r2 = R * Ease(q) * 0.85f; g.DrawEllipse(Pn(c1, (int)(190 * (1f - q)), 4f * (1f - q) + 1f), sx - r2, sy - r2 * 0.8f, r2 * 2, r2 * 1.6f); }
-                        for (int k = 0; k < 14; ++k)
-                        {
-                            float a = k * TwoPi / 14f + Rn(fx, 50) * 0.5f;
-                            float rr = R * e * (0.55f + 0.4f * Rn(fx, k + 60));
-                            Glow(g, Mix(c1, c2, Rn(fx, k + 80)), sx + (float)Math.Cos(a) * rr, sy + (float)Math.Sin(a) * rr * 0.8f, v.Px(0.55f) * (1.1f - p), 0.85f * fade);
-                        }
-                        return true;
+                        float a = k * TwoPi / 14f + Rn(fx, 50) * 0.5f;
+                        float rr = R * e * (0.55f + 0.4f * Rn(fx, k + 60));
+                        Glow(g, Mix(c1, c2, Rn(fx, k + 80)), sx + (float)Math.Cos(a) * rr, sy + (float)Math.Sin(a) * rr * 0.8f, v.Px(0.55f) * (1.1f - p), 0.85f * fade);
                     }
+                    return true;
+                }
                 case SkillFxStyle.Roar:
+                {
+                    float R = Math.Max(full, v.Px(3.4f));
+                    Glow(g, c1, sx, sy, R * 0.9f, 0.5f * fade);
+                    for (int k = 0; k < 3; ++k)
                     {
-                        float R = Math.Max(full, v.Px(3.4f));
-                        Glow(g, c1, sx, sy, R * 0.9f, 0.5f * fade);
-                        for (int k = 0; k < 3; ++k)
-                        {
-                            float q = (p - k * 0.15f) / (1f - k * 0.15f);
-                            if (q <= 0f) continue;
-                            float r = R * Ease(q);
-                            g.DrawEllipse(Pn(Mix(c1, c2, k * 0.4f), (int)(220 * (1f - q)), 5f * (1f - q) + 1f), sx - r, sy - r * 0.8f, r * 2, r * 1.6f);
-                        }
-                        return true;
+                        float q = (p - k * 0.15f) / (1f - k * 0.15f);
+                        if (q <= 0f) continue;
+                        float r = R * Ease(q);
+                        g.DrawEllipse(Pn(Mix(c1, c2, k * 0.4f), (int)(220 * (1f - q)), 5f * (1f - q) + 1f), sx - r, sy - r * 0.8f, r * 2, r * 1.6f);
                     }
+                    Bitmap spk = FxSprites.Spike();
+                    if (spk != null)
+                        for (int k = 0; k < 10; ++k)
+                        {
+                            float a = k * TwoPi / 10f + 0.2f, r = R * (0.3f + 0.65f * Ease(p));
+                            FxSprites.DrawT(g, spk, sx + (float)Math.Cos(a) * r, sy + (float)Math.Sin(a) * r * 0.8f - v.Px(0.3f), v.Px(1.3f), a * 57.29578f * 0.8f, fade, c1);
+                        }
+                    return true;
+                }
                 case SkillFxStyle.Poison:
+                {
+                    float R = Math.Max(full, v.Px(2.8f));
+                    float f = p < 0.15f ? p / 0.15f : 1f - (p - 0.15f) / 0.85f;
+                    g.FillEllipse(Br(c1, (int)(70 * f)), sx - R, sy - R * 0.8f, R * 2, R * 1.6f);
+                    g.DrawEllipse(Pn(c2, (int)(120 * f), 2f), sx - R, sy - R * 0.8f, R * 2, R * 1.6f);
+                    for (int k = 0; k < 9; ++k)
                     {
-                        float R = Math.Max(full, v.Px(2.8f));
-                        float f = p < 0.15f ? p / 0.15f : 1f - (p - 0.15f) / 0.85f;
-                        g.FillEllipse(Br(c1, (int)(70 * f)), sx - R, sy - R * 0.8f, R * 2, R * 1.6f);
-                        g.DrawEllipse(Pn(c2, (int)(120 * f), 2f), sx - R, sy - R * 0.8f, R * 2, R * 1.6f);
-                        for (int k = 0; k < 9; ++k)
-                        {
-                            float a = k * 0.7f + p * 1.1f, d = R * (0.15f + 0.65f * Rn(fx, k));
-                            Glow(g, Mix(c1, c2, 0.25f * (k % 3)), sx + (float)Math.Cos(a) * d, sy + (float)Math.Sin(a) * d * 0.8f, R * 0.42f, 0.55f * f);
-                        }
-                        return true;
+                        float a = k * 0.7f + p * 1.1f, d = R * (0.15f + 0.65f * Rn(fx, k));
+                        Glow(g, Mix(c1, c2, 0.25f * (k % 3)), sx + (float)Math.Cos(a) * d, sy + (float)Math.Sin(a) * d * 0.8f, R * 0.42f, 0.55f * f);
                     }
+                    return true;
+                }
                 case SkillFxStyle.Volley:
+                {
+                    float R = Math.Max(full, v.Px(3f));
+                    g.DrawEllipse(Pn(c1, (int)(110 * fade), 2f), sx - R, sy - R * 0.8f, R * 2, R * 1.6f);
+                    int n = VolleyCount(radius);
+                    for (int k = 0; k < n; ++k)
                     {
-                        float R = Math.Max(full, v.Px(3f));
-                        g.DrawEllipse(Pn(c1, (int)(110 * fade), 2f), sx - R, sy - R * 0.8f, R * 2, R * 1.6f);
-                        int n = VolleyCount(radius);
-                        for (int k = 0; k < n; ++k)
-                        {
-                            float tk = 0.12f + 0.55f * Rn(fx, k);
-                            if (p < tk) continue;
-                            float u = Clamp01((p - tk) / 0.3f);
-                            float a = Rn(fx, k + 100) * TwoPi, d = R * (float)Math.Sqrt(Rn(fx, k + 200)) * 0.92f;
-                            float lx = sx + (float)Math.Cos(a) * d, ly = sy + (float)Math.Sin(a) * d * 0.8f;
-                            float r = v.Px(0.45f) * (0.3f + u);
-                            g.DrawEllipse(Pn(c2, (int)(180 * (1f - u)), 2f), lx - r, ly - r * 0.6f, r * 2, r * 1.2f);
-                        }
-                        return true;
+                        float tk = 0.12f + 0.55f * Rn(fx, k);
+                        if (p < tk) continue;
+                        float u = Clamp01((p - tk) / 0.3f);
+                        float a = Rn(fx, k + 100) * TwoPi, d = R * (float)Math.Sqrt(Rn(fx, k + 200)) * 0.92f;
+                        float lx = sx + (float)Math.Cos(a) * d, ly = sy + (float)Math.Sin(a) * d * 0.8f;
+                        float r = v.Px(0.45f) * (0.3f + u);
+                        g.DrawEllipse(Pn(c2, (int)(180 * (1f - u)), 2f), lx - r, ly - r * 0.6f, r * 2, r * 1.2f);
                     }
+                    return true;
+                }
                 case SkillFxStyle.Nova:
+                {
+                    float R = Math.Max(full, v.Px(3.2f));
+                    Glow(g, c1, sx, sy, R * (0.6f + 0.5f * e), 0.8f * fade);
+                    float r = R * e;
+                    g.DrawEllipse(Pn(c1, (int)(150 * fade), 14f * fade + 2f), sx - r, sy - r * 0.8f, r * 2, r * 1.6f);
+                    g.DrawEllipse(Pn(c2, (int)(250 * fade), 5f * fade + 1.5f), sx - r, sy - r * 0.8f, r * 2, r * 1.6f);
+                    for (int k = 0; k < 16; ++k)
                     {
-                        float R = Math.Max(full, v.Px(3.2f));
-                        Glow(g, c1, sx, sy, R * (0.6f + 0.5f * e), 0.8f * fade);
-                        float r = R * e;
-                        g.DrawEllipse(Pn(c1, (int)(150 * fade), 14f * fade + 2f), sx - r, sy - r * 0.8f, r * 2, r * 1.6f);
-                        g.DrawEllipse(Pn(c2, (int)(250 * fade), 5f * fade + 1.5f), sx - r, sy - r * 0.8f, r * 2, r * 1.6f);
-                        for (int k = 0; k < 16; ++k)
-                        {
-                            float a = k * TwoPi / 16f + 0.2f;
-                            float r0 = r * 0.35f, r1 = r * 0.98f;
-                            g.DrawLine(Pn(c2, (int)(170 * fade), 2f), sx + (float)Math.Cos(a) * r0, sy + (float)Math.Sin(a) * r0 * 0.8f, sx + (float)Math.Cos(a) * r1, sy + (float)Math.Sin(a) * r1 * 0.8f);
-                        }
-                        return true;
+                        float a = k * TwoPi / 16f + 0.2f;
+                        float r0 = r * 0.35f, r1 = r * 0.98f;
+                        g.DrawLine(Pn(c2, (int)(170 * fade), 2f), sx + (float)Math.Cos(a) * r0, sy + (float)Math.Sin(a) * r0 * 0.8f, sx + (float)Math.Cos(a) * r1, sy + (float)Math.Sin(a) * r1 * 0.8f);
                     }
+                    return true;
+                }
                 case SkillFxStyle.Heal:
-                    {
-                        float R = Math.Max(full, v.Px(2.2f)) * (0.55f + 0.45f * e);
-                        float f = p < 0.2f ? p / 0.2f : 1f - (p - 0.2f) / 0.8f;
-                        Glow(g, c1, sx, sy, R * 1.1f, 0.7f * f);
-                        g.DrawEllipse(_res.DashPen(Cc(c1, (int)(230 * f)), 3f, now / 25f % 24f), sx - R, sy - R * 0.7f, R * 2, R * 1.4f);
-                        float r2 = R * 0.62f;
-                        g.DrawEllipse(Pn(c2, (int)(200 * f), 2f), sx - r2, sy - r2 * 0.7f, r2 * 2, r2 * 1.4f);
-                        return true;
-                    }
+                {
+                    float R = Math.Max(full, v.Px(2.2f)) * (0.55f + 0.45f * e);
+                    float f = p < 0.2f ? p / 0.2f : 1f - (p - 0.2f) / 0.8f;
+                    Glow(g, c1, sx, sy, R * 1.1f, 0.7f * f);
+                    g.DrawEllipse(_res.DashPen(Cc(c1, (int)(230 * f)), 3f, now / 25f % 24f), sx - R, sy - R * 0.7f, R * 2, R * 1.4f);
+                    float r2 = R * 0.62f;
+                    g.DrawEllipse(Pn(c2, (int)(200 * f), 2f), sx - r2, sy - r2 * 0.7f, r2 * 2, r2 * 1.4f);
+                    return true;
+                }
                 case SkillFxStyle.Quake:
                     Glow(g, c1, sx, sy, Math.Max(full, v.Px(3f)) * 0.9f, 0.55f * fade);
                     return false;       // 균열은 기존 그림
@@ -186,161 +188,173 @@ namespace GameViewer.App.Render
             switch (info.Style)
             {
                 case SkillFxStyle.Whirl:
+                {
+                    float R = Math.Max(full, v.Px(2.6f));
+                    for (int k = 0; k < 3; ++k)
                     {
-                        float R = Math.Max(full, v.Px(2.6f));
-                        for (int k = 0; k < 3; ++k)
-                        {
-                            float rad = R * (0.5f + 0.2f * k) * (0.75f + 0.25f * e);
-                            double a = (p * 900f * (k % 2 == 0 ? 1 : -1) + k * 120f + 85f) * Math.PI / 180.0;
-                            float hx = sx + (float)Math.Cos(a) * rad, hy = sy + (float)Math.Sin(a) * rad * 0.8f - v.Px(0.5f);
-                            Glow(g, c2, hx, hy, v.Px(0.7f), 0.9f * fade);
-                            Star(g, c2, (int)(220 * fade), hx, hy, v.Px(0.45f), p * 12f + k, 2f);
-                        }
-                        for (int k = 0; k < 8; ++k)
-                        {
-                            float a = Rn(fx, k) * TwoPi + p * 3f, d = R * (0.3f + 0.7f * Rn(fx, k + 9)) * e;
-                            float up = v.Px(0.3f + 1.4f * p * (0.4f + Rn(fx, k + 3)));
-                            Glow(g, c1, sx + (float)Math.Cos(a) * d, sy + (float)Math.Sin(a) * d * 0.8f - up, v.Px(0.2f), 0.8f * fade);
-                        }
-                        return true;
+                        float rad = R * (0.5f + 0.2f * k) * (0.75f + 0.25f * e);
+                        double a = (p * 900f * (k % 2 == 0 ? 1 : -1) + k * 120f + 85f) * Math.PI / 180.0;
+                        float hx = sx + (float)Math.Cos(a) * rad, hy = sy + (float)Math.Sin(a) * rad * 0.8f - v.Px(0.5f);
+                        Glow(g, c2, hx, hy, v.Px(0.7f), 0.9f * fade);
+                        Star(g, c2, (int)(220 * fade), hx, hy, v.Px(0.45f), p * 12f + k, 2f);
+                        FxSprites.DrawA(g, FxSprites.Crescent(), hx, hy + v.Px(0.5f), v.Px(1.0f), (float)(a * 180.0 / Math.PI) + (k % 2 == 0 ? 90f : -90f), fade);
                     }
+                    for (int k = 0; k < 8; ++k)
+                    {
+                        float a = Rn(fx, k) * TwoPi + p * 3f, d = R * (0.3f + 0.7f * Rn(fx, k + 9)) * e;
+                        float up = v.Px(0.3f + 1.4f * p * (0.4f + Rn(fx, k + 3)));
+                        Glow(g, c1, sx + (float)Math.Cos(a) * d, sy + (float)Math.Sin(a) * d * 0.8f - up, v.Px(0.2f), 0.8f * fade);
+                    }
+                    return true;
+                }
                 case SkillFxStyle.Blast:
+                {
+                    float R = Math.Max(full, v.Px(3f));
+                    if (p < 0.6f)
                     {
-                        float R = Math.Max(full, v.Px(3f));
-                        if (p < 0.6f)
+                        float q = p / 0.6f;
+                        float r = R * 0.6f * (0.35f + 0.65f * Ease(q)), h = v.Px(1.2f * Ease(q));
+                        Glow(g, c1, sx, sy - h, r * 2.1f, 0.85f * (1f - q * 0.6f));
+                        Glow(g, c2, sx, sy - h, r * 1.3f, 1f - q);
+                        g.FillEllipse(Br(0xFFFFFF, (int)(240 * (1f - q))), sx - r * 0.45f, sy - h - r * 0.4f, r * 0.9f, r * 0.8f);
+                        for (int k = 0; k < 7; ++k)
                         {
-                            float q = p / 0.6f;
-                            float r = R * 0.6f * (0.35f + 0.65f * Ease(q)), h = v.Px(1.2f * Ease(q));
-                            Glow(g, c1, sx, sy - h, r * 2.1f, 0.85f * (1f - q * 0.6f));
-                            Glow(g, c2, sx, sy - h, r * 1.3f, 1f - q);
-                            g.FillEllipse(Br(0xFFFFFF, (int)(240 * (1f - q))), sx - r * 0.45f, sy - h - r * 0.4f, r * 0.9f, r * 0.8f);
-                            for (int k = 0; k < 7; ++k)
-                            {
-                                float a = (k - 3) * 0.32f + (Rn(fx, k) - 0.5f) * 0.2f;
-                                float len = v.Px(1.4f + 2.2f * Rn(fx, k + 20)) * (float)Math.Sin(Math.PI * Clamp01(q));
-                                float bx = sx + (float)Math.Sin(a) * R * 0.55f, by = sy - v.Px(0.2f);
-                                g.FillPolygon(Br(Mix(c1, c2, Rn(fx, k + 40) * 0.6f), (int)(200 * (1f - q))), new PointF[] { new PointF(bx - v.Px(0.35f), by), new PointF(bx + v.Px(0.35f), by), new PointF(bx + (float)Math.Sin(a) * v.Px(0.3f), by - len) });
-                            }
+                            float a = (k - 3) * 0.32f + (Rn(fx, k) - 0.5f) * 0.2f;
+                            float len = v.Px(1.4f + 2.2f * Rn(fx, k + 20)) * (float)Math.Sin(Math.PI * Clamp01(q));
+                            float bx = sx + (float)Math.Sin(a) * R * 0.55f, by = sy - v.Px(0.2f);
+                            g.FillPolygon(Br(Mix(c1, c2, Rn(fx, k + 40) * 0.6f), (int)(200 * (1f - q))), new PointF[] { new PointF(bx - v.Px(0.35f), by), new PointF(bx + v.Px(0.35f), by), new PointF(bx + (float)Math.Sin(a) * v.Px(0.3f), by - len) });
                         }
-                        for (int k = 0; k < 6; ++k)
-                        {
-                            float q = Clamp01((p - 0.15f - k * 0.04f) / 0.85f);
-                            if (q <= 0f) continue;
-                            float px = sx + (Rn(fx, k + 5) - 0.5f) * R * 1.0f, py = sy - v.Px(0.8f + 2.8f * q);
-                            float r = v.Px(0.6f + 0.9f * q);
-                            Glow(g, 0x4A423C, px, py, r * 1.5f, 0.6f * (1f - q));
-                        }
-                        for (int k = 0; k < 18; ++k)
-                        {
-                            float a = Rn(fx, k + 100) * TwoPi, spd = (0.5f + Rn(fx, k + 130)) * R * 1.1f, up = v.Px(2.6f + 3.2f * Rn(fx, k + 160));
-                            float t = p;
-                            float px = sx + (float)Math.Cos(a) * spd * t, py = sy + (float)Math.Sin(a) * spd * t * 0.5f - up * t + v.Px(5f) * t * t;
-                            Glow(g, Mix(c1, c2, Rn(fx, k + 190)), px, py, v.Px(0.16f) * (1.2f - p), 0.95f * fade);
-                        }
-                        return true;
                     }
-                case SkillFxStyle.Quake:
+                    for (int k = 0; k < 6; ++k)
                     {
-                        _fx.DrawBurstDust(g, fx, v, p, sx, sy);
-                        float R = Math.Max(full, v.Px(3f));
-                        for (int k = 0; k < 10; ++k)
+                        float q = Clamp01((p - 0.15f - k * 0.04f) / 0.85f);
+                        if (q <= 0f) continue;
+                        float px = sx + (Rn(fx, k + 5) - 0.5f) * R * 1.0f, py = sy - v.Px(0.8f + 2.8f * q);
+                        float r = v.Px(0.6f + 0.9f * q);
+                        Glow(g, 0x4A423C, px, py, r * 1.5f, 0.6f * (1f - q));
+                    }
+                    for (int k = 0; k < 18; ++k)
+                    {
+                        float a = Rn(fx, k + 100) * TwoPi, spd = (0.5f + Rn(fx, k + 130)) * R * 1.1f, up = v.Px(2.6f + 3.2f * Rn(fx, k + 160));
+                        float t = p;
+                        float px = sx + (float)Math.Cos(a) * spd * t, py = sy + (float)Math.Sin(a) * spd * t * 0.5f - up * t + v.Px(5f) * t * t;
+                        Glow(g, Mix(c1, c2, Rn(fx, k + 190)), px, py, v.Px(0.16f) * (1.2f - p), 0.95f * fade);
+                    }
+                    return true;
+                }
+                case SkillFxStyle.Quake:
+                {
+                    _fx.DrawBurstDust(g, fx, v, p, sx, sy);
+                    float R = Math.Max(full, v.Px(3f));
+                    for (int k = 0; k < 10; ++k)
+                    {
+                        float a = Rn(fx, k) * TwoPi, d = R * (0.2f + 0.7f * Rn(fx, k + 20)) * Math.Min(1f, p * 4f);
+                        float t = p, up = v.Px(2.2f + 2.6f * Rn(fx, k + 40));
+                        float px = sx + (float)Math.Cos(a) * d, py = sy + (float)Math.Sin(a) * d * 0.7f - 4f * up * t * (1f - t);
+                        float s = v.Px(0.18f + 0.18f * Rn(fx, k + 60)), rot = p * 8f + k;
+                        PointF[] poly = { new PointF(px + (float)Math.Cos(rot) * s, py + (float)Math.Sin(rot) * s), new PointF(px + (float)Math.Cos(rot + 2.1f) * s, py + (float)Math.Sin(rot + 2.1f) * s), new PointF(px + (float)Math.Cos(rot + 4.2f) * s * 0.8f, py + (float)Math.Sin(rot + 4.2f) * s * 0.8f) };
+                        Bitmap sh = FxSprites.Shard(k);
+                        if (sh != null) FxSprites.DrawA(g, sh, px, py, s * 3.2f, rot * 57.29578f, p < 0.8f ? 1f : (1f - p) / 0.2f);
+                        else
                         {
-                            float a = Rn(fx, k) * TwoPi, d = R * (0.2f + 0.7f * Rn(fx, k + 20)) * Math.Min(1f, p * 4f);
-                            float t = p, up = v.Px(2.2f + 2.6f * Rn(fx, k + 40));
-                            float px = sx + (float)Math.Cos(a) * d, py = sy + (float)Math.Sin(a) * d * 0.7f - 4f * up * t * (1f - t);
-                            float s = v.Px(0.18f + 0.18f * Rn(fx, k + 60)), rot = p * 8f + k;
-                            PointF[] poly = { new PointF(px + (float)Math.Cos(rot) * s, py + (float)Math.Sin(rot) * s), new PointF(px + (float)Math.Cos(rot + 2.1f) * s, py + (float)Math.Sin(rot + 2.1f) * s), new PointF(px + (float)Math.Cos(rot + 4.2f) * s * 0.8f, py + (float)Math.Sin(rot + 4.2f) * s * 0.8f) };
                             g.FillPolygon(Br(0x5A4430, (int)(250 * (p < 0.8f ? 1f : (1f - p) / 0.2f))), poly);
                             g.DrawPolygon(Pn(c2, (int)(120 * fade), 1f), poly);
                         }
-                        return true;
                     }
+                    return true;
+                }
                 case SkillFxStyle.Roar:
+                {
+                    float R = Math.Max(full, v.Px(3.4f));
+                    for (int k = 0; k < 12; ++k)
                     {
-                        float R = Math.Max(full, v.Px(3.4f));
-                        for (int k = 0; k < 12; ++k)
-                        {
-                            float a = k * TwoPi / 12f + 0.15f;
-                            float r0 = R * (0.25f + 0.6f * e), r1 = r0 + R * 0.28f * (1f - p);
-                            float hy = v.Px(0.9f);
-                            g.DrawLine(Pn(c2, (int)(220 * fade), 3f), sx + (float)Math.Cos(a) * r0, sy + (float)Math.Sin(a) * r0 * 0.8f - hy, sx + (float)Math.Cos(a) * r1, sy + (float)Math.Sin(a) * r1 * 0.8f - hy);
-                        }
-                        Glow(g, c1, sx, sy - v.Px(1.0f), R * 0.5f * (1f - p * 0.5f), 0.7f * fade);
-                        return true;
+                        float a = k * TwoPi / 12f + 0.15f;
+                        float r0 = R * (0.25f + 0.6f * e), r1 = r0 + R * 0.28f * (1f - p);
+                        float hy = v.Px(0.9f);
+                        g.DrawLine(Pn(c2, (int)(220 * fade), 3f), sx + (float)Math.Cos(a) * r0, sy + (float)Math.Sin(a) * r0 * 0.8f - hy, sx + (float)Math.Cos(a) * r1, sy + (float)Math.Sin(a) * r1 * 0.8f - hy);
                     }
+                    Glow(g, c1, sx, sy - v.Px(1.0f), R * 0.5f * (1f - p * 0.5f), 0.7f * fade);
+                    return true;
+                }
                 case SkillFxStyle.Poison:
+                {
+                    float R = Math.Max(full, v.Px(2.8f));
+                    float f = p < 0.15f ? p / 0.15f : 1f - (p - 0.15f) / 0.85f;
+                    for (int k = 0; k < 12; ++k)
                     {
-                        float R = Math.Max(full, v.Px(2.8f));
-                        float f = p < 0.15f ? p / 0.15f : 1f - (p - 0.15f) / 0.85f;
-                        for (int k = 0; k < 12; ++k)
-                        {
-                            float ph = (p * 1.4f + Rn(fx, k)) % 1f;
-                            float px = sx + (Rn(fx, k + 30) - 0.5f) * R * 1.7f, py = sy + (Rn(fx, k + 60) - 0.5f) * R * 0.9f - v.Px(2.4f * ph);
-                            float r = v.Px(0.16f + 0.14f * Rn(fx, k + 90));
-                            g.DrawEllipse(Pn(c2, (int)(190 * f * (1f - ph * 0.6f)), 1.5f), px - r, py - r, r * 2, r * 2);
-                            g.FillEllipse(Br(c2, (int)(120 * f)), px - r * 0.35f - r * 0.2f, py - r * 0.35f - r * 0.2f, r * 0.5f, r * 0.5f);
-                        }
-                        if (info.Shake > 0f) _fx.DrawBurstDust(g, fx, v, p, sx, sy);
-                        return true;
+                        float ph = (p * 1.4f + Rn(fx, k)) % 1f;
+                        float px = sx + (Rn(fx, k + 30) - 0.5f) * R * 1.7f, py = sy + (Rn(fx, k + 60) - 0.5f) * R * 0.9f - v.Px(2.4f * ph);
+                        float r = v.Px(0.16f + 0.14f * Rn(fx, k + 90));
+                        Bitmap bb = FxSprites.Bubble(k);
+                        if (bb != null) { FxSprites.DrawT(g, bb, px, py, r * 3.2f, 0f, 0.85f * f * (1f - ph * 0.6f), c2); continue; }
+                        g.DrawEllipse(Pn(c2, (int)(190 * f * (1f - ph * 0.6f)), 1.5f), px - r, py - r, r * 2, r * 2);
+                        g.FillEllipse(Br(c2, (int)(120 * f)), px - r * 0.35f - r * 0.2f, py - r * 0.35f - r * 0.2f, r * 0.5f, r * 0.5f);
                     }
+                    if (info.Shake > 0f) _fx.DrawBurstDust(g, fx, v, p, sx, sy);
+                    return true;
+                }
                 case SkillFxStyle.Volley:
+                {
+                    float R = Math.Max(full, v.Px(3f));
+                    int n = VolleyCount(radius);
+                    float len = v.Px(1.7f), hgt = v.Px(9f), slant = v.Px(1.8f);
+                    float nl = (float)Math.Sqrt(slant * slant + hgt * hgt);
+                    for (int k = 0; k < n; ++k)
                     {
-                        float R = Math.Max(full, v.Px(3f));
-                        int n = VolleyCount(radius);
-                        float len = v.Px(1.7f), hgt = v.Px(9f), slant = v.Px(1.8f);
-                        float nl = (float)Math.Sqrt(slant * slant + hgt * hgt);
-                        for (int k = 0; k < n; ++k)
+                        float tk = 0.12f + 0.55f * Rn(fx, k);
+                        float a = Rn(fx, k + 100) * TwoPi, d = R * (float)Math.Sqrt(Rn(fx, k + 200)) * 0.92f;
+                        float lx = sx + (float)Math.Cos(a) * d, ly = sy + (float)Math.Sin(a) * d * 0.8f;
+                        if (p >= tk - 0.15f && p < tk)
                         {
-                            float tk = 0.12f + 0.55f * Rn(fx, k);
-                            float a = Rn(fx, k + 100) * TwoPi, d = R * (float)Math.Sqrt(Rn(fx, k + 200)) * 0.92f;
-                            float lx = sx + (float)Math.Cos(a) * d, ly = sy + (float)Math.Sin(a) * d * 0.8f;
-                            if (p >= tk - 0.15f && p < tk)
-                            {
-                                float u = (p - (tk - 0.15f)) / 0.15f;
-                                float tx = lx - (1f - u) * slant, ty = ly - (1f - u) * hgt;
-                                float ux = slant / nl, uy = hgt / nl;
-                                g.DrawLine(Pn(c1, 90, 5f), tx - ux * len, ty - uy * len, tx, ty);
-                                g.DrawLine(Pn(0xFFFFFF, 240, 1.5f), tx - ux * len, ty - uy * len, tx, ty);
-                                Glow(g, c2, tx, ty, v.Px(0.28f), 0.8f);
-                            }
-                            else if (p >= tk && p < tk + 0.28f)
-                            {
-                                float u = (p - tk) / 0.28f;
-                                g.DrawLine(Pn(c1, (int)(230 * (1f - u)), 2f), lx, ly, lx - v.Px(0.2f), ly - v.Px(1.0f));
-                                g.DrawLine(Pn(0xFFFFFF, (int)(200 * (1f - u)), 1f), lx - v.Px(0.2f), ly - v.Px(1.0f), lx - v.Px(0.25f), ly - v.Px(1.35f));
-                                if (u < 0.35f) Glow(g, c2, lx, ly - v.Px(0.1f), v.Px(0.55f) * (1f - u), 0.8f * (1f - u * 2.5f));
-                            }
+                            float u = (p - (tk - 0.15f)) / 0.15f;
+                            float tx = lx - (1f - u) * slant, ty = ly - (1f - u) * hgt;
+                            float ux = slant / nl, uy = hgt / nl;
+                            g.DrawLine(Pn(c1, 90, 5f), tx - ux * len, ty - uy * len, tx, ty);
+                            g.DrawLine(Pn(0xFFFFFF, 240, 1.5f), tx - ux * len, ty - uy * len, tx, ty);
+                            Glow(g, c2, tx, ty, v.Px(0.28f), 0.8f);
                         }
-                        return true;
+                        else if (p >= tk && p < tk + 0.28f)
+                        {
+                            float u = (p - tk) / 0.28f;
+                            g.DrawLine(Pn(c1, (int)(230 * (1f - u)), 2f), lx, ly, lx - v.Px(0.2f), ly - v.Px(1.0f));
+                            g.DrawLine(Pn(0xFFFFFF, (int)(200 * (1f - u)), 1f), lx - v.Px(0.2f), ly - v.Px(1.0f), lx - v.Px(0.25f), ly - v.Px(1.35f));
+                            if (u < 0.35f) Glow(g, c2, lx, ly - v.Px(0.1f), v.Px(0.55f) * (1f - u), 0.8f * (1f - u * 2.5f));
+                        }
                     }
+                    return true;
+                }
                 case SkillFxStyle.Nova:
+                {
+                    float R = Math.Max(full, v.Px(3.2f));
+                    if (p < 0.3f) Glow(g, c2, sx, sy - v.Px(0.9f), v.Px(1.8f) * (0.5f + p * 3f), 1f - p / 0.3f);
+                    for (int k = 0; k < 10; ++k)
                     {
-                        float R = Math.Max(full, v.Px(3.2f));
-                        if (p < 0.3f) Glow(g, c2, sx, sy - v.Px(0.9f), v.Px(1.8f) * (0.5f + p * 3f), 1f - p / 0.3f);
-                        for (int k = 0; k < 10; ++k)
-                        {
-                            float a = k * TwoPi / 10f + 0.4f, r = R * e * 0.95f;
-                            Glow(g, c2, sx + (float)Math.Cos(a) * r, sy + (float)Math.Sin(a) * r * 0.8f - v.Px(0.4f), v.Px(0.3f), 0.9f * fade);
-                        }
-                        return true;
+                        float a = k * TwoPi / 10f + 0.4f, r = R * e * 0.95f;
+                        Bitmap on = FxSprites.OrbNova();
+                        if (on != null) FxSprites.DrawT(g, on, sx + (float)Math.Cos(a) * r, sy + (float)Math.Sin(a) * r * 0.8f - v.Px(0.4f), v.Px(0.8f), 0f, fade, c2);
+                        Glow(g, c2, sx + (float)Math.Cos(a) * r, sy + (float)Math.Sin(a) * r * 0.8f - v.Px(0.4f), v.Px(0.3f), 0.9f * fade);
                     }
+                    return true;
+                }
                 case SkillFxStyle.Heal:
+                {
+                    float f = p < 0.2f ? p / 0.2f : 1f - (p - 0.2f) / 0.8f;
+                    float colW = v.Px(1.05f);
+                    for (int j = 0; j < 9; ++j)
+                        Glow(g, Mix(c1, c2, j / 9f), sx, sy - j * v.Px(0.42f), colW * (1.05f - j * 0.07f), 0.5f * f);
+                    for (int k = 0; k < 14; ++k)
                     {
-                        float f = p < 0.2f ? p / 0.2f : 1f - (p - 0.2f) / 0.8f;
-                        float colW = v.Px(1.05f);
-                        for (int j = 0; j < 9; ++j)
-                            Glow(g, Mix(c1, c2, j / 9f), sx, sy - j * v.Px(0.42f), colW * (1.05f - j * 0.07f), 0.5f * f);
-                        for (int k = 0; k < 14; ++k)
-                        {
-                            float ph = (p * 1.3f + Rn(fx, k)) % 1f;
-                            float px = sx + (Rn(fx, k + 20) - 0.5f) * colW * 2.4f, py = sy - v.Px(0.2f) - v.Px(3.6f) * ph;
-                            float s = v.Px(0.17f) * (0.6f + 0.6f * Rn(fx, k + 40));
-                            int a = (int)(240 * f * Math.Sin(Math.PI * ph));
-                            g.DrawLine(Pn(c2, a, 2f), px - s, py, px + s, py);
-                            g.DrawLine(Pn(c2, a, 2f), px, py - s, px, py + s);
-                        }
-                        return true;
+                        float ph = (p * 1.3f + Rn(fx, k)) % 1f;
+                        float px = sx + (Rn(fx, k + 20) - 0.5f) * colW * 2.4f, py = sy - v.Px(0.2f) - v.Px(3.6f) * ph;
+                        float s = v.Px(0.17f) * (0.6f + 0.6f * Rn(fx, k + 40));
+                        int a = (int)(240 * f * Math.Sin(Math.PI * ph));
+                        Bitmap ob = FxSprites.OrbHeal();
+                        if (ob != null) { FxSprites.DrawT(g, ob, px, py, s * 3.4f, 0f, a / 255f, c2); continue; }
+                        g.DrawLine(Pn(c2, a, 2f), px - s, py, px + s, py);
+                        g.DrawLine(Pn(c2, a, 2f), px, py - s, px, py + s);
                     }
+                    return true;
+                }
             }
             return false;
         }
@@ -362,15 +376,9 @@ namespace GameViewer.App.Render
                 case SkillFxStyle.Blade: DrawBlade(g, info, fx, v, p, cx, cy, tx, ty); return true;
                 case SkillFxStyle.Pierce: DrawPierce(g, info, fx, v, p, cx, cy, tx, ty); return true;
                 case SkillFxStyle.Lance: _fx.Attack.Thrust(g, fx, v, p, cx, cy, info.Color1, info.Color2, 1.7f); return true;
-                case SkillFxStyle.Whirl:
-                case SkillFxStyle.Roar:
-                case SkillFxStyle.Nova:
+                case SkillFxStyle.Whirl: case SkillFxStyle.Roar: case SkillFxStyle.Nova:
                     return RingAir(g, info, fx, v, now, cx, cy, fx.Radius > 0 ? fx.Radius : 3.5f);
-                case SkillFxStyle.Heal:
-                case SkillFxStyle.Blast:
-                case SkillFxStyle.Quake:
-                case SkillFxStyle.Poison:
-                case SkillFxStyle.Volley:
+                case SkillFxStyle.Heal: case SkillFxStyle.Blast: case SkillFxStyle.Quake: case SkillFxStyle.Poison: case SkillFxStyle.Volley:
                     return RingAir(g, info, fx, v, now, tx, ty, fx.Radius > 0 ? fx.Radius : 3.5f);
             }
             return false;
@@ -385,15 +393,9 @@ namespace GameViewer.App.Render
             if (c != null) c.PosAt(now, out cx, out cy);
             switch (info.Style)
             {
-                case SkillFxStyle.Whirl:
-                case SkillFxStyle.Roar:
-                case SkillFxStyle.Nova:
+                case SkillFxStyle.Whirl: case SkillFxStyle.Roar: case SkillFxStyle.Nova:
                     return RingGround(g, info, fx, v, now, cx, cy, fx.Radius);
-                case SkillFxStyle.Heal:
-                case SkillFxStyle.Blast:
-                case SkillFxStyle.Quake:
-                case SkillFxStyle.Poison:
-                case SkillFxStyle.Volley:
+                case SkillFxStyle.Heal: case SkillFxStyle.Blast: case SkillFxStyle.Quake: case SkillFxStyle.Poison: case SkillFxStyle.Volley:
                     return RingGround(g, info, fx, v, now, fx.X, fx.Y, fx.Radius);
             }
             return false;
@@ -518,6 +520,8 @@ namespace GameViewer.App.Render
             g.DrawArc(Pn(0xFFFFFF, (int)(250 * fade), 2.5f), ox - rr, oy - rr * 0.9f, rr * 2, rr * 1.8f, head - 40f, 40f);
             double ha = head * Math.PI / 180.0;
             Glow(g, c2, ox + (float)Math.Cos(ha) * rr, oy + (float)Math.Sin(ha) * rr * 0.9f, v.Px(0.9f), 0.9f * fade);
+            // 3D 초승달: 칼끝에서 진행 방향(호의 접선)으로 볼록하게 나아간다
+            FxSprites.DrawA(g, FxSprites.Crescent(), ox + (float)Math.Cos(ha) * rr * 0.92f, oy + (float)Math.Sin(ha) * rr * 0.9f * 0.92f, v.Px(1.5f), head + 90f, fade * Clamp01(sweep * 4f));
             // 타격: 베기가 끝나갈 때 대상에서 섬광과 파편
             float q = Clamp01((p - 0.22f) / 0.78f);
             if (q > 0f)
@@ -559,6 +563,8 @@ namespace GameViewer.App.Render
                 float x0 = hx - c * L * grow, y0 = hy - s * L * grow, x1 = hx + c * L * grow, y1 = hy + s * L * grow;
                 g.DrawLine(Pn(c1, (int)(150 * a), 9f), x0, y0, x1, y1);
                 g.DrawLine(Pn(c2, (int)(250 * a), 2.5f), x0, y0, x1, y1);
+                float dd = 1f - Ease(Clamp01(q * 2.2f));       // 칼이 바깥에서 대상 쪽으로 꽂힌다
+                FxSprites.DrawA(g, FxSprites.Dagger(), hx - c * L * (0.2f + dd * 0.9f), hy - s * L * (0.2f + dd * 0.9f), v.Px(1.9f), dir * 57.29578f, a);
             }
             float f = Clamp01((p - 0.14f) / 0.5f);
             if (f > 0f)
@@ -599,7 +605,9 @@ namespace GameViewer.App.Render
                     Glow(g, c1, kx, ky, v.Px(0.17f), 0.8f * (1f - k * 0.16f));
                 }
                 Glow(g, c2, px, py, v.Px(0.8f), 0.95f);
-                g.FillPolygon(Br(0xFFFFFF, 255), new PointF[] { new PointF(px + ux * 7, py + uy * 7), new PointF(px - uy * 3.5f - ux * 3, py + ux * 3.5f - uy * 3), new PointF(px + uy * 3.5f - ux * 3, py - ux * 3.5f - uy * 3) });
+                Bitmap ab = FxSprites.Arrow();
+                if (ab != null) FxSprites.Draw(g, ab, px - ux * v.Px(0.45f), py - uy * v.Px(0.45f), v.Px(2.0f), (float)(Math.Atan2(uy, ux) * 180.0 / Math.PI));
+                else g.FillPolygon(Br(0xFFFFFF, 255), new PointF[] { new PointF(px + ux * 7, py + uy * 7), new PointF(px - uy * 3.5f - ux * 3, py + ux * 3.5f - uy * 3), new PointF(px + uy * 3.5f - ux * 3, py - ux * 3.5f - uy * 3) });
                 return true;
             }
             float r = v.Px(0.55f) * (0.92f + 0.12f * (float)Math.Sin(now / 55.0));
@@ -613,8 +621,13 @@ namespace GameViewer.App.Render
             }
             Glow(g, c1, px, py, r * 3.8f, 0.9f);
             Glow(g, c2, px, py, r * 2.1f, 1f);
-            g.FillEllipse(Br(c2, 255), px - r, py - r, r * 2, r * 2);
-            g.FillEllipse(Br(0xFFFFFF, 255), px - r * 0.5f, py - r * 0.5f, r, r);
+            Bitmap fb = FxSprites.Fire(now);
+            if (fb != null) FxSprites.Draw(g, fb, px, py, r * 2.5f, 0f);
+            else
+            {
+                g.FillEllipse(Br(c2, 255), px - r, py - r, r * 2, r * 2);
+                g.FillEllipse(Br(0xFFFFFF, 255), px - r * 0.5f, py - r * 0.5f, r, r);
+            }
             for (int k = 0; k < 6; ++k)
             {
                 double a = now / 85.0 + k * 1.047;
@@ -690,46 +703,46 @@ namespace GameViewer.App.Render
             switch (row.Kind)
             {
                 case "Stun":
+                {
+                    float hy = sy - v.Px(bodyH) - v.Px(0.1f);
+                    for (int k = 0; k < 3; ++k)
                     {
-                        float hy = sy - v.Px(bodyH) - v.Px(0.1f);
-                        for (int k = 0; k < 3; ++k)
-                        {
-                            double a = now / 260.0 + k * 2.094;
-                            float depth = (float)Math.Sin(a);
-                            float px = sx + (float)Math.Cos(a) * halfW * 0.95f, py = hy + depth * halfW * 0.3f;
-                            float s = v.Px(0.2f) * (0.8f + 0.35f * depth);
-                            Star(g, 0xFFE070, 240, px, py, s, (float)a * 2f, 2f);
-                            Glow(g, 0xFFE070, px, py, s * 1.6f, 0.7f);
-                        }
-                        return true;
+                        double a = now / 260.0 + k * 2.094;
+                        float depth = (float)Math.Sin(a);
+                        float px = sx + (float)Math.Cos(a) * halfW * 0.95f, py = hy + depth * halfW * 0.3f;
+                        float s = v.Px(0.2f) * (0.8f + 0.35f * depth);
+                        Star(g, 0xFFE070, 240, px, py, s, (float)a * 2f, 2f);
+                        Glow(g, 0xFFE070, px, py, s * 1.6f, 0.7f);
                     }
+                    return true;
+                }
                 case "Shield":
-                    {
-                        float pulse = 0.5f + 0.5f * (float)Math.Sin(now / 240.0 + idx);
-                        float top = sy - v.Px(bodyH * 1.08f), bot = sy + v.Px(0.15f);
-                        float w = halfW * 1.35f;
-                        g.FillEllipse(Br(0x78C8FF, (int)(34 + 22 * pulse)), sx - w, top, w * 2, bot - top);
-                        g.DrawEllipse(Pn(0xBEE6FF, (int)(120 + 80 * pulse), 2f), sx - w, top, w * 2, bot - top);
-                        g.DrawArc(Pn(0xFFFFFF, 190, 2f), sx - w * 0.8f, top + (bot - top) * 0.1f, w * 1.6f, (bot - top) * 0.8f, 200f, 50f);
-                        float swirl = now / 700f % 1f;
-                        g.DrawArc(Pn(0xDCF2FF, (int)(160 * pulse + 40), 1.5f), sx - w, top, w * 2, bot - top, swirl * 360f, 60f);
-                        return true;
-                    }
+                {
+                    float pulse = 0.5f + 0.5f * (float)Math.Sin(now / 240.0 + idx);
+                    float top = sy - v.Px(bodyH * 1.08f), bot = sy + v.Px(0.15f);
+                    float w = halfW * 1.35f;
+                    g.FillEllipse(Br(0x78C8FF, (int)(34 + 22 * pulse)), sx - w, top, w * 2, bot - top);
+                    g.DrawEllipse(Pn(0xBEE6FF, (int)(120 + 80 * pulse), 2f), sx - w, top, w * 2, bot - top);
+                    g.DrawArc(Pn(0xFFFFFF, 190, 2f), sx - w * 0.8f, top + (bot - top) * 0.1f, w * 1.6f, (bot - top) * 0.8f, 200f, 50f);
+                    float swirl = now / 700f % 1f;
+                    g.DrawArc(Pn(0xDCF2FF, (int)(160 * pulse + 40), 1.5f), sx - w, top, w * 2, bot - top, swirl * 360f, 60f);
+                    return true;
+                }
                 case "Hot":
+                {
+                    for (int k = 0; k < 5; ++k)
                     {
-                        for (int k = 0; k < 5; ++k)
-                        {
-                            float ph = ((now / 650f) + k * 0.2f + idx * 0.07f) % 1f;
-                            float px = sx + (Noise.Hash01(k + idx, 11, 4) - 0.5f) * halfW * 1.7f;
-                            float py = sy - v.Px(0.3f) - ph * v.Px(bodyH * 0.9f);
-                            float s = v.Px(0.13f) * (1f - ph * 0.4f);
-                            int a = (int)(240 * Math.Sin(Math.PI * ph));
-                            g.DrawLine(Pn(0x8CFFA8, a, 2f), px - s, py, px + s, py);
-                            g.DrawLine(Pn(0x8CFFA8, a, 2f), px, py - s, px, py + s);
-                        }
-                        Glow(g, 0x78FF9E, sx, sy - v.Px(0.1f), halfW * 1.3f, 0.35f);
-                        return true;
+                        float ph = ((now / 650f) + k * 0.2f + idx * 0.07f) % 1f;
+                        float px = sx + (Noise.Hash01(k + idx, 11, 4) - 0.5f) * halfW * 1.7f;
+                        float py = sy - v.Px(0.3f) - ph * v.Px(bodyH * 0.9f);
+                        float s = v.Px(0.13f) * (1f - ph * 0.4f);
+                        int a = (int)(240 * Math.Sin(Math.PI * ph));
+                        g.DrawLine(Pn(0x8CFFA8, a, 2f), px - s, py, px + s, py);
+                        g.DrawLine(Pn(0x8CFFA8, a, 2f), px, py - s, px, py + s);
                     }
+                    Glow(g, 0x78FF9E, sx, sy - v.Px(0.1f), halfW * 1.3f, 0.35f);
+                    return true;
+                }
             }
             return false;
         }

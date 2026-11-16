@@ -6,7 +6,7 @@
 
 using System.Collections.Generic;
 
-namespace Game.Data
+namespace Game.Generated
 {
 	/// <summary>HeroSkill.json의 한 행.</summary>
 	public sealed class HeroSkillRow

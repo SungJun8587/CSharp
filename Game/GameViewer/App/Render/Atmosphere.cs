@@ -7,13 +7,14 @@ using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using GameViewer.Core.Logic;
 
 namespace GameViewer.App.Render
 {
-    public sealed class Atmosphere : IDisposable
+    public sealed partial class Atmosphere : IDisposable
     {
         private const int Beams = 5;
-        private const int Leaves = 26;
+        private const int Leaves = 12;
         private readonly Resources _res;
         private const int Levels = 6;
         private readonly Bitmap[] _beam = new Bitmap[Levels];      // 밝기 단계별 (ColorMatrix 는 느려서 쓰지 않는다)
@@ -42,17 +43,120 @@ namespace GameViewer.App.Render
             }
         }
 
-        public void Dispose() { foreach (Bitmap b in _beam) b.Dispose(); }
+        public void Dispose() { foreach (Bitmap b in _beam) b.Dispose(); if (_beamLayer != null) _beamLayer.Dispose(); }
 
         public void Draw(Graphics g, ViewState v, long now)
         {
+            if (ZoneTheme.Current == MapKind.Desert) { DrawDesertAir(g, v, now); return; }
+            if (ZoneTheme.Current != MapKind.Forest) { DrawBiomeAir(g, v, now, ZoneTheme.Current); return; }
+            DrawForestGrade(g, v, now);
             DrawBeams(g, v, now);
             DrawLeaves(g, v, now);
+            DrawFireflies(g, v, now);
         }
+
+        /// <summary>숲의 색조: 위쪽 햇빛은 따뜻하게, 아래쪽은 차갑게 눌러 분위기를 만든다.</summary>
+        private void DrawForestGrade(Graphics g, ViewState v, long now)
+        {
+            float W = v.Width, H = v.Height;
+            using (LinearGradientBrush t = new LinearGradientBrush(new RectangleF(0, 0, W, H + 1), Color.FromArgb(22, 255, 238, 160), Color.FromArgb(16, 20, 60, 90), LinearGradientMode.Vertical))
+                g.FillRectangle(t, 0, 0, W, H);
+        }
+
+        /// <summary>반딧불/꽃가루: 천천히 떠다니며 깜박이는 노란 빛 점.</summary>
+        private void DrawFireflies(Graphics g, ViewState v, long now)
+        {
+            float W = v.Width, H = v.Height;
+            for (int i = 0; i < 22; ++i)
+            {
+                uint h = Noise.Hash(i, 9, 421);
+                double t = now / 1000.0;
+                float x = ((h >> 4) & 1023) / 1023f * W + (float)Math.Sin(t * (0.2 + (h & 3) * 0.07) + i) * 46f;
+                float y = ((h >> 14) & 1023) / 1023f * H + (float)Math.Cos(t * (0.17 + ((h >> 2) & 3) * 0.06) + i * 1.7) * 34f;
+                float tw = 0.5f + 0.5f * (float)Math.Sin(t * (1.4 + (h & 7) * 0.2) + i * 2.1);
+                int a = (int)(150 * tw * tw);
+                if (a < 6) continue;
+                g.FillEllipse(_res.Brush(a / 4, 255, 244, 140), x - 7, y - 7, 14, 14);
+                g.FillEllipse(_res.Brush(a, 255, 250, 190), x - 1.8f, y - 1.8f, 3.6f, 3.6f);
+            }
+        }
+
+        /// <summary>사막의 공기: 뜨거운 햇빛의 따뜻한 색조, 위쪽의 아지랑이 빛, 바람에 쓸려 가는 모래 줄기와 먼지.</summary>
+        private void DrawDesertAir(Graphics g, ViewState v, long now)
+        {
+            float W = v.Width, H = v.Height;
+            g.FillRectangle(_res.Brush(16, 255, 186, 96), 0, 0, W, H);
+            using (LinearGradientBrush t = new LinearGradientBrush(new RectangleF(0, 0, W, H * 0.45f + 1), Color.FromArgb(46, 255, 226, 150), Color.FromArgb(0, 255, 226, 150), LinearGradientMode.Vertical))
+                g.FillRectangle(t, 0, 0, W, H * 0.45f);
+            // 아지랑이: 천천히 일렁이는 밝은 띠
+            for (int i = 0; i < 4; ++i)
+            {
+                float yy = H * (0.18f + i * 0.2f) + (float)Math.Sin(now / 1900.0 + i * 1.7) * 14f;
+                using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(0, yy - 18, W, 36), Color.FromArgb(0, 255, 240, 200), Color.FromArgb(0, 255, 240, 200), LinearGradientMode.Vertical))
+                {
+                    ColorBlend cb = new ColorBlend(3);
+                    cb.Colors = new Color[] { Color.FromArgb(0, 255, 240, 200), Color.FromArgb(18, 255, 240, 200), Color.FromArgb(0, 255, 240, 200) };
+                    cb.Positions = new float[] { 0f, 0.5f, 1f };
+                    b.InterpolationColors = cb;
+                    g.FillRectangle(b, 0, yy - 18, W, 36);
+                }
+            }
+            // 바람 줄기
+            for (int i = 0; i < 34; ++i)
+            {
+                uint h = Noise.Hash(i, 5, 311);
+                double period = 2600 + (h & 1023) * 4;
+                double p = ((now + (long)((h >> 10) & 0xFFFF) * 5) % (long)period) / period;
+                float y = ((h >> 4) & 1023) / 1023f * H + (float)Math.Sin(p * 6.28) * 6f;
+                float len = 40 + ((h >> 14) & 127);
+                float x = -len + (float)p * (W + len * 2f);
+                float a = (float)Math.Sin(p * Math.PI);
+                g.DrawLine(_res.Pen((int)(58 * a), 255, 236, 186, 1.4f), x, y, x + len, y + len * 0.06f);
+            }
+            // 먼지 알갱이
+            for (int i = 0; i < 40; ++i)
+            {
+                uint h = Noise.Hash(i, 8, 313);
+                double period = 5000 + (h & 1023) * 6;
+                double p = ((now + (long)((h >> 10) & 0xFFFF) * 3) % (long)period) / period;
+                float x = (float)p * (W + 60f) - 30f + (float)Math.Sin(p * 11 + i) * 8f;
+                float y = ((h >> 4) & 1023) / 1023f * H + (float)Math.Sin(p * 8 + i * 2) * 14f;
+                float s = 1.2f + ((h >> 14) & 3) * 0.6f;
+                g.FillEllipse(_res.Brush(120, 255, 232, 180), x, y, s, s);
+            }
+        }
+
+        // 빛줄기는 아주 천천히 움직여서 4Hz 로만 반해상도 층에 다시 그리고, 프레임마다는 그 층을 한 번 깐다.
+        // (기울어진 평행사변형 DrawImage 가 프레임당 가장 비싼 공기 연출이었다)
+        private Bitmap _beamLayer; private long _beamAt = long.MinValue; private int _beamW, _beamH;
+        private const int BeamRefreshMs = 250;
 
         private void DrawBeams(Graphics g, ViewState v, long now)
         {
-            float W = v.Width, H = v.Height;
+            int lw = Math.Max(1, v.Width / 2), lh = Math.Max(1, v.Height / 2);
+            if (_beamLayer == null || _beamW != lw || _beamH != lh)
+            {
+                if (_beamLayer != null) _beamLayer.Dispose();
+                _beamLayer = new Bitmap(lw, lh, PixelFormat.Format32bppPArgb); _beamW = lw; _beamH = lh; _beamAt = long.MinValue;
+            }
+            if (now - _beamAt >= BeamRefreshMs || now < _beamAt)
+            {
+                _beamAt = now;
+                using (Graphics lg = Graphics.FromImage(_beamLayer))
+                {
+                    lg.Clear(Color.Transparent);
+                    lg.ScaleTransform(0.5f, 0.5f);
+                    PaintBeams(lg, v.Width, v.Height, now);
+                }
+            }
+            InterpolationMode im = g.InterpolationMode;
+            g.InterpolationMode = InterpolationMode.Bilinear;
+            g.DrawImage(_beamLayer, 0, 0, v.Width, v.Height);
+            g.InterpolationMode = im;
+        }
+
+        private void PaintBeams(Graphics g, float W, float H, long now)
+        {
             float lean = H * 0.34f;
             InterpolationMode im = g.InterpolationMode;
             g.InterpolationMode = InterpolationMode.Bilinear;

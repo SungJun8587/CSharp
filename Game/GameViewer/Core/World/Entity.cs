@@ -33,6 +33,7 @@ namespace GameViewer.Core.World
         public long HitFlashMs = -100000;       // 마지막 피격 시각
         public long AttackAnimMs = -100000;     // 마지막 공격 동작 시각
         public byte AttackKind;                 // 마지막 공격의 종류: 0 근접 기본, 1 스킬, 2 원거리(발사)
+        public float HitPower = 0.4f;           // 마지막 피격의 세기 0.2~1 (최대 체력 대비 피해량). 반동/번쩍임/사망 때 밀리는 거리가 이에 비례한다
         public float HitDirX, HitDirY;          // 마지막 피격의 방향(공격자 -> 피격자 단위벡터, 0이면 방향 모름)
         public long InvulnUntilMs;
 
@@ -47,6 +48,7 @@ namespace GameViewer.Core.World
         public BossRow Boss;                    // 보스 정의 (보스가 아니면 null)
         public int BossPhase;                   // 현재 페이즈(1부터). 한 번 올라가면 내려가지 않는다(서버 규칙과 같음)
         public long PhaseChangedMs = -100000;
+        public long AppearMs = -100000;         // 보스가 처음 나타난 시각(등장 연출)
         public float GhostHp;                   // 체력바 뒤에서 천천히 줄어드는 잔상 (피해량 표시)
         public long GhostSinceMs;
 

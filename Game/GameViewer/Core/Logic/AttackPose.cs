@@ -37,17 +37,12 @@ namespace GameViewer.Core.Logic
     {
         public const int StrikeMs = 70, HoldMs = 40;
 
-        /// <summary>몬스터 종류별 동작 스타일. 슬라임/알은 뛰어오르고, 덩치 큰 것(7~10)은 내려찍고, 나머지는 달려들어 문다.</summary>
+        /// <summary>몬스터 종류별 동작 스타일(MonsterTraits 에 등록된 값, 보스는 항상 내려찍기). 등록이 없으면 달려들어 문다.</summary>
         public static AttackStyle StyleOf(Entity e)
         {
             if (!e.IsMonster) return AttackStyle.Lunge;
             if (e.IsBoss) return AttackStyle.Slam;
-            switch (e.TemplateId)
-            {
-                case 1: case 3: return AttackStyle.Hop;
-                case 7: case 8: case 9: case 10: return AttackStyle.Slam;
-                default: return AttackStyle.Lunge;
-            }
+            return MonsterTraits.StyleOf(e.TemplateId);
         }
 
         /// <summary>타격 한 번의 전체 길이(ms).</summary>
@@ -87,8 +82,41 @@ namespace GameViewer.Core.Logic
             return k;
         }
 
-        /// <summary>지금 엔티티가 어떤 동작 중인지 보고 몸동작을 계산한다.</summary>
-        public static BodyPose Compute(Entity e, long now)
+        /// <summary>
+        /// 몸을 휘어 구워 둔 공격 자세 그림(Assets attackFrames)을 쓰는 몬스터가 지금 그려야 할 자세 번호(0..count-1). 해당 없으면 -1.
+        /// 0 = 예비동작(시전 중, 스킬 타격 직전), 1..count-1 = 내지르는 정도 순서. 점액처럼 뛰는 몬스터는 뛰어오름/착지(퍼짐) 순서로 고른다.
+        /// </summary>
+        public static int BakedFrame(Entity e, long now, int count)
+        {
+            if (!e.IsMonster || e.Dead || count < 2) return -1;
+            float c = CastProgress(e, now);
+            if (c >= 0f) return c >= 0.25f ? 0 : -1;
+            float t = now - e.AttackAnimMs;
+            int total = DurationMs(e);
+            if (t < 0f || t >= total || e.AttackKind == 2) return -1;
+            int last = count - 1;
+            if (StyleOf(e) == AttackStyle.Hop)
+            {
+                float u = t / total;
+                if (u < 0.18f) return Math.Min(last, 1);
+                if (u < 0.5f) return Math.Min(last, last - 1);
+                if (u < 0.62f) return Math.Min(last, 2);
+                if (u < 0.85f) return last;
+                return Math.Min(last, 1);
+            }
+            float f = Strike(t, e.AttackKind == 1 ? -0.3f : 0f, total);
+            if (f < 0.12f) return e.AttackKind == 1 ? 0 : -1;
+            int k = 1 + (int)((f - 0.12f) / 0.88f * last);
+            return k > last ? last : k;
+        }
+
+        public static BodyPose Compute(Entity e, long now) { return Compute(e, now, false); }
+
+        /// <summary>
+        /// 지금 엔티티가 어떤 동작 중인지 보고 몸동작을 계산한다.
+        /// bakedBody: 몸을 휘어 구운 공격 그림을 쓰는 중이면 기울임/눌림은 그림이 맡으므로 빼고, 밀림은 절반만 남긴다.
+        /// </summary>
+        public static BodyPose Compute(Entity e, long now, bool bakedBody)
         {
             BodyPose p = BodyPose.Identity;
             if (e.Dead) return p;
@@ -161,24 +189,54 @@ namespace GameViewer.Core.Logic
                     }
                     else
                     {
-                        Push(ref p, fx, fy, (e.IsMonster ? 0.55f : 0.5f) * skill * f, 13f * f * lean);
-                        p.ScaleX *= 1f + 0.08f * f; p.ScaleY *= 1f - 0.05f * f;
+                        // 달려들어 문다: 몬스터는 몸을 띄워 덮치듯 뛰어들고(작은 포물선), 물고 난 뒤 착지에서 눌렸다 펴진다
+                        Push(ref p, fx, fy, (e.IsMonster ? 0.6f : 0.5f) * skill * f, (e.IsMonster ? 8f : 13f) * f * lean);
+                        p.ScaleX *= 1f + 0.10f * f; p.ScaleY *= 1f - 0.07f * f;
+                        if (e.IsMonster)
+                        {
+                            float air = StrikeMs + HoldMs + 100f;
+                            if (t < air) p.Lift += 0.3f * skill * (float)Math.Sin(Math.PI * t / air);
+                            float ls = t - air;
+                            if (ls >= 0f && ls < 130f) { float sq = (float)Math.Sin(Math.PI * ls / 130f); p.ScaleY *= 1f - 0.10f * sq; p.ScaleX *= 1f + 0.07f * sq; }
+                        }
                     }
                 }
             }
 
+            if (bakedBody && e.IsMonster && !(Math.Abs(p.Lean) < 1e-4f && p.ScaleX == 1f && p.ScaleY == 1f))
+            {
+                p.Lean = 0f; p.ScaleX = 1f; p.ScaleY = 1f;
+                p.OffX *= 0.5f; p.OffY *= 0.5f;
+            }
+
             // 피격 반동
             float th = now - e.HitFlashMs;
-            if (th >= 0f && th < 240f && (e.HitDirX != 0f || e.HitDirY != 0f))
+            float hitMs = HitReactMs(e);
+            if (th >= 0f && th < hitMs && (e.HitDirX != 0f || e.HitDirY != 0f))
             {
-                float k = 1f - th / 240f; k *= k;
-                float resist = e.IsBoss ? 0.3f : (e.IsMonster ? 1f : 0.8f);
+                float k = 1f - th / hitMs; k *= k;
+                float resist = (e.IsBoss ? 0.3f : (e.IsMonster ? 1f : 0.8f)) * (0.6f + 1.1f * e.HitPower);       // 센 타격일수록 더 멀리, 더 크게 흔들린다
                 float push = 0.30f * k * resist;
                 p.OffX += e.HitDirX * push; p.OffY += e.HitDirY * push;
                 p.Lean += e.HitDirX * 14f * k * resist;
                 p.ScaleY *= 1f - 0.09f * k * resist; p.ScaleX *= 1f + 0.05f * k * resist;
             }
             return p;
+        }
+
+        /// <summary>피격 반동이 이어지는 시간(밀리초). 세게 맞을수록 길다.</summary>
+        public static float HitReactMs(Entity e) { return 240f + 130f * e.HitPower; }
+
+        /// <summary>하얗게 번쩍이는 시간(밀리초).</summary>
+        public static float FlashMs(Entity e) { return 90f + 60f * e.HitPower; }
+
+        /// <summary>죽는 순간 맞은 방향으로 미끄러지는 거리(월드 단위)의 진행도 0~1 에 대한 위치. age 는 사망 후 경과(ms), 반환은 거리.</summary>
+        public static float DeathSlide(Entity e, float age)
+        {
+            const float dur = 380f;
+            if (age < 0f || e.IsBoss) return 0f;
+            float t = Math.Min(1f, age / dur);
+            return (0.20f + 0.55f * e.HitPower) * (1f - (1f - t) * (1f - t));
         }
 
         /// <summary>바라보는 방향으로 amount 만큼 밀고, 가로 성분만큼 기울인다.</summary>

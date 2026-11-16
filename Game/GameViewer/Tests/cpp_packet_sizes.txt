@@ -35,3 +35,12 @@ ZcSkillCancelNotifyPacket 17
 ZcProjectileNotifyPacket 48
 ZcSkillImpactNotifyPacket 32
 ZcStatusNotifyPacket 29
+ZcPingReqPacket 16
+ZcPongNotifyPacket 24
+ZcStatNotifyPacket 20
+ZcPickupReqPacket 12
+ZcPickupRejectNotifyPacket 13
+ZcItemGainNotifyPacket 16
+ZcChatReqPacket 141
+ZcChatNotifyPacket 149
+ZcChatRejectNotifyPacket 6

@@ -12,6 +12,7 @@ using GameViewer.Core;
 using GameViewer.Core.Audio;
 using GameViewer.Core.Data;
 using GameViewer.Core.Logic;
+using GameViewer.Core.Net;
 using GameViewer.Core.World;
 
 namespace GameViewer.App
@@ -29,27 +30,54 @@ namespace GameViewer.App
         private bool _rightDown;
         private int _fpsFrames; private long _fpsLast;
         private readonly ViewerConfig _cfg;
-        private readonly GameData _data;
+        private GameData _data;                        // 로딩이 끝나면 채운다
+        private readonly StartupLoader _loader;
+        private enum Phase { Loading, Select, Playing, Failed }
+        private Phase _phase = Phase.Loading;
+        private StartScreen _start;
+        private float _loadShown;                       // 화면에 보이는 진행률(실제 진행률을 부드럽게 따라간다)
+        private int _selIndex, _hoverCard = -1;         // 영웅 선택 화면: 고른 카드 / 마우스가 올라간 카드(-2 = 시작 버튼)
         private readonly bool _demoMode;
         private readonly SoundFx _sfx = new SoundFx();
         private readonly HashSet<ViewEffect> _sfxSeen = new HashSet<ViewEffect>();
         private bool _sfxPrimed;
         private readonly HeartbeatClock _heart = new HeartbeatClock();
+        private readonly string _settingsPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json");
+        private long _introSeen = -1;                   // 마지막으로 연출을 시작한 입장 시각(같은 입장에 연출을 두 번 하지 않게)
+        private int _reconnectsSeen;
+        private readonly TextBox _chat = new TextBox();
+        private readonly Stopwatch _drawSw = new Stopwatch();
+        private bool _mapDrag, _mapMoved; private int _mapDownX, _mapDownY;
+        private readonly BgmPlayer _bgm = new BgmPlayer();
+        private readonly BgmDirector _bgmDir = new BgmDirector();
+        private ServerPanel _servers;                   // 시작 화면의 서버 선택(서버 모드에서만)
+        private ServerProbe _probe;
 
-        public GameCanvas(ViewerConfig cfg, GameData data, bool demoMode)
+        public GameCanvas(ViewerConfig cfg, StartupLoader loader, bool demoMode)
         {
-            _cfg = cfg; _data = data; _demoMode = demoMode;
+            _cfg = cfg; _loader = loader; _demoMode = demoMode;
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.Opaque | ControlStyles.Selectable, true);
             DoubleBuffered = true;
             TabStop = true;
             _view.Scale = cfg.PixelsPerUnit; _targetScale = _view.Scale;
-            StartSession();
+            _start = new StartScreen(_renderer.Res);
+            _view.Settings = ViewSettings.Load(_settingsPath);
+            ApplySettings(false);
+            _chat.Visible = false; _chat.MaxLength = 120; _chat.BorderStyle = BorderStyle.FixedSingle;
+            _chat.BackColor = Color.FromArgb(24, 30, 28); _chat.ForeColor = Color.White;
+            _chat.Font = new Font(_renderer.Res.FontFamily, 9.5f);
+            _chat.KeyDown += ChatKeyDown;
+            _chat.LostFocus += delegate { if (_view.ChatActive) CloseChat(); };
+            Controls.Add(_chat);
         }
 
         public long Now { get { return _clock.ElapsedMilliseconds + 1000; } }
         public ViewerSession Session { get { return _session; } }
 
-        public void StartSession()
+        public void StartSession() { StartSession(float.NaN, float.NaN); }
+
+        /// <summary>arrivalX/Y 가 숫자이면 데모 영웅을 그 지점에서 시작한다(존 관문을 넘어온 경우).</summary>
+        public void StartSession(float arrivalX, float arrivalY)
         {
             if (_session != null) { _session.Leave(); _session.Dispose(); }
             _session = new ViewerSession(_cfg, _data);
@@ -57,9 +85,12 @@ namespace GameViewer.App
             _demo = null;
             _view.SelectedId = 0;
             _sfxSeen.Clear(); _sfxPrimed = false;
+            _session.AutoReconnect = !_demoMode;            // 서버에 붙는 실행만 끊겼을 때 자동으로 다시 접속한다
+            _introSeen = -1; _reconnectsSeen = 0; _view.IntroStartMs = -1; _view.MapOpen = false; _view.ChatActive = false; _chat.Visible = false;
             if (_demoMode)
             {
                 _demo = new DemoDirector(_session);
+                if (!float.IsNaN(arrivalX)) _demo.SetArrival(arrivalX, arrivalY);
                 _demo.Start(Now);
             }
             else _session.Start(Now);
@@ -67,15 +98,235 @@ namespace GameViewer.App
             _follow = true;
         }
 
-        /// <summary>한 프레임 진행: 패킷 처리 -> AI -> 카메라.</summary>
+        // ------------------------------------------------------------------ 시작 화면 (로딩바 -> 영웅 선택 -> 시작)
+
+        private void TickStart()
+        {
+            if (_phase == Phase.Loading)
+            {
+                float target = _loader.Done ? 1f : Math.Min(0.99f, _loader.Progress);
+                _loadShown += (target - _loadShown) * 0.2f;
+                if (target - _loadShown < 0.003f) _loadShown = target;
+                if (_loader.Done && _loadShown >= 1f) FinishLoading();
+            }
+            else if (_phase == Phase.Select)
+            {
+                if (!_prewarmed) PrewarmScene();
+                if (_probe != null) _probe.Tick(_clock.ElapsedMilliseconds);
+                ApplyBgm();
+                _bgm.Update();
+            }
+            Invalidate();
+        }
+
+        private bool _prewarmed;
+
+        /// <summary>영웅 선택 화면에 처음 들어왔을 때 한 번: 버려 둘 데모 장면을 화면 밖에 몇 프레임 그려
+        /// JIT 와 첫 스프라이트 읽기, 글자/펜/붓 캐시를 미리 데운다(실제 첫 프레임이 수백 ms 걸리던 것을 선택 화면 뒤로 옮긴다).</summary>
+        private void PrewarmScene()
+        {
+            _prewarmed = true;
+            try
+            {
+                ViewerConfig wc = new ViewerConfig(); wc.DataDir = _cfg.DataDir; wc.HeroId = _cfg.HeroId; wc.ZoneId = _cfg.ZoneId;
+                using (ViewerSession s = new ViewerSession(wc, _data))
+                {
+                    DemoDirector demo = new DemoDirector(s);
+                    long now = 100000; demo.Start(now);
+                    for (int i = 0; i < 30; ++i) { now += 16; s.Update(now); demo.Update(now); }
+                    AutoPilot pilot = new AutoPilot(s);
+                    ViewState v = new ViewState(); v.Width = Math.Max(320, Math.Min(1280, _view.Width)); v.Height = Math.Max(200, Math.Min(720, _view.Height)); v.Scale = _view.Scale;
+                    Entity me = s.World.Self;
+                    if (me != null) { v.CamX = me.X; v.CamY = me.Y; }
+                    using (Bitmap bmp = new Bitmap(v.Width, v.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb))
+                    using (Graphics g = Graphics.FromImage(bmp))
+                        for (int k = 0; k < 3; ++k) _renderer.Draw(g, s, pilot, v, s.World.RenderTime(now + k * 16));
+                }
+            }
+            catch (Exception ex) { Console.Error.WriteLine("prewarm: " + ex.Message); }
+        }
+
+        /// <summary>읽기가 끝났을 때: 오류 처리 후 영웅 선택 화면으로(선택을 건너뛰는 옵션이면 바로 시작).</summary>
+        private void FinishLoading()
+        {
+            _phase = Phase.Failed;                  // 아래 대화상자가 떠 있는 동안 타이머가 다시 들어오지 못하게
+            if (_loader.Error != null || _loader.Data == null)
+            {
+                MessageBox.Show("시작 중 오류가 났습니다.\r\n\r\n" + (_loader.Error != null ? _loader.Error.Message : "GameData 를 읽지 못했습니다"), "GameViewer", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                CloseForm(); return;
+            }
+            _data = _loader.Data;
+            foreach (string w in _loader.AssetWarnings) Console.Error.WriteLine("assets: " + w);
+            if (_data.Warnings.Count > 0 && _data.Heroes.Count == 0)
+            {
+                DialogResult r = MessageBox.Show("GameData 를 읽지 못했습니다 (이름/사거리/스킬 정보 없이 실행됩니다).\r\n\r\n폴더: " + _loader.DataDir + "\r\n" + string.Join("\r\n", _data.Warnings.ToArray()) + "\r\n\r\n계속할까요?",
+                    "GameViewer", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (r != DialogResult.Yes) { CloseForm(); return; }
+            }
+            List<uint> ids = _data.HeroIds();
+            _selIndex = Math.Max(0, ids.IndexOf(_cfg.HeroId));
+            SetupServers();
+            if (_cfg.SkipHeroSelect || ids.Count == 0) BeginGame();
+            else { _phase = Phase.Select; ApplyBgm(); }
+        }
+
+        private void CloseForm() { Form f = FindForm(); if (f != null) f.BeginInvoke(new MethodInvoker(f.Close)); }
+
+        /// <summary>시작 화면을 마치고 게임(접속 또는 데모)을 시작한다.</summary>
+        private void BeginGame()
+        {
+            _phase = Phase.Playing;
+            _hoverCard = -1; _start.HoverServer = -1; _start.HoverSkillCard = -1;
+            if (_probe != null) _probe.Stop();
+            StartSession();
+        }
+
+        /// <summary>시작 화면에서 고른 영웅으로 시작한다.</summary>
+        private void StartWithSelected()
+        {
+            List<uint> ids = _data.HeroIds();
+            if (ids.Count > 0) _cfg.HeroId = ids[Math.Max(0, Math.Min(ids.Count - 1, _selIndex))];
+            BeginGame();
+        }
+
+        private void DrawStart(Graphics g)
+        {
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+            if (_phase == Phase.Select)
+            {
+                string target = _demoMode ? "데모 모드 - 서버 없이 로컬 시뮬레이션" : "서버 " + _cfg.Host + ":" + _cfg.Port + "   존 " + _cfg.ZoneId;
+                _start.Keys = _view.Settings.Keys;
+                _start.DrawSelect(g, _view.Width, _view.Height, _data, _selIndex, _hoverCard, target, Now, _cfg.ZoneId);
+            }
+            else _start.DrawLoading(g, _view.Width, _view.Height, _loadShown, _phase == Phase.Loading ? _loader.Label : "", Now);
+        }
+
+        private void StartMouseDown(MouseEventArgs e)
+        {
+            if (_phase != Phase.Select || e.Button != MouseButtons.Left) return;
+            int n = _data.HeroIds().Count;
+            if (StartScreen.StartRect(_view.Width, _view.Height).Contains(e.X, e.Y)) { StartWithSelected(); return; }
+            int zi = StartScreen.ZoneAt(_view.Width, _view.Height, e.X, e.Y);
+            if (zi >= 0) { SelectZone(ZoneTheme.Zones[zi]); return; }
+            if (_servers != null)
+            {
+                int si = StartScreen.ServerAt(_view.Width, _view.Height, _servers.List.Count, e.X, e.Y);
+                if (si >= 0) { SelectServer(si); return; }
+            }
+            int c = StartScreen.CardAt(_view.Width, _view.Height, n, e.X, e.Y);
+            if (c < 0) return;
+            _selIndex = c;
+            if (e.Clicks >= 2) StartWithSelected();
+        }
+
+        private void StartMouseMove(MouseEventArgs e)
+        {
+            if (_phase != Phase.Select) return;
+            int n = _data.HeroIds().Count;
+            int zi = StartScreen.ZoneAt(_view.Width, _view.Height, e.X, e.Y);
+            _hoverCard = StartScreen.StartRect(_view.Width, _view.Height).Contains(e.X, e.Y) ? -2 : (zi >= 0 ? -3 - zi : StartScreen.CardAt(_view.Width, _view.Height, n, e.X, e.Y));
+            _start.HoverServer = _servers != null ? StartScreen.ServerAt(_view.Width, _view.Height, _servers.List.Count, e.X, e.Y) : -1;
+            int hc, hk;
+            if (StartScreen.SkillIconAt(_view.Width, _view.Height, _data, e.X, e.Y, out hc, out hk)) { _start.HoverSkillCard = hc; _start.HoverSkill = hk; }
+            else { _start.HoverSkillCard = -1; _start.HoverSkill = -1; }
+        }
+
+        // ------------------------------------------------------------------ 서버 선택 (시작 화면)
+
+        /// <summary>서버 모드에서만 서버 목록을 만들고 각 서버의 접속 상태를 재기 시작한다. 처음 고르는 서버: 명령행으로 준 주소 > 마지막으로 고른 서버 > 설정의 Host:Port.</summary>
+        private void SetupServers()
+        {
+            if (_demoMode) { _servers = null; _start.Servers = null; return; }
+            ServerPanel sp = new ServerPanel();
+            sp.List = _cfg.ServerEntries();
+            int sel = -1;
+            if (!_cfg.HostPortExplicit && _view.Settings.LastServer.Length > 0)
+                for (int i = 0; i < sp.List.Count; ++i) if (sp.List[i].Name == _view.Settings.LastServer) sel = i;
+            if (sel < 0) for (int i = 0; i < sp.List.Count; ++i) if (sp.List[i].Host == _cfg.Host && sp.List[i].Port == _cfg.Port) sel = i;
+            sp.Selected = Math.Max(0, sel);
+            _cfg.Host = sp.List[sp.Selected].Host; _cfg.Port = sp.List[sp.Selected].Port;
+            _probe = new ServerProbe(sp.List);
+            sp.Probe = _probe;
+            _servers = sp; _start.Servers = sp;
+        }
+
+        private void SelectServer(int i)
+        {
+            if (_servers == null || i < 0 || i >= _servers.List.Count) return;
+            _servers.Selected = i;
+            _cfg.Host = _servers.List[i].Host; _cfg.Port = _servers.List[i].Port;
+            _view.Settings.LastServer = _servers.List[i].Name;
+            ApplySettings(true);
+            if (_sfx.Enabled) _sfx.Play(SfxKind.UiTick, 0.6f);
+        }
+
+        private void StartKey(KeyEventArgs e)
+        {
+            if (_phase != Phase.Select) return;
+            Keys k = e.KeyCode;
+            int n = _data.HeroIds().Count;
+            if (n > 0)
+            {
+                if (k == Keys.Left || k == Keys.Up) _selIndex = (_selIndex + n - 1) % n;
+                else if (k == Keys.Right || k == Keys.Down) _selIndex = (_selIndex + 1) % n;
+                else if (k >= Keys.D1 && k <= Keys.D9 && k - Keys.D1 < n) _selIndex = k - Keys.D1;
+                else if (k >= Keys.NumPad1 && k <= Keys.NumPad9 && k - Keys.NumPad1 < n) _selIndex = k - Keys.NumPad1;
+            }
+            if (k == Keys.S && _servers != null && _servers.List.Count > 1) { SelectServer((_servers.Selected + 1) % Math.Min(StartScreen.ServerRows(ClientSize.Width, ClientSize.Height), _servers.List.Count)); return; }
+            if (k == Keys.Tab || k == Keys.Z)
+            {
+                int cur = Array.IndexOf(ZoneTheme.Zones, _cfg.ZoneId);
+                SelectZone(ZoneTheme.Zones[(cur + 1 + ZoneTheme.Zones.Length) % ZoneTheme.Zones.Length]);
+            }
+            if (k == Keys.Enter || k == Keys.Return || k == Keys.Space) StartWithSelected();
+        }
+
+        /// <summary>시작 화면에서 맵(존)을 바꾼다. 존마다 스폰/장애물이 달라 GameData 를 그 존 기준으로 다시 읽는다.</summary>
+        private void SelectZone(uint zoneId)
+        {
+            if (zoneId == _cfg.ZoneId) return;
+            GameData d = GameData.Load(_loader.DataDir, zoneId);
+            if (d.Heroes.Count == 0 && _data.Heroes.Count > 0) return;      // 읽기 실패: 그대로 둔다
+            _cfg.ZoneId = zoneId;
+            _data = d;
+            ZoneTheme.Current = ZoneTheme.For(zoneId);
+        }
+
+        private int _tickErrors;
+
+        /// <summary>한 프레임 진행: 패킷 처리 -> AI -> 카메라. 어느 단계에서 예외가 나도 타이머가 죽지 않게 감싸고,
+        /// 첫 오류와 이후 10초(600틱)마다 한 번씩만 로그에 남긴다(그리기 오류 처리와 같은 방식).</summary>
         public void Tick()
         {
+            try { TickCore(); }
+            catch (Exception ex)
+            {
+                ++_tickErrors;
+                if (_tickErrors == 1 || _tickErrors % 600 == 0)
+                {
+                    Console.Error.WriteLine(ex);
+                    if (_session != null && _session.World != null) _session.World.AddLog(Now, 2, "틱 오류(" + _tickErrors + "회): " + ex.GetType().Name + " " + ex.Message);
+                }
+                Invalidate();
+            }
+        }
+
+        private void TickCore()
+        {
+            if (_phase != Phase.Playing) { TickStart(); return; }
             long now = Now;
             _session.Update(now);
             if (_demo != null) _demo.Update(now);
             _pilot.Update(now);
             UpdateSeekBoss(now);
             PlayEffectSounds(now);
+            UpdateGateTravel(now);
+            UpdateIntro();
+            _session.World.HitStopScale = _view.Settings.FeedbackScale;
+            if (_bgmDir.Update(now, _session.State == SessionState.InZone, ZoneTheme.For(_session.ZoneId), BgmDirector.BossAlive(_session.World))) ApplyBgm();
+            _bgm.Update();
+            _view.BgmLabel = _view.Settings.BgmGain > 0f && _bgmDir.Playing ? _bgm.Now : null;
 
             if (_follow || _session.World.Self == null)
             {
@@ -134,9 +385,22 @@ namespace GameViewer.App
                 if (_frame != null) _frame.Dispose();
                 _frame = new Bitmap(_view.Width, _view.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
             }
+            if (_phase != Phase.Playing)
+            {
+                try { using (Graphics g = Graphics.FromImage(_frame)) DrawStart(g); }
+                catch (Exception ex) { if (!_paintFailed) { _paintFailed = true; Console.Error.WriteLine(ex); } }
+                e.Graphics.DrawImageUnscaled(_frame, 0, 0);
+                return;
+            }
             try
             {
-                using (Graphics g = Graphics.FromImage(_frame)) _renderer.Draw(g, _session, _pilot, _view, Now);
+                _drawSw.Restart();
+                using (Graphics g = Graphics.FromImage(_frame))
+                {
+                    _renderer.Draw(g, _session, _pilot, _view, _session.World.RenderTime(Now));
+                    DrawGateFade(g);
+                }
+                _view.FrameMs = _view.FrameMs * 0.9 + _drawSw.Elapsed.TotalMilliseconds * 0.1;
             }
             catch (Exception ex)
             {
@@ -155,14 +419,24 @@ namespace GameViewer.App
         protected override void OnMouseDown(MouseEventArgs e)
         {
             Focus();
+            if (_phase != Phase.Playing) { StartMouseDown(e); return; }
             UpdateMouse(e.X, e.Y);
             long now = Now;
+            if (_view.KeysOpen) { if (e.Button == MouseButtons.Left) ClickKeys(e.X, e.Y); return; }
+            if (_view.SettingsOpen) { if (e.Button == MouseButtons.Left && !ClickSettings(e.X, e.Y)) { } return; }
+            if (_view.MapOpen)
+            {
+                if (e.Button == MouseButtons.Left) { _mapDrag = true; _mapMoved = false; _mapDownX = e.X; _mapDownY = e.Y; }
+                return;
+            }
+            if (e.Button == MouseButtons.Left && _view.LogMode == 1 && ClickLogTab(e.X, e.Y)) return;
             if (_view.HeroSelectOpen)
             {
                 if (e.Button == MouseButtons.Left && !ClickHeroSelect(e.X, e.Y)) _view.HeroSelectOpen = false;
                 return;
             }
             if (e.Button == MouseButtons.Left && ClickMiniMap(e.X, e.Y, now)) return;
+            if (e.Button == MouseButtons.Left) { int ss = SkillSlotAt(e.X, e.Y); if (ss > 0) { _view.DragSlot = ss; return; } }
             if (e.Button == MouseButtons.Left || e.Button == MouseButtons.Right)
             {
                 Entity hit = PickEntity(e.X, e.Y, now);
@@ -196,7 +470,9 @@ namespace GameViewer.App
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
+            if (_phase != Phase.Playing) { StartMouseMove(e); return; }
             UpdateMouse(e.X, e.Y);
+            if (_view.MapOpen) { DragMap(e.X, e.Y); return; }
             Entity hover = PickEntity(e.X, e.Y, Now);
             _view.HoverId = hover != null ? hover.Id : 0;
             // 우클릭을 누르고 있을 때만 커서 쪽으로 이동한다(마우스를 그냥 움직일 때 이동 요청이 나가면 서버가 시전을 취소한다).
@@ -208,16 +484,50 @@ namespace GameViewer.App
             base.OnMouseMove(e);
         }
 
+        /// <summary>스킬바에서 (sx,sy) 아래에 있는 스킬 칸 번호(1..), 없거나 기본 공격 칸이면 0.</summary>
+        private int SkillSlotAt(int sx, int sy)
+        {
+            int count = _session.MySkills.Count, n = Math.Min(9, count);
+            for (int i = 1; i <= n; ++i) if (HudRenderer.SkillSlotRect(_view, count, i).Contains(sx, sy)) return i;
+            return 0;
+        }
+
         protected override void OnMouseUp(MouseEventArgs e)
         {
+            if (_view.DragSlot > 0 && e.Button == MouseButtons.Left)
+            {
+                int to = SkillSlotAt(e.X, e.Y);
+                if (to > 0 && to != _view.DragSlot && _session.SwapSkillSlots(_view.DragSlot - 1, to - 1) && _sfx.Enabled) _sfx.Play(SfxKind.UiTick, 0.8f);
+                _view.DragSlot = -1;
+                return;
+            }
             if (e.Button == MouseButtons.Right) _rightDown = false;
+            if (_mapDrag && e.Button == MouseButtons.Left)
+            {
+                _mapDrag = false;
+                if (!_mapMoved) ClickMap(e.X, e.Y);
+            }
             base.OnMouseUp(e);
         }
 
-        protected override void OnMouseLeave(EventArgs e) { _view.HasMouse = false; _rightDown = false; base.OnMouseLeave(e); }
+        protected override void OnMouseLeave(EventArgs e) { _view.HasMouse = false; _view.DragSlot = -1; _rightDown = false; base.OnMouseLeave(e); }
 
         protected override void OnMouseWheel(MouseEventArgs e)
         {
+            if (_phase != Phase.Playing) return;
+            if (_view.SettingsOpen || _view.KeysOpen) return;
+            if (_view.MapOpen)
+            {
+                MapProjection m = WindowsHud.MapProj(_data, _view);
+                if (m.Contains(e.X, e.Y)) { m.ZoomAt(e.X, e.Y, e.Delta > 0 ? 1.25f : 0.8f); _view.MapZoom = m.Zoom; _view.MapCx = m.CenterX; _view.MapCy = m.CenterY; }
+                return;
+            }
+            if (_view.LogMode == 1 && WindowsHud.LogPanel(_view, _session.MySkills.Count).Contains(e.X, e.Y))
+            {
+                int total = LogFilter.Count(_session.World.Log, _view.LogTabSel);
+                _view.LogScroll = Math.Max(0, Math.Min(Math.Max(0, total - WindowsHud.LogPanelLines), _view.LogScroll + (e.Delta > 0 ? 2 : -2)));
+                return;
+            }
             ZoomBy(e.Delta > 0 ? 1.12 : 1 / 1.12);
             base.OnMouseWheel(e);
         }
@@ -230,6 +540,7 @@ namespace GameViewer.App
         private void UpdateMouse(int x, int y)
         {
             _view.HasMouse = true;
+            _view.MouseX = x; _view.MouseY = y;
             _view.MouseWorldX = _view.ToWorldX(x);
             _view.MouseWorldY = _view.ToWorldY(y);
         }
@@ -259,42 +570,355 @@ namespace GameViewer.App
         protected override bool IsInputKey(Keys keyData)
         {
             Keys k = keyData & Keys.KeyCode;
+            if (k == Keys.Left || k == Keys.Right || k == Keys.Up || k == Keys.Down) return true;       // 방향키는 화면 이동/창 조작에 쓰므로 포커스 이동에 빼앗기지 않게
             return k == Keys.Tab || k == Keys.Space || k == Keys.Escape || k == Keys.Enter || (k >= Keys.D1 && k <= Keys.D9) || base.IsInputKey(keyData);
         }
 
         protected override void OnKeyDown(KeyEventArgs e)
         {
+            if (_phase != Phase.Playing) { StartKey(e); e.Handled = true; return; }
             long now = Now;
             Keys k = e.KeyCode;
+            KeyBindings kb = _view.Settings.Keys;
+            if (_view.KeysOpen) { KeysKey(k); e.Handled = true; return; }
+            if (_view.SettingsOpen) { SettingsKey(k); e.Handled = true; return; }
+            if (_view.MapOpen) { MapKey(k); e.Handled = true; return; }
             if (_view.HeroSelectOpen) { HeroSelectKey(k); e.Handled = true; return; }
-            if (k == Keys.H) { OpenHeroSelect(); e.Handled = true; return; }
-            if (k >= Keys.D1 && k <= Keys.D9) { UseSkillSlot(k - Keys.D1, now); e.Handled = true; }
-            else if (k >= Keys.NumPad1 && k <= Keys.NumPad9) { UseSkillSlot(k - Keys.NumPad1, now); e.Handled = true; }
-            else switch (k)
-                {
-                    case Keys.Q: BasicAttack(now); break;
-                    case Keys.B: SelectBoss(now); break;
-                    case Keys.F12: SaveScreenshot(); break;
-                    case Keys.A: _pilot.SetAuto(_pilot.Mode != PilotMode.Auto); break;
-                    case Keys.F: _follow = !_follow; break;
-                    case Keys.Space: _follow = true; break;
-                    case Keys.Tab: CycleTarget(now, e.Shift); e.Handled = true; break;
-                    case Keys.Escape: _pilot.SetAuto(false); _view.SelectedId = 0; _session.StopMoving(now); break;
-                    case Keys.F1: _view.ShowHelp = !_view.ShowHelp; break;
-                    case Keys.L: _view.ShowLog = !_view.ShowLog; break;
-                    case Keys.M:
-                        _sfx.Enabled = !_sfx.Enabled;
-                        _session.World.AddLog(now, 0, _sfx.Failed ? "효과음을 재생할 수 없습니다(오디오 장치 확인)" : (_sfx.Enabled ? "효과음 켜짐" : "효과음 꺼짐"));
-                        break;
-                    case Keys.F5: StartSession(); break;
-                    case Keys.Oemplus: case Keys.Add: ZoomBy(1.15); break;
-                    case Keys.OemMinus: case Keys.Subtract: ZoomBy(1 / 1.15); break;
-                    case Keys.Left: PanCamera(-4, 0); break;
-                    case Keys.Right: PanCamera(4, 0); break;
-                    case Keys.Up: PanCamera(0, -4); break;
-                    case Keys.Down: PanCamera(0, 4); break;
-                }
+            if (k == Keys.M && e.Control)
+            {
+                _view.Settings.SfxOn = !_view.Settings.SfxOn; ApplySettings(true);
+                _session.World.AddLog(now, 0, _sfx.Failed ? "효과음을 재생할 수 없습니다(오디오 장치 확인)" : (_view.Settings.SfxOn ? "효과음 켜짐" : "효과음 꺼짐"));
+                e.Handled = true; return;
+            }
+            if (k >= Keys.NumPad1 && k <= Keys.NumPad9) { UseSkillSlot(k - Keys.NumPad1, now); e.Handled = true; return; }
+            BindAction act;
+            if (!e.Control && !e.Alt && kb.TryActionFor((int)k, out act)) { DoAction(act, e, now); e.Handled = true; return; }
+            switch (k)
+            {
+                case Keys.G: if (_demoMode) WalkToNearestGate(now); break;
+                case Keys.Escape: _pilot.SetAuto(false); _view.SelectedId = 0; _session.StopMoving(now); break;
+                case Keys.Oemplus: case Keys.Add: ZoomBy(1.15); break;
+                case Keys.OemMinus: case Keys.Subtract: ZoomBy(1 / 1.15); break;
+                case Keys.Left: PanCamera(-4, 0); break;
+                case Keys.Right: PanCamera(4, 0); break;
+                case Keys.Up: PanCamera(0, -4); break;
+                case Keys.Down: PanCamera(0, 4); break;
+            }
             base.OnKeyDown(e);
+        }
+
+        /// <summary>키 설정에 묶인 동작을 실행한다.</summary>
+        private void DoAction(BindAction a, KeyEventArgs e, long now)
+        {
+            if ((int)a >= KeyBindings.FirstSkill) { UseSkillSlot((int)a - KeyBindings.FirstSkill, now); return; }
+            switch (a)
+            {
+                case BindAction.BasicAttack: BasicAttack(now); break;
+                case BindAction.SelectBoss: SelectBoss(now); break;
+                case BindAction.AutoBattle: _pilot.SetAuto(_pilot.Mode != PilotMode.Auto); break;
+                case BindAction.FollowToggle: _follow = !_follow; break;
+                case BindAction.CenterCamera: _follow = true; break;
+                case BindAction.CycleTarget: CycleTarget(now, e.Shift); break;
+                case BindAction.ToggleHelp: _view.ShowHelp = !_view.ShowHelp; break;
+                case BindAction.ToggleLog: _view.LogMode = (_view.LogMode + 1) % 3; _view.LogScroll = 0; break;
+                case BindAction.Chat: OpenChat(); break;
+                case BindAction.Settings: OpenSettings(); break;
+                case BindAction.WorldMap: _view.MapOpen = true; _mapDrag = false; break;
+                case BindAction.HeroSelect: OpenHeroSelect(); break;
+                case BindAction.Screenshot: SaveScreenshot(); break;
+                case BindAction.Reconnect:
+                    if (!_demoMode && (_session.State == SessionState.Failed || _session.State == SessionState.Disconnected)) _session.ReconnectNow(now);
+                    else StartSession();
+                    break;
+            }
+        }
+
+        // ------------------------------------------------------------------ 설정 / 월드맵 / 로그 창 / 채팅 / 입장 연출
+
+        /// <summary>설정값을 소리/표시에 반영하고, save 면 파일에도 저장한다.</summary>
+        private void ApplySettings(bool save)
+        {
+            ViewSettings st = _view.Settings;
+            _sfx.SetGain(st.Gain);
+            _sfx.Enabled = st.Gain > 0f;
+            _bgm.SetGain(st.BgmGain);
+            if (st.BgmGain <= 0f) _bgm.Stop();
+            else ApplyBgm();
+            _view.BgmLabel = st.BgmGain > 0f ? _bgm.Now : null;
+            _start.Keys = st.Keys;
+            if (_session != null) _session.World.HitStopScale = st.FeedbackScale;
+            if (save) st.Save(_settingsPath);
+        }
+
+        /// <summary>지금 상황(시작 화면/존 안)에 맞는 곡을 틀거나 끈다.</summary>
+        private void ApplyBgm()
+        {
+            if (_view.Settings.BgmGain <= 0f) return;
+            if (_phase == Phase.Select) { _bgm.Play(ZoneTheme.For(_cfg.ZoneId), false); return; }
+            if (_phase == Phase.Playing && _bgmDir.Playing) _bgm.Play(_bgmDir.Kind, _bgmDir.Battle);
+            else if (_phase != Phase.Loading) _bgm.Stop();
+            _view.BgmLabel = _bgm.Now;
+        }
+
+        private void OpenSettings() { _view.SettingsOpen = true; _view.SettingsIndex = 0; }
+
+        private void SettingsKey(Keys k)
+        {
+            int n = WindowsHud.SettingNames.Length;
+            if (k == Keys.Escape || (int)k == _view.Settings.Keys.Get(BindAction.Settings)) { _view.SettingsOpen = false; return; }
+            if (k == Keys.Up) _view.SettingsIndex = (_view.SettingsIndex + n - 1) % n;
+            else if (k == Keys.Down) _view.SettingsIndex = (_view.SettingsIndex + 1) % n;
+            else if (k == Keys.Left) ChangeSetting(_view.SettingsIndex, -1);
+            else if (k == Keys.Right || k == Keys.Enter || k == Keys.Space) ChangeSetting(_view.SettingsIndex, 1);
+        }
+
+        private void ChangeSetting(int i, int dir)
+        {
+            ViewSettings st = _view.Settings;
+            switch (i)
+            {
+                case WindowsHud.RowQuality: if (dir > 0) st.CycleQuality(); else { st.CycleQuality(); st.CycleQuality(); } break;
+                case WindowsHud.RowSfx: st.SfxOn = !st.SfxOn; break;
+                case WindowsHud.RowSfxVol: st.StepVolume(dir * 10); break;
+                case WindowsHud.RowBgm: st.BgmOn = !st.BgmOn; break;
+                case WindowsHud.RowBgmVol: st.StepBgm(dir * 10); break;
+                case WindowsHud.RowFps: st.ShowFps = !st.ShowFps; break;
+                case WindowsHud.RowDmg: st.ShowDamageNumbers = !st.ShowDamageNumbers; break;
+                case WindowsHud.RowFx: st.ShowScreenFx = !st.ShowScreenFx; break;
+                case WindowsHud.RowShake: st.ReduceShake = !st.ReduceShake; break;
+                case WindowsHud.RowWeather: st.WeatherOn = !st.WeatherOn; break;
+                case WindowsHud.RowFeedback: st.StepFeedback(dir * 25); break;
+                case WindowsHud.RowKeys: _view.KeysOpen = true; _view.KeysIndex = 0; _view.KeysCapture = false; _view.KeysMsg = ""; return;
+            }
+            ApplySettings(true);
+            if (_sfx.Enabled) _sfx.Play(SfxKind.UiTick, 1f);
+        }
+
+        private bool ClickSettings(int sx, int sy)
+        {
+            for (int i = 0; i < WindowsHud.SettingNames.Length; ++i)
+            {
+                RectangleF r = WindowsHud.SettingsRow(_view, i);
+                if (!r.Contains(sx, sy)) continue;
+                _view.SettingsIndex = i;
+                int smax, sstep;
+                if (WindowsHud.IsSlider(i, out smax, out sstep))
+                {
+                    RectangleF t = WindowsHud.SliderTrack(_view, i);
+                    if (sx >= t.X - 6 && sx <= t.Right + 6)
+                    {
+                        int val = (int)Math.Round(Math.Max(0f, Math.Min(1f, (sx - t.X) / t.Width)) * smax / sstep) * sstep;
+                        ViewSettings st = _view.Settings;
+                        if (i == WindowsHud.RowSfxVol) { st.VolumePercent = val; st.SfxOn = val > 0; }
+                        else if (i == WindowsHud.RowBgmVol) { st.BgmVolumePercent = val; st.BgmOn = val > 0; }
+                        else st.FeedbackPercent = val;
+                        st.Normalize(); ApplySettings(true);
+                        if (_sfx.Enabled) _sfx.Play(SfxKind.UiTick, 1f);
+                        return true;
+                    }
+                }
+                ChangeSetting(i, 1);
+                return true;
+            }
+            if (!WindowsHud.SettingsWindow(_view).Contains(sx, sy)) _view.SettingsOpen = false;
+            return true;
+        }
+
+        // ------------------------------------------------------------------ 키 설정 창
+
+        private void KeysKey(Keys k)
+        {
+            KeyBindings kb = _view.Settings.Keys;
+            BindAction a = (BindAction)_view.KeysIndex;
+            if (_view.KeysCapture)
+            {
+                if (k == Keys.Escape) { _view.KeysCapture = false; _view.KeysMsg = ""; return; }
+                if (k == Keys.Back || k == Keys.Delete) { kb.Reset(a); _view.KeysCapture = false; _view.KeysMsg = KeyBindings.ActionName(a) + ": 기본 키(" + KeyBindings.KeyName(kb.Get(a)) + ")로 되돌렸습니다"; ApplySettings(true); return; }
+                BindAction other;
+                BindResult r = kb.Set(a, (int)k, out other);
+                if (r == BindResult.Reserved) { _view.KeysMsg = "이 키는 쓸 수 없습니다 (Esc / 방향키 / Shift·Ctrl·Alt / 숫자패드 1~9 는 예약)"; return; }
+                _view.KeysCapture = false;
+                _view.KeysMsg = r == BindResult.Swapped
+                    ? KeyBindings.KeyName((int)k) + " 키는 '" + KeyBindings.ActionName(other) + "' 가 쓰고 있어 서로 맞바꿨습니다 (" + KeyBindings.ActionName(other) + " = " + KeyBindings.KeyName(kb.Get(other)) + ")"
+                    : KeyBindings.ActionName(a) + " = " + KeyBindings.KeyName((int)k);
+                ApplySettings(true);
+                if (_sfx.Enabled) _sfx.Play(SfxKind.UiTick, 1f);
+                return;
+            }
+            int n = KeyBindings.ActionCount, left = 14;
+            if (k == Keys.Escape || k == Keys.F2) { _view.KeysOpen = false; _view.KeysMsg = ""; return; }
+            if (k == Keys.Up) _view.KeysIndex = (_view.KeysIndex + n - 1) % n;
+            else if (k == Keys.Down) _view.KeysIndex = (_view.KeysIndex + 1) % n;
+            else if (k == Keys.Left || k == Keys.Right) _view.KeysIndex = _view.KeysIndex < left ? Math.Min(n - 1, _view.KeysIndex + left) : _view.KeysIndex - left;
+            else if (k == Keys.Enter || k == Keys.Space) { _view.KeysCapture = true; _view.KeysMsg = ""; }
+            else if (k == Keys.Delete || k == Keys.Back) { kb.Reset(a); _view.KeysMsg = KeyBindings.ActionName(a) + ": 기본 키(" + KeyBindings.KeyName(kb.Get(a)) + ")로 되돌렸습니다"; ApplySettings(true); }
+            else if (k == Keys.R) { kb.ResetAll(); _view.KeysMsg = "모든 키를 기본값으로 되돌렸습니다"; ApplySettings(true); }
+        }
+
+        private void ClickKeys(int sx, int sy)
+        {
+            if (_view.KeysCapture) { _view.KeysCapture = false; return; }
+            for (int i = 0; i < KeyBindings.ActionCount; ++i)
+                if (WindowsHud.KeyRow(_view, i).Contains(sx, sy)) { _view.KeysIndex = i; _view.KeysCapture = true; _view.KeysMsg = ""; return; }
+            if (WindowsHud.KeysResetButton(_view).Contains(sx, sy)) { _view.Settings.Keys.ResetAll(); _view.KeysMsg = "모든 키를 기본값으로 되돌렸습니다"; ApplySettings(true); return; }
+            if (!WindowsHud.KeysWindow(_view).Contains(sx, sy)) { _view.KeysOpen = false; _view.KeysMsg = ""; }
+        }
+
+        private void MapKey(Keys k)
+        {
+            if (k == Keys.Escape || (int)k == _view.Settings.Keys.Get(BindAction.WorldMap)) { _view.MapOpen = false; _mapDrag = false; return; }
+            MapProjection m = WindowsHud.MapProj(_data, _view);
+            RectangleF a = WindowsHud.MapArea(_view);
+            if (k == Keys.Oemplus || k == Keys.Add) { m.ZoomAt(a.X + a.Width / 2, a.Y + a.Height / 2, 1.25f); }
+            else if (k == Keys.OemMinus || k == Keys.Subtract) { m.ZoomAt(a.X + a.Width / 2, a.Y + a.Height / 2, 0.8f); }
+            else if (k == Keys.Space) { m.Zoom = 1f; float sx, sy; if (_session.SelfPos(Now, out sx, out sy)) { m.CenterX = sx; m.CenterY = sy; } m.Clamp(); }
+            else
+            {
+                float step = 60f / m.Scale * 0.5f;
+                if (k == Keys.Left) m.CenterX -= step; else if (k == Keys.Right) m.CenterX += step;
+                else if (k == Keys.Up) m.CenterY -= step; else if (k == Keys.Down) m.CenterY += step; else return;
+                m.Clamp();
+            }
+            _view.MapZoom = m.Zoom; _view.MapCx = m.CenterX; _view.MapCy = m.CenterY;
+        }
+
+        private void DragMap(int x, int y)
+        {
+            if (!_mapDrag) return;
+            if (!_mapMoved && Math.Abs(x - _mapDownX) + Math.Abs(y - _mapDownY) < 5) return;
+            _mapMoved = true;
+            MapProjection m = WindowsHud.MapProj(_data, _view);
+            m.CenterX -= (x - _mapDownX) / m.Scale; m.CenterY -= (y - _mapDownY) / m.Scale;
+            m.Clamp();
+            _view.MapCx = m.CenterX; _view.MapCy = m.CenterY;
+            _mapDownX = x; _mapDownY = y;
+        }
+
+        /// <summary>월드맵을 클릭하면 그 지점으로 이동한다(자동 전투는 끈다).</summary>
+        private void ClickMap(int sx, int sy)
+        {
+            MapProjection m = WindowsHud.MapProj(_data, _view);
+            if (!m.Contains(sx, sy)) return;
+            float wx = m.ToWorldX(sx), wy = m.ToWorldY(sy);
+            if (wx < _data.WorldMinX || wx > _data.WorldMaxX || wy < _data.WorldMinY || wy > _data.WorldMaxY) return;
+            _pilot.SetAuto(false); _seekBoss = false;
+            _session.MoveTo(wx, wy, Now, true);
+            _session.World.AddLog(Now, 0, "지도에서 (" + wx.ToString("0") + ", " + wy.ToString("0") + ") 로 이동");
+            _view.MapOpen = false;
+        }
+
+        private bool ClickLogTab(int sx, int sy)
+        {
+            int skills = _session.MySkills.Count;
+            for (int i = 0; i < 4; ++i)
+                if (WindowsHud.LogTabRect(_view, skills, i).Contains(sx, sy)) { _view.LogTabSel = (LogTab)i; _view.LogScroll = 0; if (_sfx.Enabled) _sfx.Play(SfxKind.UiTick, 0.5f); return true; }
+            return false;
+        }
+
+        private void OpenChat()
+        {
+            if (_session.State != SessionState.InZone) return;
+            _view.LogMode = 1; _view.LogTabSel = LogTab.Chat; _view.LogScroll = 0;
+            RectangleF r = WindowsHud.ChatInputRect(_view, _session.MySkills.Count);
+            _chat.SetBounds((int)r.X, (int)r.Y, (int)r.Width, (int)r.Height);
+            _chat.Text = ""; _chat.Visible = true; _view.ChatActive = true;
+            _chat.Focus();
+        }
+
+        private void CloseChat()
+        {
+            _view.ChatActive = false; _chat.Visible = false;
+            if (!IsDisposed) Focus();
+        }
+
+        private void ChatKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Escape) { e.SuppressKeyPress = true; CloseChat(); }
+            else if (e.KeyCode == Keys.Enter)
+            {
+                e.SuppressKeyPress = true;
+                string t = _chat.Text.Trim();
+                if (t.Length > 0 && _session != null) _session.World.AddLog(Now, 0, "[나] " + t, LogCat.Chat, true);
+                CloseChat();
+            }
+        }
+
+        /// <summary>존에 새로 들어오면(처음 입장 또는 재접속) 입장 연출과 효과음을 시작한다.</summary>
+        // ------------------------------------------------------------------ 존 관문 통과 (데모 모드)
+
+        private readonly GateTravel _gate = new GateTravel();
+
+        /// <summary>영웅이 관문 안쪽 가장자리에 닿으면 화면을 어둡게 하고, 다 어두워지면 건너편 존(GameData ZoneLink)으로 바꿔 도착 지점에서 다시 시작한다.
+        /// 서버 모드는 존 이동을 서버가 정하므로 하지 않는다.</summary>
+        private void UpdateGateTravel(long now)
+        {
+            if (!_demoMode || _demo == null || _session == null) return;
+            Entity me = _session.World.Self;
+            float x = me != null ? me.X : 0f, y = me != null ? me.Y : 0f;
+            GateStep st = _gate.Update(now, _data.Gates, x, y, _data.WorldMinX, _data.WorldMinY, _data.WorldMaxX, _data.WorldMaxY, me != null && !me.Dead);
+            if (st == GateStep.Started)
+            {
+                _session.StopMoving(now);
+                if (_sfx.Enabled) _sfx.Play(SfxSynth.ZoneSfx(ZoneTheme.For(_gate.Pending.TargetZone)), 0.8f);
+            }
+            else if (st == GateStep.Switch) TravelThroughGate(now);
+        }
+
+        private void TravelThroughGate(long now)
+        {
+            ZoneGate g = _gate.Pending;
+            GameData d = GameData.Load(_loader.DataDir, g.TargetZone);
+            if (d.Heroes.Count == 0 && _data.Heroes.Count > 0) { _gate.Arrived(now); return; }       // 읽기 실패: 그대로 둔다
+            bool auto = _pilot != null && _pilot.Mode == PilotMode.Auto;
+            _cfg.ZoneId = g.TargetZone;
+            _data = d;
+            ZoneTheme.Current = ZoneTheme.For(g.TargetZone);
+            StartSession(g.TargetX, g.TargetY);
+            if (auto) _pilot.SetAuto(true);
+            _gate.Arrived(Now);
+            ApplyBgm();
+        }
+
+        private void DrawGateFade(Graphics g)
+        {
+            float t = _gate.Fade(Now);
+            if (t <= 0f) return;
+            using (SolidBrush b = new SolidBrush(Color.FromArgb((int)(255 * t), 0, 0, 0))) g.FillRectangle(b, 0, 0, _view.Width, _view.Height);
+        }
+
+        /// <summary>G: 가장 가까운 관문으로 걸어간다(데모 모드).</summary>
+        private void WalkToNearestGate(long now)
+        {
+            Entity me = _session.World.Self;
+            if (me == null || _data.Gates.Count == 0) { _session.World.AddLog(now, 1, "이 존에는 관문이 없습니다"); return; }
+            ZoneGate best = null; float bd = float.MaxValue, bx = 0, by = 0;
+            foreach (ZoneGate gt in _data.Gates)
+            {
+                float cx, cy; ZoneGates.CenterOf(gt, _data.WorldMinX, _data.WorldMinY, _data.WorldMaxX, _data.WorldMaxY, out cx, out cy);
+                float dd = (cx - me.X) * (cx - me.X) + (cy - me.Y) * (cy - me.Y);
+                if (dd < bd) { bd = dd; best = gt; bx = cx; by = cy; }
+            }
+            float k = GateTravel.Depth * 0.5f;
+            switch (best.Edge) { case 'W': bx += k; break; case 'E': bx -= k; break; case 'N': by += k; break; default: by -= k; break; }
+            _pilot.SetAuto(false); _seekBoss = false;
+            _session.MoveTo(bx, by, now, true);
+            _session.World.AddLog(now, 0, "관문으로 이동: " + ZoneTheme.NameOf(best.TargetZone));
+        }
+
+        private void UpdateIntro()
+        {
+            long since = _session.InZoneSinceMs;
+            if (since < 0 || since == _introSeen) return;
+            bool again = _introSeen >= 0;
+            _introSeen = since;
+            _view.IntroStartMs = since; _view.IntroBanner = !again;
+            _view.MapOpen = false;
+            if (again && _session.ReconnectCount > _reconnectsSeen)
+            {
+                _reconnectsSeen = _session.ReconnectCount;
+                if (_sfx.Enabled) _sfx.Play(SfxKind.Reconnect, 1f);
+            }
+            else if (_sfx.Enabled) _sfx.Play(SfxSynth.ZoneSfx(ZoneTheme.For(_session.ZoneId)), 1f);
         }
 
         // ------------------------------------------------------------------ 영웅 선택
@@ -312,7 +936,7 @@ namespace GameViewer.App
         {
             List<uint> ids = _data.HeroIds();
             int n = ids.Count;
-            if (k == Keys.Escape || k == Keys.H) { _view.HeroSelectOpen = false; return; }
+            if (k == Keys.Escape || (int)k == _view.Settings.Keys.Get(BindAction.HeroSelect)) { _view.HeroSelectOpen = false; return; }
             if (n == 0) return;
             if (k == Keys.Up) _view.HeroSelectIndex = (_view.HeroSelectIndex + n - 1) % n;
             else if (k == Keys.Down) _view.HeroSelectIndex = (_view.HeroSelectIndex + 1) % n;
@@ -476,13 +1100,32 @@ namespace GameViewer.App
             if (_pilot.Mode == PilotMode.Chase) _pilot.ChaseTarget(_view.SelectedId);
         }
 
+        private bool _formHooked;
+
+        /// <summary>창이 비활성(다른 창으로 전환)이 되면 배경음악을 멈추고, 돌아오면 이어서 튼다.</summary>
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            Form f = FindForm();
+            if (f != null && !_formHooked)
+            {
+                _formHooked = true;
+                f.Deactivate += delegate { _bgm.Pause(); };
+                f.Activated += delegate { _bgm.Resume(); };
+            }
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
+                if (_probe != null) _probe.Stop();
+                _bgm.Dispose();
                 if (_session != null) { _session.Leave(); _session.Dispose(); }
                 if (_frame != null) _frame.Dispose();
                 _sfx.Dispose();
+                _chat.Dispose();
+                _start.Dispose();
                 _renderer.Dispose();
             }
             base.Dispose(disposing);

@@ -20,6 +20,7 @@ namespace GameViewer.Core.World
         RespawnRing,    // 부활 링 (X,Y)
         Text,           // 상태 효과 등 짧은 문구 (Text)
         Banner,         // 화면 중앙 알림 (보스 페이즈 돌입 등. Text, EntityId, Value=페이즈, Variant 1 = 경고(붉은 경보))
+        BossDeath,      // 보스 사망 폭발과 빛기둥 (X,Y, EntityId)
         Streak,         // 연속 처치 알림 (Value=연속 횟수, Text=칭호)
     }
 
@@ -46,10 +47,14 @@ namespace GameViewer.Core.World
         }
     }
 
+    public enum LogCat { System = 0, Combat = 1, Chat = 2 }
+
     public sealed class LogLine
     {
         public long Ms;
         public int Level;       // 0 정보, 1 경고(거부/보정), 2 오류
         public string Text;
+        public LogCat Cat;      // 로그 창 탭 분류
+        public bool Feed = true;    // 화면 아래에 잠깐 떠오르는 줄로도 보여줄지(타격 한 번마다의 상세 줄은 창에만)
     }
 }

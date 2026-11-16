@@ -6,7 +6,7 @@
 
 using System.Collections.Generic;
 
-namespace Game.Data
+namespace Game.Generated
 {
 	/// <summary>Skill.json의 한 행.</summary>
 	public sealed class SkillRow
@@ -30,6 +30,10 @@ namespace Game.Data
 		public uint HealPercent { get; set; }
 		public int FlatHeal { get; set; }
 		public double Angle { get; set; }
+		public uint MpCost { get; set; }
+		public int ThreatBonusPercent { get; set; }
+		public uint TauntMs { get; set; }
+		public double KnockbackDistance { get; set; }
 
 		/// <summary>헤더의 [min..max]를 벗어난 값을 errors에 덧붙인다.</summary>
 		public void Validate(string where, List<string> errors)
@@ -39,6 +43,7 @@ namespace Game.Data
 			if( this.CooldownMs < 1u ) errors.Add(where + ".CooldownMs=" + this.CooldownMs + " (허용 범위 1..)");
 			if( this.MaxTargets < 1u ) errors.Add(where + ".MaxTargets=" + this.MaxTargets + " (허용 범위 1..)");
 			if( this.FlatHeal < 0 ) errors.Add(where + ".FlatHeal=" + this.FlatHeal + " (허용 범위 0..)");
+			if( this.ThreatBonusPercent < -100 || this.ThreatBonusPercent > 1000 ) errors.Add(where + ".ThreatBonusPercent=" + this.ThreatBonusPercent + " (허용 범위 -100..1000)");
 		}
 	}
 

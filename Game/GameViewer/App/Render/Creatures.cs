@@ -4,8 +4,10 @@
 // 좌표는 "단위(unit)" 이고 발 밑 중앙이 (0,0), 위쪽이 -y 다. 걷기 8프레임 / 대기 1 / 공격 5프레임.
 //***************************************************************************
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using GameViewer.Core.Logic;
 using GameViewer.Core.World;
 
 namespace GameViewer.App.Render
@@ -21,6 +23,9 @@ namespace GameViewer.App.Render
     {
         public const int AttackSprite = 255;
         public const int AttackBodyFrame0 = 230;    // 무기를 뺀 몸의 공격 자세 프레임 번호 시작(+자세 번호)        // 이미지 영웅의 공격 그림(무기를 흐리게 한 것) 프레임 번호
+        public const int IdleFrame0 = 100;          // 영웅 대기 숨쉬기 프레임 번호 시작(+프레임)
+        public const int HitFrame = 240, DeathFrame0 = 245;    // 영웅 피격 그림, 사망 그림(+단계) 프레임 번호
+        public const long IdleFrameMs = 260, HitPoseMs = 260;
         public const int FrameIdle = 8, FrameAttack0 = 9, AttackFrames = 5, WalkFrames = 8;
         private const float PadTop = 0.25f, PadBottom = 0.55f;
 
@@ -44,27 +49,33 @@ namespace GameViewer.App.Render
             AssetSet a = AssetSprites.Find(monster, tpl);
             if (a != null) return a.Look;
             if (!monster) return new Look(1.9f, 3.6f);
-            switch (tpl)
-            {
-                case 1: return new Look(1.1f, 2.1f);
-                case 2: return new Look(1.3f, 2.3f);
-                case 3: return new Look(1.9f, 1.8f);
-                case 4: return new Look(1.8f, 2.9f);
-                case 5: return new Look(1.4f, 2.8f);
-                case 6: return new Look(2.4f, 2.0f);
-                case 7: return new Look(1.8f, 3.2f);
-                case 8: return new Look(3.0f, 3.1f);
-                case 9: return new Look(3.3f, 5.4f);
-                case 10: return new Look(2.6f, 4.6f);
-                default: return new Look(1.1f, 1.7f);
-            }
+            return new Look(1.1f, 1.7f);                    // 이미지가 없는 몬스터 기본 크기
         }
         public static Look LookOf(Entity e) { return LookOf(e.IsMonster, e.TemplateId); }
 
-        /// <summary>대기 중에도 계속 움직이는 종류(슬라임, 박쥐)인지.</summary>
-        private static bool AnimatesIdle(bool monster, uint tpl) { return monster && (tpl == 1 || tpl == 4 || tpl == 10 || tpl > 10); }
+        /// <summary>대기 중에도 계속 움직이는 종류(sprites.json 의 idleAnim)인지.</summary>
+        private static bool AnimatesIdle(bool monster, uint tpl) { return monster && MonsterTraits.AnimatesIdle(tpl); }
 
         // ------------------------------------------------------------------ 찍기
+
+        /// <summary>0..1. 1 보다 작으면 그림을 그만큼 투명하게 그린다(시체가 서서히 사라질 때). 그리기 직전에 정하고 바로 되돌린다.</summary>
+        public float Alpha = 1f;
+        private readonly Dictionary<int, System.Drawing.Imaging.ImageAttributes> _alphaAttr = new Dictionary<int, System.Drawing.Imaging.ImageAttributes>();
+
+        private void Blit(Graphics g, Bitmap bmp, float x, float y, float w, float h)
+        {
+            if (Alpha >= 0.99f) { g.DrawImage(bmp, x, y, w, h); return; }
+            int q = Math.Max(1, (int)(Alpha * 16f));
+            System.Drawing.Imaging.ImageAttributes ia;
+            if (!_alphaAttr.TryGetValue(q, out ia))
+            {
+                ia = new System.Drawing.Imaging.ImageAttributes();
+                ia.SetColorMatrix(new System.Drawing.Imaging.ColorMatrix(new float[][] {
+                    new float[] { 1, 0, 0, 0, 0 }, new float[] { 0, 1, 0, 0, 0 }, new float[] { 0, 0, 1, 0, 0 }, new float[] { 0, 0, 0, q / 16f, 0 }, new float[] { 0, 0, 0, 0, 1 } }));
+                _alphaAttr[q] = ia;
+            }
+            g.DrawImage(bmp, new Rectangle((int)Math.Round(x), (int)Math.Round(y), (int)Math.Round(w), (int)Math.Round(h)), 0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel, ia);
+        }
 
         /// <summary>
         /// (sx, sy) 는 발 밑 화면 좌표. 번쩍임(hurt)과 시체(dead)는 파생 그림을 쓴다.
@@ -91,6 +102,8 @@ namespace GameViewer.App.Render
             int dir = 0;
             bool walkAnim = false;
             int weaponPose = 0;
+            bool baked = false;         // 무기까지 구운 한 장(피격/사망)이라 무기 레이어를 따로 얹지 않는다
+            int idleK = -1;
             if (asset != null)
             {
                 dir = asset.IndexFor(e.FaceX, e.FaceY); left = false; frame = 0;
@@ -102,10 +115,35 @@ namespace GameViewer.App.Render
                     int ak;
                     if (HeroWeapons.PoseOf(e, now, asset.Weapon.Poses, out ak)) { frame = AttackBodyFrame0 + ak; walkAnim = false; weaponPose = ak + 1; }
                 }
+                else if (monster && !e.Dead && asset.AttackBody != null)
+                {
+                    int bf = AttackPose.BakedFrame(e, now, asset.AttackBody[0].Length);
+                    if (bf >= 0) { frame = AttackBodyFrame0 + bf; walkAnim = false; }
+                }
                 else if (!monster && !e.Dead && asset.Attack != null && (e.Casting || (atkAge >= 0 && atkAge < HeroWeapons.TotalMs))) { frame = AttackSprite; walkAnim = false; }
+                if (!monster || asset.DeathCount > 0 || asset.Hit != null)       // 피격/사망 그림이 있으면 영웅과 몬스터 모두 쓴다
+                {
+                    if (e.Dead)
+                    {
+                        // 사망: 쓰러지는 중 -> 누워 있음. 마지막 그림이 시체로 남는다
+                        if (asset.DeathCount > 0)
+                        {
+                            long age = now - e.DeadAtMs;
+                            frame = DeathFrame0 + (e.DeadAtMs <= 0 || age >= 420 ? asset.DeathCount - 1 : Math.Min(asset.DeathCount - 1, (int)(age * (asset.DeathCount - 1) / 420)));
+                            baked = true; weaponPose = 0;
+                        }
+                    }
+                    else if (frame == 0)
+                    {
+                        long hitAge = now - e.HitFlashMs;
+                        if (asset.Hit != null && !walking && hitAge >= 0 && hitAge < HitPoseMs) { frame = HitFrame; baked = true; }
+                        else if (!walking && asset.IdleCount > 0) { idleK = (int)(((now / IdleFrameMs) + (long)(e.Id & 7) * 3) % asset.IdleCount); frame = IdleFrame0 + idleK; }
+                    }
+                }
             }
 
-            int w = (int)Math.Ceiling((look.HalfW + 0.25f) * 2 * ppuQ), h = (int)Math.Ceiling((look.H + PadTop + PadBottom) * ppuQ);
+            Look ext = asset != null ? asset.Extent : look;       // 비트맵은 모든 자세가 들어가는 크기
+            int w = (int)Math.Ceiling((ext.HalfW + 0.25f) * 2 * ppuQ), h = (int)Math.Ceiling((ext.H + PadTop + PadBottom) * ppuQ);
             float ax = w / 2f, ay = h - PadBottom * ppuQ;
             long key = ((monster ? 1L : 0L) << 40) | ((long)(tpl & 0xFF) << 32) | ((long)frame << 24) | ((left ? 1L : 0L) << 20) | (long)(ppuQ * 2);
             if (asset != null) key |= (1L << 48) | ((long)dir << 50);       // 이미지 그림은 방향 번호로 구분
@@ -113,43 +151,62 @@ namespace GameViewer.App.Render
             SpriteCache.Entry en = _cache.Get(key, w, h, ax, ay, _paintFn);
 
             float k = (float)(v.Scale / ppuQ);
-            if (e.Dead)
+            if (e.Dead && !baked)
             {
                 SpriteCache.Entry body = _cache.GetDerived(key | (2L << 44), en, 2);
-                g.DrawImage(body.Bmp, sx - ax * k * 1.08f, sy - ay * k * 0.34f, w * k * 1.08f, h * k * 0.34f);
+                Blit(g, body.Bmp, sx - ax * k * 1.08f, sy - ay * k * 0.34f, w * k * 1.08f, h * k * 0.34f);
                 return;
             }
             if (hurt) en = _cache.GetDerived(key | (1L << 44), en, 1);
             if (asset != null)
             {
                 // 프레임 애니메이션이 없으면 걸을 땐 튀고, 설 땐 숨 쉬듯 눌러서 움직임을 흉내 낸다. 발 밑은 고정.
-                float hop = walking && !walkAnim ? Math.Abs((float)Math.Sin(walked * 3.4f)) * 0.16f : 0f;
-                // 날아다니는 몬스터(박쥐, 날개 해골 기사)는 땅에서 떠서 위아래로 일렁인다. 그림자는 땅에 남는다.
-                if (monster && (tpl == 4 || tpl == 11)) hop += 0.45f + 0.14f * (float)Math.Sin(now / 230.0 + (e.Id & 15));
-                float sq = walking ? 1f : 1f + (float)Math.Sin(now / 380.0 + (e.Id & 15)) * 0.018f;
+                float hop = HoverOf(e, now, walking && !walkAnim, walked);
+                // 걸을 땐 발이 닿는 순간에 살짝 눌리고 떼는 순간에 늘어난다(땅을 딛는 느낌). 설 땐 숨 쉬듯 미세하게.
+                float sq = baked || idleK >= 0 ? 1f : walking ? (walkAnim ? 1f : 1f + (0.5f - Math.Abs((float)Math.Sin(walked * 3.4f))) * 0.05f) : 1f + (float)Math.Sin(now / 380.0 + (e.Id & 15)) * 0.018f;
                 float dh = h * k * sq, dy = sy - ay * k * sq - hop * (float)v.Scale;
-                if (asset.Weapon != null && !monster)
+                if (asset.Weapon != null && !monster && !baked)
                 {
                     GraphicsState gs = g.Save();
                     g.TranslateTransform(sx, sy - hop * (float)v.Scale);
                     g.ScaleTransform(1f, sq);
                     g.InterpolationMode = InterpolationMode.HighQualityBilinear;
-                    DrawWeapon(g, asset, dir, weaponPose, weaponPose == 0 && walkAnim ? frame - 1 : -1, (float)(v.Scale * asset.Scale), true);
+                    DrawWeapon(g, asset, dir, weaponPose, weaponPose == 0 && walkAnim ? frame - 1 : -1, idleK, (float)(v.Scale * asset.Scale), true);
                     g.Restore(gs);
-                    g.DrawImage(en.Bmp, sx - ax * k, dy, w * k, dh);
+                    Blit(g, en.Bmp, sx - ax * k, dy, w * k, dh);
                     gs = g.Save();
                     g.TranslateTransform(sx, sy - hop * (float)v.Scale);
                     g.ScaleTransform(1f, sq);
                     g.InterpolationMode = InterpolationMode.HighQualityBilinear;
-                    DrawWeapon(g, asset, dir, weaponPose, weaponPose == 0 && walkAnim ? frame - 1 : -1, (float)(v.Scale * asset.Scale), false);
+                    DrawWeapon(g, asset, dir, weaponPose, weaponPose == 0 && walkAnim ? frame - 1 : -1, idleK, (float)(v.Scale * asset.Scale), false);
                     g.Restore(gs);
                     return;
                 }
-                g.DrawImage(en.Bmp, sx - ax * k, dy, w * k, dh);
+                Blit(g, en.Bmp, sx - ax * k, dy, w * k, dh);
                 return;
             }
             float breathe = (!walking && !monster) ? (float)Math.Sin(now / 420.0 + (e.Id & 15)) * 0.025f * (float)v.Scale : 0f;
-            g.DrawImage(en.Bmp, sx - ax * k, sy - ay * k + breathe, w * k, h * k);
+            Blit(g, en.Bmp, sx - ax * k, sy - ay * k + breathe, w * k, h * k);
+        }
+
+        /// <summary>
+        /// 몸이 땅에서 뜬 높이(월드 단위). 걷기 프레임이 없는 몬스터의 걸음 통통거림(작게: 크게 뛰면 땅에서 떠 보인다)과 날아다니는 몬스터(박쥐, 날개 해골 기사)의 부유.
+        /// 그림자가 이 값에 맞춰 작아지고 옅어지도록 WorldRenderer 도 같은 값을 쓴다.
+        /// </summary>
+        public static float HoverOf(Entity e, long now, bool stepHop, float walked)
+        {
+            float hop = stepHop ? Math.Abs((float)Math.Sin(walked * 3.4f)) * 0.07f : 0f;
+            if (e.IsMonster && MonsterTraits.IsFlying(e.TemplateId)) hop += 0.45f + 0.14f * (float)Math.Sin(now / 230.0 + (e.Id & 15));
+            return hop;
+        }
+
+        /// <summary>이 엔티티가 지금 걷기 프레임 없이 통통거리며 걷는 중인지(그림자 계산용).</summary>
+        public static float HoverNow(Entity e, long now)
+        {
+            AssetSet a = AssetSprites.Find(e.IsMonster, e.TemplateId);
+            float walked; bool walking = e.WalkingAt(now, out walked);
+            bool stepHop = walking && !e.Dead && a != null && a.WalkCount == 0;
+            return HoverOf(e, now, stepHop, walked);
         }
 
         /// <summary>영웅 걷기 프레임 한 장이 넘어가는 걸음 길이(단위). 걷기 그림의 발 움직임이 땅 위를 미끄러지지 않도록 한 걸음 거리를 프레임 수로 나눈 값이다.</summary>
@@ -159,7 +216,7 @@ namespace GameViewer.App.Render
         /// 몸과 따로 그린 무기 한 겹(back = 몸에 가려지는 부분, 아니면 앞으로 나온 부분)을 발 밑 원점(0,0) 기준으로 찍는다. s = 원본 픽셀 하나의 화면 크기.
         /// 걷기 프레임(walkFrame >= 0)이면 그 프레임의 손 위치로 대기 자세 무기를 옮긴다.
         /// </summary>
-        private static void DrawWeapon(Graphics g, AssetSet a, int dir, int pose, int walkFrame, float s, bool back)
+        private static void DrawWeapon(Graphics g, AssetSet a, int dir, int pose, int walkFrame, int idleFrame, float s, bool back)
         {
             WeaponLayers w = a.Weapon;
             float ox = 0f, oy = 0f;
@@ -168,8 +225,14 @@ namespace GameViewer.App.Render
                 float[] wg = w.WalkGrip[dir][walkFrame % w.WalkGrip[dir].Length], g0 = w.Grip[0][dir];
                 ox = wg[0] - g0[0]; oy = wg[1] - g0[1];
             }
+            else if (pose == 0 && idleFrame >= 0 && w.IdleGrip != null)
+            {
+                float[] ig = w.IdleGrip[dir][idleFrame % w.IdleGrip[dir].Length], g0 = w.Grip[0][dir];
+                ox = ig[0] - g0[0]; oy = ig[1] - g0[1];
+            }
             Bitmap src = back ? w.Back[pose][dir] : w.Front[pose][dir];
-            g.DrawImage(src, new RectangleF((ox - w.Pad - a.Cx) * s, (oy - w.Pad - a.Foot) * s, src.Width * s, src.Height * s),
+            Point at = back ? w.BackAt[pose][dir] : w.FrontAt[pose][dir];
+            g.DrawImage(src, new RectangleF((ox - w.Pad - a.Cx + at.X) * s, (oy - w.Pad - a.Foot + at.Y) * s, src.Width * s, src.Height * s),
                 new RectangleF(0, 0, src.Width, src.Height), GraphicsUnit.Pixel);
         }
 
@@ -187,7 +250,10 @@ namespace GameViewer.App.Render
             {
                 AssetSet a = _pAsset;
                 g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                Bitmap src = (_pFrame >= AttackBodyFrame0 && _pFrame < AttackSprite && a.AttackBody != null) ? a.AttackBody[_pDir][_pFrame - AttackBodyFrame0] : (_pFrame == AttackSprite && a.Attack != null) ? a.Attack[_pDir] : (_pFrame > 0 && a.WalkCount > 0) ? a.Walk[_pDir][(_pFrame - 1) % a.WalkCount] : a.Frames[_pDir];
+                Bitmap src = (_pFrame >= IdleFrame0 && _pFrame < IdleFrame0 + 32 && a.IdleCount > 0) ? a.IdleAt(_pDir, (_pFrame - IdleFrame0) % a.IdleCount)
+                    : (_pFrame == HitFrame && a.Hit != null) ? a.HitAt(_pDir)
+                    : (_pFrame >= DeathFrame0 && _pFrame < DeathFrame0 + 8 && a.DeathCount > 0) ? a.DeathAt(_pDir, (_pFrame - DeathFrame0) % a.DeathCount)
+                    : (_pFrame >= AttackBodyFrame0 && _pFrame < AttackSprite && a.AttackBody != null) ? a.AttackBodyAt(_pDir, _pFrame - AttackBodyFrame0) : (_pFrame == AttackSprite && a.Attack != null) ? a.Attack[_pDir] : (_pFrame > 0 && a.WalkCount > 0) ? a.WalkAt(_pDir, (_pFrame - 1) % a.WalkCount) : a.Frames[_pDir];
                 g.DrawImage(src, new RectangleF(-a.Cx * a.Scale, -a.Foot * a.Scale, src.Width * a.Scale, src.Height * a.Scale),
                     new RectangleF(0, 0, src.Width, src.Height), GraphicsUnit.Pixel);
                 return;

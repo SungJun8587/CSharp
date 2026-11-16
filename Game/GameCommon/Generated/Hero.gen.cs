@@ -6,7 +6,7 @@
 
 using System.Collections.Generic;
 
-namespace Game.Data
+namespace Game.Generated
 {
 	/// <summary>Hero.json의 한 행.</summary>
 	public sealed class HeroRow
@@ -22,6 +22,9 @@ namespace Game.Data
 		public double AttackRange { get; set; }
 		public uint AttackIntervalMs { get; set; }
 		public double Speed { get; set; }
+		public int MaxMp { get; set; }
+		public int HpRegen { get; set; }
+		public int MpRegen { get; set; }
 
 		/// <summary>헤더의 [min..max]를 벗어난 값을 errors에 덧붙인다.</summary>
 		public void Validate(string where, List<string> errors)
@@ -31,6 +34,9 @@ namespace Game.Data
 			if( this.Attack < 0 ) errors.Add(where + ".Attack=" + this.Attack + " (허용 범위 0..)");
 			if( this.Defense < 0 ) errors.Add(where + ".Defense=" + this.Defense + " (허용 범위 0..)");
 			if( this.AttackIntervalMs < 1u ) errors.Add(where + ".AttackIntervalMs=" + this.AttackIntervalMs + " (허용 범위 1..)");
+			if( this.MaxMp < 0 ) errors.Add(where + ".MaxMp=" + this.MaxMp + " (허용 범위 0..)");
+			if( this.HpRegen < 0 ) errors.Add(where + ".HpRegen=" + this.HpRegen + " (허용 범위 0..)");
+			if( this.MpRegen < 0 ) errors.Add(where + ".MpRegen=" + this.MpRegen + " (허용 범위 0..)");
 		}
 	}
 

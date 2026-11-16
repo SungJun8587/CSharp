@@ -18,23 +18,20 @@ namespace GameViewer.App.Render
 
         private readonly Resources _res;
         private readonly EffectRenderer _fx;
+        private readonly MaterialFx _mat;
         private const float TwoPi = 6.2831853f;
 
-        public AttackEffects(Resources res, EffectRenderer fx) { _res = res; _fx = fx; }
+        public AttackEffects(Resources res, EffectRenderer fx) { _res = res; _fx = fx; _mat = new MaterialFx(res, fx); }
 
         // ------------------------------------------------------------------ 도구
 
         private static Color Cc(int rgb, int a) { return Color.FromArgb(a < 0 ? 0 : (a > 255 ? 255 : (a & 0xF0) | (a >> 4)), (rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255); }
-        private Pen Pn(int rgb, int a, float width) { return _res.Pen(Cc(rgb, a), (float)Math.Round(Math.Max(0.5f, width) * 2f) / 2f); }
-        private SolidBrush Br(int rgb, int a) { return _res.Brush(Cc(rgb, a)); }
-        private static float Ease(float p) { return 1f - (1f - p) * (1f - p); }
-        private static float Clamp01(float v) { return v < 0f ? 0f : (v > 1f ? 1f : v); }
-        private static int Mix(int a, int b, float t)
-        {
-            t = Clamp01(t);
-            int r = (int)(((a >> 16) & 255) * (1f - t) + ((b >> 16) & 255) * t), g = (int)(((a >> 8) & 255) * (1f - t) + ((b >> 8) & 255) * t), bl = (int)((a & 255) * (1f - t) + (b & 255) * t);
-            return (r << 16) | (g << 8) | bl;
-        }
+        private static int QA(int a) { return Math.Max(0, Math.Min(255, (a + 8) & ~15)); }      // 알파를 16 단계로 묶어 펜/붓 캐시가 불어나지 않게 한다
+        private Pen Pn(int rgb, int a, float width) { return _res.Pen(Cc(rgb, QA(a)), (float)Math.Round(Math.Max(0.5f, width) * 2f) / 2f); }
+        private SolidBrush Br(int rgb, int a) { return _res.Brush(Cc(rgb, QA(a))); }
+        private static float Ease(float p) { return GameViewer.Core.Logic.Mx.Ease(p); }
+        private static float Clamp01(float v) { return GameViewer.Core.Logic.Mx.Clamp01(v); }
+        private static int Mix(int a, int b, float t) { return GameViewer.Core.Logic.Mx.MixRgb(a, b, t); }
         private static float Rn(ViewEffect fx, int i) { return Noise.Hash01(i * 7 + (int)(fx.StartMs & 0x7FFF), (int)(fx.EntityId & 0xFF) + i * 3, 0x3Bu); }
         private void Glow(Graphics g, int rgb, float cx, float cy, float r, float k) { _fx.Glow(g, Color.FromArgb(255, (rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255), cx, cy, r, r, k); }
 
@@ -163,6 +160,7 @@ namespace GameViewer.App.Render
                 g.DrawLine(Pn(c2, (int)(170 * fade), 1.5f), ax + ux * s0 + nx * off, ay + uy * s0 + ny * off, ax + ux * s1 + nx * off, ay + uy * s1 + ny * off);
             }
             Glow(g, c1, tip.X, tip.Y, v.Px(1.0f), 0.95f * fade);
+            FxSprites.DrawA(g, FxSprites.Spear(), tip.X - ux * v.Px(0.5f * power), tip.Y - uy * v.Px(0.5f * power), v.Px(1.5f * power), (float)(Math.Atan2(uy, ux) * 180.0 / Math.PI), fade);
             Glow(g, 0xFFFFFF, tip.X, tip.Y, v.Px(0.5f), 1f * fade);
             // 맞는 순간: 대상에서 퍼지는 고리와 별빛
             float q = Clamp01((p - 0.22f) / 0.78f);
@@ -306,7 +304,25 @@ namespace GameViewer.App.Render
                 float a = float.IsNaN(dirA) ? Rn(fx, k + 40) * TwoPi : dirA + (Rn(fx, k + 40) - 0.5f) * 3.6f;
                 float spd = v.Px((1.4f + 3.0f * Rn(fx, k + 60)) * scale);
                 float px = sx + (float)Math.Cos(a) * spd * p, py = cy + (float)Math.Sin(a) * spd * p * 0.8f - v.Px(0.9f) * p + v.Px(2.6f) * p * p;
-                Glow(g, Mix(c1, c2, Rn(fx, k + 80)), px, py, v.Px(0.15f) * (1.25f - p), 0.95f * fade);
+                // 아주 작은 점이라 번짐 비트맵을 늘려 찍는 대신 타원 두 개로 그린다(크기 변환 DrawImage 가 느리다)
+                int sc = Mix(c1, c2, Rn(fx, k + 80));
+                float sr = v.Px(0.15f) * (1.25f - p);
+                g.FillEllipse(Br(sc, (int)(80 * fade)), px - sr * 1.6f, py - sr * 1.6f, sr * 3.2f, sr * 3.2f);
+                g.FillEllipse(Br(Mix(sc, 0xFFFFFF, 0.5f), (int)(240 * fade)), px - sr * 0.7f, py - sr * 0.7f, sr * 1.4f, sr * 1.4f);
+            }
+            if (tgt != null && tgt.IsMonster)
+                _mat.Debris(g, GameViewer.Core.Logic.HitMaterial.Of(tgt.TemplateId, true), MaterialFx.Seed(fx), sx, cy, dirA, heavy, p, v);
+            if (tgt != null && GameViewer.Core.Logic.DamageStyle.Tier(fx.Value, tgt.MaxHp) >= 3)
+            {
+                // 치명타: 몸을 가르는 X 자 번쩍임
+                float L = v.Px(2.7f) * (0.35f + 0.65f * Ease(Clamp01(p * 2.2f))), wd = v.Px(0.16f) * (1f - p);
+                for (int k = 0; k < 2; ++k)
+                {
+                    float ang = (k == 0 ? -0.62f : 0.62f) + (float.IsNaN(dirA) ? 0f : Math.Sign((float)Math.Cos(dirA)) * 0.12f);
+                    float cs = (float)Math.Cos(ang), sn = (float)Math.Sin(ang);
+                    PointF[] bl = { new PointF(sx - cs * L, cy - sn * L * 0.8f), new PointF(sx - sn * wd, cy + cs * wd), new PointF(sx + cs * L, cy + sn * L * 0.8f), new PointF(sx + sn * wd, cy - cs * wd) };
+                    g.FillPolygon(Br(0xFFF4D0, (int)(235 * fade)), bl);
+                }
             }
             if (heavy)
             {

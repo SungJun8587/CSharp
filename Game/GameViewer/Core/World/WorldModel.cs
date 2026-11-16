@@ -24,8 +24,13 @@ namespace GameViewer.Core.World
 
         // 통계(화면 표시용)
         public long PacketCount, UnknownPacketCount, MalformedPacketCount;
+        /// <summary>서버 왕복 지연 측정(세션이 핑을 보내고, 응답은 여기서 받는다).</summary>
+        public readonly GameViewer.Core.Logic.PingMeter Ping = new GameViewer.Core.Logic.PingMeter();
         public long DamageDealtBySelf, DamageTakenBySelf, KillsBySelf, SelfDeaths;
         public readonly KillStreak Streak = new KillStreak();
+        public readonly ComboCounter Combo = new ComboCounter();            // 내가 연속으로 때린 횟수
+        public long SelfHitMs = -100000; public float SelfHitRatio;        // 내가 마지막으로 맞은 시각과 최대 체력 대비 피해 비율(피격 화면 효과용)
+        public long HitStopStartMs = -100000; public int HitStopMs;          // 큰 타격 때 화면이 아주 잠깐 멈추는 구간
         private readonly HashSet<ulong> _bossWarned = new HashSet<ulong>();      // 이미 경고를 낸 보스(죽으면 빠져서 다시 나오면 또 경고)
         public long TotalDeaths, TotalRespawns, TotalDamageEvents;
         public float LastCorrectX, LastCorrectY;
@@ -68,11 +73,31 @@ namespace GameViewer.Core.World
             Entities.Clear(); Effects.Clear(); _projectiles.Clear(); _lastSkillMs.Clear(); Self = null;
         }
 
-        public void AddLog(long now, int level, string text)
+        public void AddLog(long now, int level, string text) { AddLog(now, level, text, LogCat.System, true); }
+
+        public void AddLog(long now, int level, string text, LogCat cat, bool feed)
         {
-            LogLine l = new LogLine(); l.Ms = now; l.Level = level; l.Text = text;
+            LogLine l = new LogLine(); l.Ms = now; l.Level = level; l.Text = text; l.Cat = cat; l.Feed = feed;
             Log.Add(l);
             if (Log.Count > MaxLogLines) Log.RemoveRange(0, Log.Count - MaxLogLines);
+        }
+
+        /// <summary>타격감 세기 설정(0..1.5). 히트 스톱 길이에 곱한다.</summary>
+        public float HitStopScale = 1f;
+
+        /// <summary>큰 타격의 순간 화면을 잠깐 얼린다. 더 긴 정지가 진행 중이면 덮어쓰지 않는다.</summary>
+        public void HitStop(long now, int ms)
+        {
+            ms = (int)Math.Round(ms * Math.Max(0f, HitStopScale));
+            if (ms <= 0) return;
+            if (now < HitStopStartMs + HitStopMs && HitStopStartMs + HitStopMs >= now + ms) return;
+            HitStopStartMs = now; HitStopMs = ms;
+        }
+
+        /// <summary>화면을 그릴 때 쓸 시각. 히트 스톱 중에는 정지가 시작된 시각에 머문다(패킷 처리는 실제 시각으로 계속된다).</summary>
+        public long RenderTime(long now)
+        {
+            return now >= HitStopStartMs && now < HitStopStartMs + HitStopMs ? HitStopStartMs : now;
         }
 
         /// <summary>화면 흔들림을 건다. 더 센 흔들림이 진행 중이면 덮어쓰지 않는다.</summary>
@@ -195,6 +220,7 @@ namespace GameViewer.Core.World
                     case ZonePacketType.ZcProjectileNotify: OnProjectile(ZcProjectileNotify.Parse(f.Data), now); break;
                     case ZonePacketType.ZcSkillImpactNotify: OnImpact(ZcSkillImpactNotify.Parse(f.Data), now); break;
                     case ZonePacketType.ZcStatusNotify: OnStatus(ZcStatusNotify.Parse(f.Data), now); break;
+                    case ZonePacketType.ZcPongNotify: Ping.OnPong(ZcPongNotify.Parse(f.Data).Seq, now); break;
                     default: ++UnknownPacketCount; break;
                 }
             }
@@ -215,7 +241,7 @@ namespace GameViewer.Core.World
             e.Boss = e.IsMonster ? Data.BossOf(e.TemplateId) : null;
             e.GhostHp = e.Hp;
             UpdateBossPhase(e, now, true);
-            if (e.Boss != null && !e.Dead && _bossWarned.Add(e.Id)) WarnBoss(e, now, "경고  " + e.Boss.Name + " 출현!", 2800);
+            if (e.Boss != null && !e.Dead && _bossWarned.Add(e.Id)) { e.AppearMs = now; WarnBoss(e, now, "경고  " + e.Boss.Name + " 출현!", 2800); }
             if (p.Dead && e.DeadAtMs == 0) e.DeadAtMs = now;
             if (p.Moving) e.Face(p.DestX, p.DestY, now);
             if (p.EntityId == SelfId) Self = e;
@@ -265,15 +291,24 @@ namespace GameViewer.Core.World
                 target.Hp = p.Hp < 0 ? 0 : p.Hp; target.MaxHp = p.MaxHp;
                 target.HitFlashMs = now;
                 SetHitDir(target, attacker, now);
+                target.HitPower = target.MaxHp > 0 ? Math.Max(0.2f, Math.Min(1f, 0.2f + 0.8f * dmg / (0.15f * target.MaxHp))) : 0.4f;       // 최대 체력의 15% 이상이면 최대
                 UpdateBossPhase(target, now, false);
-                if (p.TargetId == SelfId && target.MaxHp > 0 && dmg * 100 >= target.MaxHp * 12) Shake(now, 260, 4f);
-                else if (p.AttackerId == SelfId && target.MaxHp > 0 && dmg * 100 >= target.MaxHp * 12) Shake(now, 150, 2.5f);      // 내가 큰 타격을 줄 때 손맛
+                bool big = target.MaxHp > 0 && dmg * 100 >= target.MaxHp * 12;
+                if (p.TargetId == SelfId && big) { Shake(now, 260, 4f); HitStop(now, 70); }
+                else if (p.AttackerId == SelfId && big) { Shake(now, 150, 2.5f); HitStop(now, 45); }      // 내가 큰 타격을 줄 때 손맛
+                else if (p.AttackerId == SelfId && target.Boss != null && dmg > 0) HitStop(now, 22);
                 target.PosAt(now, out tx, out ty);
             }
             else if (attacker != null) attacker.PosAt(now, out tx, out ty);
 
-            if (p.TargetId == SelfId) DamageTakenBySelf += dmg;
+            if (p.TargetId == SelfId) { DamageTakenBySelf += dmg; if (dmg > 0 && target != null && target.MaxHp > 0) { SelfHitMs = now; SelfHitRatio = Math.Min(1f, dmg / (float)target.MaxHp); } }
             if (p.AttackerId == SelfId) DamageDealtBySelf += dmg;
+            if (dmg > 0 && p.AttackerId == SelfId && target != null && p.TargetId != SelfId) Combo.Hit(now, dmg);
+            if (dmg > 0 && target != null && (p.AttackerId == SelfId || p.TargetId == SelfId))
+            {
+                string who = p.AttackerId == 0 ? "지속 피해" : (p.AttackerId == SelfId ? "나" : NameOf(attacker));
+                AddLog(now, 0, who + " -> " + (p.TargetId == SelfId ? "나" : NameOf(target)) + "  " + dmg + " 피해  (남은 " + target.Hp + "/" + target.MaxHp + ")", LogCat.Combat, false);
+            }
 
             if (target != null)
             {
@@ -323,14 +358,14 @@ namespace GameViewer.Core.World
             ++TotalDeaths;
             e.Hp = 0; e.Dead = true; e.DeadAtMs = now;
             UpdateBossPhase(e, now, true);
-            if (e.Boss != null) { Shake(now, 700, 7f); AddLog(now, 0, e.Boss.Name + " 처치"); _bossWarned.Remove(e.Id); }
+            if (e.Boss != null) { Shake(now, 900, 9f); HitStop(now, 160); NewFx(EffectKind.BossDeath, now, GameViewer.Core.Logic.BossFx.DeathMs, x, y).EntityId = e.Id; AddLog(now, 0, e.Boss.Name + " 처치", LogCat.Combat, true); _bossWarned.Remove(e.Id); }
             e.Statuses.Clear();                 // 사망 시 해제 알림은 오지 않으므로 여기서 비운다
             EndCast(e);
-            NewFx(EffectKind.DeathPuff, now, 700, x, y);
-            if (p.EntityId == SelfId) { ++SelfDeaths; Streak.Reset(); AddLog(now, 1, "사망"); }
+            NewFx(EffectKind.DeathPuff, now, 700, x, y).EntityId = e.Id;
+            if (p.EntityId == SelfId) { ++SelfDeaths; Streak.Reset(); Combo.Reset(); AddLog(now, 1, "사망", LogCat.Combat, true); }
             else if (p.KillerId == SelfId)
             {
-                ++KillsBySelf; AddLog(now, 0, NameOf(e) + " 처치");
+                ++KillsBySelf; AddLog(now, 0, NameOf(e) + " 처치", LogCat.Combat, true);
                 int n = Streak.Register(now);
                 if (n >= 2) { ViewEffect st = NewFx(EffectKind.Streak, now, 1900, x, y); st.Value = n; st.Text = KillStreak.Title(n); }
             }
