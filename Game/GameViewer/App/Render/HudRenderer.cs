@@ -2,6 +2,7 @@
 // HudRenderer.cs : 화면 위에 덮는 정보(상태/체력/스킬바/미니맵/로그/도움말).
 //***************************************************************************
 using System;
+using GameViewer.App.Forest;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -70,21 +71,45 @@ namespace GameViewer.App.Render
 
         private const float HeroRowH = 74f, HeroPanelW = 520f;
 
+        /// <summary>3D 숲이 켜져 있으면 목록을 오른쪽으로 비켜 서서 왼쪽에 영웅이 서 있게 하고, 아니면 예전처럼 가운데에 둔다.</summary>
+        private static float HeroPanelX(ViewState v)
+        {
+            if (!ForestBackdrop.Enabled || !ForestBackdrop.IsReady) return (v.Width - HeroPanelW) / 2;
+            return Math.Max(8f, v.Width - HeroPanelW - 36f);
+        }
+
+        /// <summary>
+        /// 영웅 선택 중이면 이번 그리기의 3D 숲 위에 고른 영웅을 세우도록 부탁해 둔다(ForestBackdrop.Draw 보다 먼저 부른다).
+        /// 영웅 템플릿 1~4 가 전사/궁수/마법사/창기사이다. 그 밖의 번호는 영웅 없이 숲만 보인다.
+        /// </summary>
+        private static void RequestHeroBackdrop(ViewerSession s, ViewState v)
+        {
+            if (!v.HeroSelectOpen || !ForestBackdrop.IsReady) return;
+            List<uint> ids = s.Data.HeroIds();
+            if (ids.Count == 0) return;
+            uint id = ids[Math.Max(0, Math.Min(ids.Count - 1, v.HeroSelectIndex))];
+            if (id < 1 || id > 4) return;
+            float cx = HeroPanelX(v) * 0.5f;                                   // 목록 왼쪽 빈 공간의 가운데
+            ForestBackdrop.ShowHero((int)id - 1, cx / Math.Max(1, v.Width) * 2f - 1f);
+        }
+
         /// <summary>영웅 선택 창의 줄 i 의 화면 영역. 마우스 클릭 판정에도 쓴다.</summary>
         public static RectangleF HeroRowRect(ViewState v, int count, int i)
         {
             float h = 64 + count * HeroRowH + 34;
-            float x = (v.Width - HeroPanelW) / 2, y = Math.Max(10, (v.Height - h) / 2);
+            float x = HeroPanelX(v), y = Math.Max(10, (v.Height - h) / 2);
             return new RectangleF(x + 12, y + 52 + i * HeroRowH, HeroPanelW - 24, HeroRowH - 6);
         }
 
         private void DrawHeroSelect(Graphics g, ViewerSession s, ViewState v)
         {
             List<uint> ids = s.Data.HeroIds();
-            if (Backdrop.Draw(g, v.Width, v.Height)) g.FillRectangle(_res.Brush(70, 0, 0, 0), 0, 0, v.Width, v.Height);       // 배경 이미지가 있으면 살짝만 어둡게
-            else g.FillRectangle(_res.Brush(150, 0, 0, 0), 0, 0, v.Width, v.Height);
+            // 배경 우선순위: 3D 숲(영웅이 서 있다) > 사용자가 둔 Assets/backdrop 이미지 > 어둡게만
+            RequestHeroBackdrop(s, v);
+            bool lit = ForestBackdrop.Draw(g, v.Width, v.Height) == ForestResult.Drawn || Backdrop.Draw(g, v.Width, v.Height);
+            g.FillRectangle(_res.Brush(lit ? 40 : 150, 0, 0, 0), 0, 0, v.Width, v.Height);                                      // 배경이 있으면 살짝만 어둡게
             float h = 64 + ids.Count * HeroRowH + 34;
-            float x = (v.Width - HeroPanelW) / 2, y = Math.Max(10, (v.Height - h) / 2);
+            float x = HeroPanelX(v), y = Math.Max(10, (v.Height - h) / 2);
             g.FillRectangle(_res.Brush(235, 14, 20, 17), x, y, HeroPanelW, h);
             g.DrawRectangle(_res.Pen(200, 200, 220, 190, 1.5f), x, y, HeroPanelW, h);
             g.DrawString("영웅 선택", _res.Big, _res.Brush(Color.FromArgb(255, 235, 150)), x + 16, y + 12);

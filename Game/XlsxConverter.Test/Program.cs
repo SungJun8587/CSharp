@@ -55,6 +55,8 @@ namespace XlsxConverter.Tests
             UnitValueFormat();
             Pipeline();
             Errors();
+            IncrementalNamespace();
+            ErrorCap();
             Usage();
             FolderRules();
             WriterRules();
@@ -226,8 +228,8 @@ namespace XlsxConverter.Tests
             File.WriteAllText(Path.Combine(data, "~$A_Main.xlsx"), "lock");          // 임시 파일은 건너뛴다
             Directory.CreateDirectory(Path.Combine(data, "sub"));
 
-            string json = Path.Combine(root, "json"), cpp = Path.Combine(root, "cpp"), cs = Path.Combine(root, "cs"), pcs = Path.Combine(root, "pcs"), spo = Path.Combine(root, "spo"), sizes = Path.Combine(root, "meta", "sizes.txt");
-            string[] a = { data, "--out", json, "--cpp-out", cpp, "--cs-out", cs, "--cs-namespace", "Game.Rows", "--cs-client-proto-out", pcs, "--cs-client-proto-namespace", "Game.Proto", "--cs-server-proto-out", spo, "--cs-server-proto-namespace", "Game.ServerProto", "--proto-sizes-out", sizes };
+            string json = Path.Combine(root, "json"), cpp = Path.Combine(root, "cpp"), cs = Path.Combine(root, "cs"), pcs = Path.Combine(root, "pcs"), sizes = Path.Combine(root, "meta", "sizes.txt");
+            string[] a = { data, "--out", json, "--cpp-gen-out", cpp, "--cs-gen-out", cs, "--cs-gen-namespace", "Game.Rows", "--cs-client-proto-out", pcs, "--cs-client-proto-namespace", "Game.Proto", "--proto-sizes-out", sizes };
 
             var r = Run(a);
             Check(r.Code == 0, "pipeline exit 0", r.Err + r.Out);
@@ -245,7 +247,7 @@ namespace XlsxConverter.Tests
             foreach (string f in new[] { "ProtocolTypes.gen.cs", "Packets.gen.cs" })
                 Check(File.Exists(Path.Combine(pcs, f)) && HasBom(Path.Combine(pcs, f)), "proto cs file with BOM: " + f);
             foreach (string f in new[] { "ProtocolTypes.gen.cs", "Packets.gen.cs" })
-                Check(File.Exists(Path.Combine(spo, f)) && HasBom(Path.Combine(spo, f)), "server proto cs file with BOM: " + f);
+                Check(File.Exists(Path.Combine(cs, f)) && HasBom(Path.Combine(cs, f)), "server proto cs file with BOM (in --cs-gen-out): " + f);
             Eq("GwLoginReqPacket 10\nGwLoginAckPacket 13\nGwNotePacket 20\n", Read(sizes), "sizes file");
 
             string monsterH = Read(Path.Combine(cpp, "Monster.gen.h"));
@@ -266,11 +268,11 @@ namespace XlsxConverter.Tests
             Check(pk.Contains("namespace Game.Proto") && pk.Contains("public static byte[] GwLoginReq(uint accountId, ushort version)") && pk.Contains("p.Result = (EGwResult)r.U8();".Replace("EGwResult", "GwResult")) && pk.Contains("public GwResult Result;"), "Packets.gen.cs", pk);
 
             // 서버 패킷: Cs 열과 무관하게 모든 패킷이 IPacket 구조체로 나온다. enum 필드도 원래 정수 형식, char 배열은 고정 길이 UTF-8 문자열 필드.
-            string sv = Read(Path.Combine(spo, "Packets.gen.cs"));
-            Check(sv.Contains("namespace Game.ServerProto;") && sv.Contains("public struct GwLoginReq : IPacket") && sv.Contains("public const int Size = 10;") && sv.Contains("public const GatewayPacketType Type = GatewayPacketType.GwLoginReq;"), "server Packets.gen.cs struct", sv);
+            string sv = Read(Path.Combine(cs, "Packets.gen.cs"));
+            Check(sv.Contains("namespace Game.Rows;") && sv.Contains("public struct GwLoginReq : IPacket") && sv.Contains("public const int Size = 10;") && sv.Contains("public const GatewayPacketType Type = GatewayPacketType.GwLoginReq;"), "server Packets.gen.cs struct", sv);
             Check(sv.Contains("public byte Result;") && sv.Contains("s[4] = Result;") && sv.Contains("BinaryPrimitives.WriteUInt64LittleEndian(s.Slice(5), SessionId);") && sv.Contains("Result = p[4],"), "server Packets.gen.cs fields", sv);
             Check(sv.Contains("public string Name;") && sv.Contains("PacketIO.WriteString(s.Slice(4, ProtocolConst.MaxNameLen), Name);") && sv.Contains("Name = PacketIO.ReadString(p.Slice(4, ProtocolConst.MaxNameLen)),"), "server Packets.gen.cs char field", sv);
-            Check(Read(Path.Combine(spo, "ProtocolTypes.gen.cs")).Contains("namespace Game.ServerProto"), "server ProtocolTypes.gen.cs namespace");
+            Check(Read(Path.Combine(cs, "ProtocolTypes.gen.cs")).Contains("namespace Game.Rows"), "server ProtocolTypes.gen.cs namespace");
 
             string? keep = Environment.GetEnvironmentVariable("KEEP_GEN");
             if (!string.IsNullOrEmpty(keep))
@@ -313,9 +315,73 @@ namespace XlsxConverter.Tests
             // --sheets: 정리와 상태 기록을 하지 않는다
             r = Run(data, "--out", json, "--sheets", "Item");
             Check(r.Code == 0 && r.Out.Contains("Item.json: 2 rows"), "--sheets", r.Out + r.Err);
+
+            // 경로를 --sheets 뒤에 써도 경로로 읽는다. (.xlsx 로 끝나거나 실제로 있는 폴더/파일일 때만)
+            string json2 = Path.Combine(root, "json_sheets_first");
+            r = Run("--out", json2, "--sheets", "Item", data);
+            Check(r.Code == 0 && r.Out.Contains("Item.json: 2 rows") && !r.Out.Contains("Monster.json"), "--sheets before the input path (folder)", r.Out + r.Err);
+            r = Run("--sheets", "Item", "nope.xlsx", "--out", json2);
+            Check(r.Code == 2 && r.Err.Contains("--sheets에 시트 이름이 없습니다") == false && r.Err.Contains("nope.xlsx"), "--sheets before a missing .xlsx path reports the path", r.Err + r.Out);
+            r = Run("--out", json2, "--sheets", data);
+            Check(r.Code == 2 && r.Err.Contains("--sheets에 시트 이름이 없습니다"), "--sheets with only a path says the sheet list is empty", r.Err);
+            r = Run("--out", json2, "--sheets", "Item", "Monster");
+            Check(r.Code == 2 && r.Err.Contains("usage:"), "--sheets with names only and no path is still a usage error", r.Err);
         }
 
         // ------------------------------------------------------------------ 오류
+
+        // --cs-gen-namespace만 바꿔도(서버 패킷 포함) 다시 생성해야 한다.
+        private static void IncrementalNamespace()
+        {
+            string root = Tmp("incns");
+            string x = Path.Combine(root, "p.xlsx");
+            WriteProto(x);
+            string pcs = Path.Combine(root, "pcs"), cs = Path.Combine(root, "cs"), json = Path.Combine(root, "json");
+            string[] Args(string ns) => new[] { x, "--out", json, "--cs-client-proto-out", pcs, "--cs-gen-out", cs, "--cs-gen-namespace", ns, "--incremental" };
+
+            var r = Run(Args("NsA"));
+            Check(r.Code == 0 && !r.Out.StartsWith("up to date"), "incns first run", r.Out + r.Err);
+            string all = string.Concat(Directory.GetFiles(pcs, "*.cs").Concat(Directory.GetFiles(cs, "*.cs")).Select(Read));
+            Check(all.Contains("namespace NsA") && !all.Contains("NsB"), "incns generated with NsA", all.Length > 200 ? all.Substring(0, 200) : all);
+
+            r = Run(Args("NsA"));
+            Check(r.Code == 0 && r.Out.StartsWith("up to date: "), "incns same args stays up to date", r.Out + r.Err);
+
+            r = Run(Args("NsB"));
+            Check(r.Code == 0 && !r.Out.StartsWith("up to date"), "incns namespace change regenerates", r.Out + r.Err);
+            all = string.Concat(Directory.GetFiles(pcs, "*.cs").Concat(Directory.GetFiles(cs, "*.cs")).Select(Read));
+            Check(all.Contains("namespace NsB") && !all.Contains("namespace NsA"), "incns files now use NsB");
+
+            // 명시한 패킷 네임스페이스는 --cs-gen-namespace가 바뀌어도 그대로이므로 다시 만들 필요가 없다.
+            string[] Fixed(string ns) => new[] { x, "--out", json, "--cs-client-proto-out", pcs, "--cs-client-proto-namespace", "Fixed.Proto", "--cs-gen-namespace", ns, "--incremental" };
+            Run(Fixed("NsA"));
+            r = Run(Fixed("NsB"));
+            Check(r.Code == 0 && r.Out.StartsWith("up to date: "), "incns explicit proto namespace ignores --cs-gen-namespace", r.Out + r.Err);
+            r = Run(new[] { x, "--out", json, "--cs-client-proto-out", pcs, "--cs-client-proto-namespace", "Other.Proto", "--cs-gen-namespace", "NsB", "--incremental" });
+            Check(r.Code == 0 && !r.Out.StartsWith("up to date"), "incns proto namespace change regenerates", r.Out + r.Err);
+        }
+
+        // 열 하나가 통째로 틀려도 오류는 앞 200건만 보이고 나머지 건수가 붙는다. 종료 코드는 1.
+        private static void ErrorCap()
+        {
+            string root = Tmp("errcap");
+            string x = Path.Combine(root, "many.xlsx");
+            var rows = new List<object?[]> { R("Id:uint", "Name:string", "Hp:int") };
+            for (int i = 0; i < 3000; ++i) rows.Add(R((double)(i + 1), "N" + i, "bad"));
+            XlsxWriter.Write(x, ("Many", rows.ToArray()));
+            var r = Run(x, "--out", Path.Combine(root, "json"));
+            Check(r.Code == 1, "errcap exit code", r.Err.Substring(0, Math.Min(200, r.Err.Length)));
+            Check(r.Err.StartsWith("변환 실패 (3000건):\n"), "errcap header keeps the total", r.Err.Substring(0, Math.Min(80, r.Err.Length)));
+            Check(r.Err.Split('\n').Count(l => l.StartsWith("  Many!")) == ConverterApp.MaxErrorsShown, "errcap shows 200 errors");
+            Check(r.Err.Contains("  ... 그 밖에 2800건 더 있습니다\n"), "errcap says how many more", r.Err.Substring(Math.Max(0, r.Err.Length - 120)));
+            Check(!Directory.Exists(Path.Combine(root, "json")) || Directory.GetFiles(Path.Combine(root, "json")).Length == 0, "errcap writes nothing");
+
+            // 오류가 한도 이하이면 "그 밖에" 줄이 없다.
+            string y = Path.Combine(root, "few.xlsx");
+            XlsxWriter.Write(y, ("Few", new[] { R("Id:uint", "Hp:int"), R(1.0, "bad"), R(2.0, "bad") }));
+            r = Run(y, "--out", Path.Combine(root, "json2"));
+            Check(r.Code == 1 && r.Err.StartsWith("변환 실패 (2건):") && !r.Err.Contains("그 밖에"), "errcap no remainder line under the limit", r.Err);
+        }
 
         private static void Errors()
         {
@@ -379,9 +445,9 @@ namespace XlsxConverter.Tests
             XlsxWriter.Write(k,
                 ("Enum", new[] { R("Enum:string", "Name:string"), R("Mode", "default"), R("Mode", "ERROR") }),
                 ("T", new[] { R("A:Mode"), R("default") }));
-            r = Run(k, "--out", json, "--cpp-out", Path.Combine(root, "kwcpp"));
+            r = Run(k, "--out", json, "--cpp-gen-out", Path.Combine(root, "kwcpp"));
             Check(r.Code == 1 && r.Err.Contains("Enum Mode.default: C++ 키워드나 Windows 매크로 이름은 멤버 이름으로 쓸 수 없습니다") && r.Err.Contains("Enum Mode.ERROR:"), "cpp reserved names", r.Err);
-            r = Run(k, "--out", json, "--cs-out", Path.Combine(root, "kwcs"));
+            r = Run(k, "--out", json, "--cs-gen-out", Path.Combine(root, "kwcs"));
             Check(r.Code == 0, "cs keyword member gets @", r.Err);
             Check(Read(Path.Combine(root, "kwcs", "Enums.gen.cs")).Contains("\t\t@default = 0,"), "@default member");
             Check(Read(Path.Combine(root, "kwcs", "T.gen.cs")).Contains("public Mode A { get; set; } = Mode.@default;"), "@default initializer", Read(Path.Combine(root, "kwcs", "T.gen.cs")));
@@ -395,16 +461,20 @@ namespace XlsxConverter.Tests
             Check(r.Code == 2, "usage without --out");
             r = Run("a.xlsx", "--out", "o", "--bogus");
             Check(r.Code == 2 && r.Err.StartsWith("알 수 없는 인자: --bogus"), "unknown arg", r.Err);
+                        // 이전 옵션 이름은 더 이상 받지 않는다.
+            foreach (string oldName in new[] { "--cpp-out", "--cs-out", "--cs-namespace" })
+            {
+                r = Run("a.xlsx", "--out", "o", oldName, "x");
+                Check(r.Code == 2 && r.Err.Contains("알 수 없는 인자: " + oldName), "old option name rejected: " + oldName, r.Err);
+            }
             r = Run("a.xlsx", "--out", "o", "--incremental", "--sheets", "A");
             Check(r.Code == 2 && r.Err.Contains("--incremental은 --sheets와 함께 쓸 수 없습니다"), "incremental + sheets", r.Err);
-            r = Run("a.xlsx", "--out", "o", "--cpp-out", "c", "--sheets", "A");
+            r = Run("a.xlsx", "--out", "o", "--cpp-gen-out", "c", "--sheets", "A");
             Check(r.Code == 2 && r.Err.Contains("--sheets와 함께 쓸 수 없습니다"), "codegen + sheets", r.Err);
-            r = Run("a.xlsx", "--out", "o", "--cs-out", "c", "--cs-client-proto-out", "c/");
-            Check(r.Code == 2 && r.Err.Contains("--cs-client-proto-out은 --cs-out과 다른 폴더여야 합니다"), "same cs folders", r.Err);
-            r = Run("a.xlsx", "--out", "o", "--cs-out", "c", "--cs-server-proto-out", "c/");
-            Check(r.Code == 2 && r.Err.Contains("--cs-server-proto-out은 --cs-out, --cs-client-proto-out과 다른 폴더여야 합니다"), "server proto same folder", r.Err);
-            r = Run("a.xlsx", "--out", "o", "--cs-server-proto-out", "c", "--sheets", "A");
-            Check(r.Code == 2 && r.Err.Contains("--sheets와 함께 쓸 수 없습니다"), "server proto + sheets", r.Err);
+            r = Run("a.xlsx", "--out", "o", "--cs-gen-out", "c", "--cs-client-proto-out", "c/");
+            Check(r.Code == 2 && r.Err.Contains("--cs-client-proto-out은 --cs-gen-out과 다른 폴더여야 합니다"), "same cs folders", r.Err);
+            r = Run("a.xlsx", "--out", "o", "--cs-server-proto-out", "c");
+            Check(r.Code == 2, "removed --cs-server-proto-out rejected", r.Err);
             r = Run("a.xlsx", "--out");
             Check(r.Code == 2 && r.Err.StartsWith("알 수 없는 인자: --out"), "option without value", r.Err);
         }
@@ -505,7 +575,7 @@ namespace XlsxConverter.Tests
             XlsxWriter.Write(xlsx, sheets.ToArray());
             Console.WriteLine("write xlsx: " + sw.ElapsedMilliseconds + " ms, " + new FileInfo(xlsx).Length / 1024 + " KB");
 
-            string[] a = { xlsx, "--out", Path.Combine(root, "json"), "--cpp-out", Path.Combine(root, "cpp"), "--cs-out", Path.Combine(root, "cs"), "--cs-client-proto-out", Path.Combine(root, "pcs"), "--proto-sizes-out", Path.Combine(root, "sizes.txt") };
+            string[] a = { xlsx, "--out", Path.Combine(root, "json"), "--cpp-gen-out", Path.Combine(root, "cpp"), "--cs-gen-out", Path.Combine(root, "cs"), "--cs-client-proto-out", Path.Combine(root, "pcs"), "--proto-sizes-out", Path.Combine(root, "sizes.txt") };
             for (int run = 1; run <= 3; ++run)
             {
                 sw.Restart();

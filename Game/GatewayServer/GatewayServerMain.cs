@@ -6,8 +6,8 @@ using System.Net;
 using System.Threading;
 using Core.Net;
 using Core.Util;
-using Game.Protocol;
-using Game.ServerCommon;
+using Game.Generated;
+using Game.ZoneCommon;
 
 namespace Game.GatewayServer;
 
@@ -19,7 +19,7 @@ namespace Game.GatewayServer;
 ///  4. 존 서버 등록/하트비트 처리, 하트비트 타임아웃 감시, 존 서버 연결 종료 시 해당 존의 클라이언트 정리
 /// 종료 순서: 감시 스레드 → 클라이언트 서비스(클라이언트 퇴장이 존 서버로 전달돼야 하므로 먼저) → 존 서버 서비스.
 /// </summary>
-public sealed class GatewayServerMain : Game.ServerCommon.IServerHost
+public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
 {
     private const int MaintenanceTickMs = 500;      // 감시 스레드 틱 간격
 

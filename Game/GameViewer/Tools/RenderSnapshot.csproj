@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <Compile Include="..\App\Render\*.cs" Link="Render\%(Filename)%(Extension)" />
+    <Compile Include="..\App\Forest\*.cs" Link="Forest\%(Filename)%(Extension)" />
     <Reference Include="System.Drawing" />
     <ProjectReference Include="..\Core\GameViewer.Core.csproj" />
   </ItemGroup>

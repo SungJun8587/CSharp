@@ -9,8 +9,8 @@
   "Auto": false,
   "SkipHeroSelect": false,
   "PixelsPerUnit": 20,
-  "WindowWidth": 1280,
-  "WindowHeight": 800,
+  "WindowWidth": 1600,
+  "WindowHeight": 960,
   "ConnectTimeoutMs": 3000,
   "MoveIntervalMs": 120,
   "Servers": [

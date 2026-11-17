@@ -1,7 +1,7 @@
 ﻿// Program.cs : Gateway 서버 진입점.
 using System;
 using Core.Util;
-using Game.ServerCommon;
+using Game.ZoneCommon;
 
 namespace Game.GatewayServer;
 

@@ -13,7 +13,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../Generated/Game.Generated.csproj" />
-    <ProjectReference Include="../ZoneCommon/Game.Protocol.csproj" />
     <ProjectReference Include="../../../Library/Core/Util/Core.Util.csproj" />
   </ItemGroup>
 

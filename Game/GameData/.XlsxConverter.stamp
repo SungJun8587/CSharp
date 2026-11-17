@@ -1,15 +1,10 @@
-XlsxConverter stamp v3 exe=639304169099077353/639304169099077353
+XlsxConverter stamp v4 exe=639304984791426680/639304984791426680
 xlsx=K:\GitHub\CSharp\Game\GameData
 out=K:\GitHub\CSharp\Game\GameData
 cs=K:\GitHub\CSharp\Game\GameCommon\Generated
 ns=Game.Generated
-pcs=K:\GitHub\CSharp\Game\GameViewer\Core\Protocol\Generated
-pns=GameViewer.Core.Protocol
-spo=K:\GitHub\CSharp\Game\GameCommon\ZoneCommon
-sns=Game.Protocol
-psz=K:\GitHub\CSharp\Game\GameViewer\Tests\cpp_packet_sizes.txt
 --
-src=Definitions.xlsx=639304119128228139/10084;Hero.xlsx=639304119128373216/12628;Monster.xlsx=639304119128471420/10837;Packet.xlsx=639304119128551348/22377;World.xlsx=639304119128631407/9033;
+src=Definitions.xlsx=639304964325509546/10084;Hero.xlsx=639304964325158198/12628;Monster.xlsx=639304964324991875/10837;Packet.xlsx=639304964325659641/22377;World.xlsx=639304964324718565/9033;
 K:\GitHub\CSharp\Game\GameData\Hero.json
 K:\GitHub\CSharp\Game\GameData\Skill.json
 K:\GitHub\CSharp\Game\GameData\Status.json
@@ -34,8 +29,5 @@ K:\GitHub\CSharp\Game\GameCommon\Generated\BossAction.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\Drop.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\Spawn.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\Block.gen.cs
-K:\GitHub\CSharp\Game\GameViewer\Core\Protocol\Generated\ProtocolTypes.gen.cs
-K:\GitHub\CSharp\Game\GameViewer\Core\Protocol\Generated\Packets.gen.cs
-K:\GitHub\CSharp\Game\GameCommon\ZoneCommon\ProtocolTypes.gen.cs
-K:\GitHub\CSharp\Game\GameCommon\ZoneCommon\Packets.gen.cs
-K:\GitHub\CSharp\Game\GameViewer\Tests\cpp_packet_sizes.txt
+K:\GitHub\CSharp\Game\GameCommon\Generated\ProtocolTypes.gen.cs
+K:\GitHub\CSharp\Game\GameCommon\Generated\Packets.gen.cs

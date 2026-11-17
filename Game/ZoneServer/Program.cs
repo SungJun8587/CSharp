@@ -1,8 +1,8 @@
 ﻿// Program.cs : 존 서버 진입점.
 using System;
 using Core.Util;
-using Game.Protocol;
-using Game.ServerCommon;
+using Game.Generated;
+using Game.ZoneCommon;
 
 namespace Game.ZoneServer;
 

@@ -1,7 +1,7 @@
 ﻿// ZoneRouter.cs : zoneId -> 존 서버 노드 라우팅 테이블.
 using System.Collections.Generic;
 using System.Threading;
-using Game.Protocol;
+using Game.Generated;
 
 namespace Game.GatewayServer;
 

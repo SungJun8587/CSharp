@@ -14,14 +14,13 @@ namespace XlsxConverter
         public string CsOutDir { get; set; } = string.Empty;
         public bool HasCsOut { get; set; }
         public string CsNamespace { get; set; } = "GameDataRows";
-        public string CsClientProtoOutDir { get; set; } = string.Empty;       // 패킷 프로토콜 C# 출력 폴더 (--cs-out과 다른 폴더)
+        public string CsClientProtoOutDir { get; set; } = string.Empty;       // 패킷 프로토콜 C# 출력 폴더 (--cs-gen-out과 다른 폴더)
         public bool HasCsClientProtoOut { get; set; }
         public string CsClientProtoNamespace { get; set; } = string.Empty;    // 비어 있으면 CsNamespace
-        public string CsServerProtoOutDir { get; set; } = string.Empty;   // 서버 패킷 C# 출력 폴더 (IPacket 구조체: Write/TryRead)
-        public bool HasCsServerProtoOut { get; set; }
-        public string CsServerProtoNamespace { get; set; } = string.Empty; // 비어 있으면 CsNamespace
         public string ProtoSizesOut { get; set; } = string.Empty;       // "<구조체> <바이트>" 목록 파일
         public bool HasProtoSizesOut { get; set; }
+        /// <summary>클라이언트 패킷 C#을 실제로 만들 네임스페이스. (--cs-client-proto-namespace를 안 주면 --cs-gen-namespace)</summary>
+        public string EffectiveClientProtoNamespace => CsClientProtoNamespace.Length == 0 ? CsNamespace : CsClientProtoNamespace;
         public List<string> Sheets { get; } = new List<string>();
         public bool HasSheets { get; set; }
         public bool Incremental { get; set; }
@@ -53,14 +52,12 @@ namespace XlsxConverter
                 bool hasNext = i + 1 < argv.Length;
 
                 if (arg == "--out" && hasNext) { opt.OutDir = argv[++i]; hasOut = true; }
-                else if (arg == "--cpp-out" && hasNext) { opt.CppOutDir = argv[++i]; opt.HasCppOut = true; }
-                else if (arg == "--cs-out" && hasNext) { opt.CsOutDir = argv[++i]; opt.HasCsOut = true; }
+                else if (arg == "--cpp-gen-out" && hasNext) { opt.CppOutDir = argv[++i]; opt.HasCppOut = true; }
+                else if (arg == "--cs-gen-out" && hasNext) { opt.CsOutDir = argv[++i]; opt.HasCsOut = true; }
                 else if (arg == "--cs-client-proto-out" && hasNext) { opt.CsClientProtoOutDir = argv[++i]; opt.HasCsClientProtoOut = true; }
                 else if (arg == "--cs-client-proto-namespace" && hasNext) { opt.CsClientProtoNamespace = argv[++i]; }
-                else if (arg == "--cs-server-proto-out" && hasNext) { opt.CsServerProtoOutDir = argv[++i]; opt.HasCsServerProtoOut = true; }
-                else if (arg == "--cs-server-proto-namespace" && hasNext) { opt.CsServerProtoNamespace = argv[++i]; }
                 else if (arg == "--proto-sizes-out" && hasNext) { opt.ProtoSizesOut = argv[++i]; opt.HasProtoSizesOut = true; }
-                else if (arg == "--cs-namespace" && hasNext) { opt.CsNamespace = argv[++i]; }
+                else if (arg == "--cs-gen-namespace" && hasNext) { opt.CsNamespace = argv[++i]; }
                 else if (arg == "--incremental") { opt.Incremental = true; }
                 else if (arg == "--sheets")
                 {
@@ -76,20 +73,32 @@ namespace XlsxConverter
                 }
             }
 
+            // "--sheets A B 파일.xlsx"처럼 경로를 --sheets 뒤에 쓰면 경로가 시트 이름으로 읽힌다.
+            // 경로를 못 받았으면 마지막 값이 엑셀 파일/폴더(.xlsx 로 끝나거나 실제로 있는 경로)일 때 그것을 경로로 본다.
+            if (opt.XlsxPath.Length == 0 && opt.HasSheets && opt.Sheets.Count > 0)
+            {
+                string last = opt.Sheets[opt.Sheets.Count - 1];
+                if (last.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) || Directory.Exists(last) || File.Exists(last))
+                {
+                    opt.XlsxPath = last;
+                    opt.Sheets.RemoveAt(opt.Sheets.Count - 1);
+                    if (opt.Sheets.Count == 0)
+                    {
+                        stderr.Write("--sheets에 시트 이름이 없습니다 ('" + last + "'을(를) 엑셀 경로로 읽었습니다)\n");
+                        return false;
+                    }
+                }
+            }
+
             if (opt.XlsxPath.Length == 0 || !hasOut)
             {
-                stderr.Write("usage: XlsxConverter <GameData folder | file.xlsx> --out <dir> [--cpp-out <dir>] [--cs-out <dir> [--cs-namespace <name>]] [--cs-client-proto-out <dir> [--cs-client-proto-namespace <name>]] [--cs-server-proto-out <dir> [--cs-server-proto-namespace <name>]] [--proto-sizes-out <file>] [--sheets Name ...] [--incremental]\n");
+                stderr.Write("usage: XlsxConverter <GameData folder | file.xlsx> --out <dir> [--cpp-gen-out <dir>] [--cs-gen-out <dir> [--cs-gen-namespace <name>]] [--cs-client-proto-out <dir> [--cs-client-proto-namespace <name>]] [--proto-sizes-out <file>] [--sheets Name ...] [--incremental]\n");
                 return false;
             }
             if (opt.HasCsClientProtoOut && opt.HasCsOut && SamePath(opt.CsClientProtoOutDir, opt.CsOutDir))
             {
                 // 폴더마다 *.gen.cs 한 묶음을 관리하므로 같은 폴더에 두 묶음이 섞이면 서로의 파일을 낡은 파일로 보고 지운다.
-                stderr.Write("--cs-client-proto-out은 --cs-out과 다른 폴더여야 합니다\n");
-                return false;
-            }
-            if (opt.HasCsServerProtoOut && ((opt.HasCsOut && SamePath(opt.CsServerProtoOutDir, opt.CsOutDir)) || (opt.HasCsClientProtoOut && SamePath(opt.CsServerProtoOutDir, opt.CsClientProtoOutDir))))
-            {
-                stderr.Write("--cs-server-proto-out은 --cs-out, --cs-client-proto-out과 다른 폴더여야 합니다\n");
+                stderr.Write("--cs-client-proto-out은 --cs-gen-out과 다른 폴더여야 합니다\n");
                 return false;
             }
             if (opt.Incremental && opt.HasSheets)
@@ -97,10 +106,10 @@ namespace XlsxConverter
                 stderr.Write("--incremental은 --sheets와 함께 쓸 수 없습니다\n");
                 return false;
             }
-            if ((opt.HasCppOut || opt.HasCsOut || opt.HasCsClientProtoOut || opt.HasCsServerProtoOut || opt.HasProtoSizesOut) && opt.HasSheets)
+            if ((opt.HasCppOut || opt.HasCsOut || opt.HasCsClientProtoOut || opt.HasProtoSizesOut) && opt.HasSheets)
             {
                 // 일부 시트만으로 헤더를 만들면 나머지 시트의 구조체가 사라져 C++ 빌드가 깨진다.
-                stderr.Write("--cpp-out/--cs-out/--cs-client-proto-out/--cs-server-proto-out/--proto-sizes-out는 --sheets와 함께 쓸 수 없습니다 (생성 코드는 모든 시트로 만들어야 합니다)\n");
+                stderr.Write("--cpp-gen-out/--cs-gen-out/--cs-client-proto-out/--proto-sizes-out는 --sheets와 함께 쓸 수 없습니다 (생성 코드는 모든 시트로 만들어야 합니다)\n");
                 return false;
             }
             return true;

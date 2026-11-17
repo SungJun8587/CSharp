@@ -22,6 +22,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using GameViewer.Core.Data;
 using GameViewer.Core.Logic;
+using System.Runtime.InteropServices;
 
 namespace GameViewer.App.Render
 {
@@ -127,12 +128,36 @@ namespace GameViewer.App.Render
             return m.TryGetValue(Key(monster, tpl), out s) ? s : null;
         }
 
+        // ---- 시트(아틀라스): 최상위 "atlases" 의 색인에 있는 경로는 개별 파일 대신 시트에서 잘라 읽는다(Tools/pack_atlas.py 가 만든다).
+        // 그림은 처음 그릴 때 읽는 경우가 많아서(걷기/공격 자세) 시트 쪽은 읽어 둔 채로 두고, 다시 불러오거나 Clear 할 때 놓는다.
+        private static Dictionary<string, AtlasRef> _atlas;     // 전체 경로(대소문자 무시) -> 시트 안의 위치
+        private static List<AtlasPage> _atlasPages;
+
+        private sealed class AtlasPage
+        {
+            public string Path; public Bitmap Bmp;
+            private readonly object _lock = new object();
+            public Bitmap Get(out string why)
+            {
+                why = null;
+                lock (_lock) { if (Bmp == null) Bmp = ReadArgbFile(Path, out why); return Bmp; }
+            }
+            public void Release() { lock (_lock) { if (Bmp != null) { Bmp.Dispose(); Bmp = null; } } }
+        }
+
+        /// <summary>시트 안의 한 장: 잘라 낸 상자(X,Y,W,H)와 원래 크기(Fw,Fh) 안에서의 위치(Ox,Oy).</summary>
+        private sealed class AtlasRef { public AtlasPage Page; public int X, Y, W, H, Ox, Oy, Fw, Fh; }
+
+        private static bool Exists(string path) { return (_atlas != null && _atlas.ContainsKey(path)) || File.Exists(path); }
+
         public static int Count { get { return _sets == null ? 0 : _sets.Count; } }
 
         public static void Clear()
         {
             Dictionary<long, AssetSet> m = _sets;
             _sets = null;
+            if (_atlasPages != null) foreach (AtlasPage pg in _atlasPages) pg.Release();
+            _atlas = null; _atlasPages = null;
             MonsterTraits.Clear();
             if (m == null) return;
             foreach (AssetSet s in m.Values) Dispose(s);
@@ -189,6 +214,7 @@ namespace GameViewer.App.Render
                 Dictionary<string, object> root = MiniJson.AsObject(MiniJson.Parse(File.ReadAllText(manifest, System.Text.Encoding.UTF8)));
                 List<object> list = root == null ? null : MiniJson.AsArray(root.ContainsKey("sprites") ? root["sprites"] : null);
                 if (list == null) { warnings.Add(manifest + ": \"sprites\" 배열이 없습니다"); return 0; }
+                LoadAtlasIndex(dir, root, warnings);
                 for (int i = 0; i < list.Count; ++i) _total += Weight(MiniJson.AsObject(list[i]));
                 _done = 0; Report(true);
                 double acc = 0;
@@ -271,7 +297,7 @@ namespace GameViewer.App.Render
                     try { rel = string.Format(CultureInfo.InvariantCulture, pattern, (int)Math.Round(i * 360.0 / n)); }
                     catch (FormatException) { why = "pattern 형식이 잘못됨: " + pattern; return Fail(frames); }
                     string path = Path.GetFullPath(Path.Combine(dir, rel));
-                    if (!File.Exists(path)) { why = "파일이 없습니다: " + rel; return Fail(frames); }
+                    if (!Exists(path)) { why = "파일이 없습니다: " + rel; return Fail(frames); }
                     frames[i] = ReadArgb(path, out why);
                     if (frames[i] == null) return Fail(frames);
                     if (i == 0) { w = frames[0].Width; h = frames[0].Height; }
@@ -287,7 +313,7 @@ namespace GameViewer.App.Render
                             try { rel = string.Format(CultureInfo.InvariantCulture, walkPattern, (int)Math.Round(i * 360.0 / n), k); }
                             catch (FormatException) { why = "walkPattern 형식이 잘못됨: " + walkPattern; return Fail(frames); }
                             string path = Path.GetFullPath(Path.Combine(dir, rel));
-                            if (!File.Exists(path)) { why = "파일이 없습니다: " + rel; return Fail(frames); }
+                            if (!Exists(path)) { why = "파일이 없습니다: " + rel; return Fail(frames); }
                             extra.WalkPaths[i][k] = path;
                             if (!o.ContainsKey("bounds"))        // 크기 계산에만 잠깐 읽고 바로 버린다(걷기 그림은 처음 그릴 때 읽는다)
                             {
@@ -305,7 +331,7 @@ namespace GameViewer.App.Render
                         try { rel = string.Format(CultureInfo.InvariantCulture, attackPattern, (int)Math.Round(i * 360.0 / n)); }
                         catch (FormatException) { why = "attackPattern 형식이 잘못됨: " + attackPattern; return Fail(frames); }
                         string path = Path.GetFullPath(Path.Combine(dir, rel));
-                        if (!File.Exists(path)) { why = "파일이 없습니다: " + rel; return Fail(frames); }
+                        if (!Exists(path)) { why = "파일이 없습니다: " + rel; return Fail(frames); }
                         attack[i] = ReadArgb(path, out why);
                         if (attack[i] == null) return Fail(frames);
                         if (attack[i].Width != w || attack[i].Height != h) { why = "공격 이미지 크기가 기본 이미지와 다릅니다: " + rel; return Fail(frames); }
@@ -495,7 +521,7 @@ namespace GameViewer.App.Render
             try { rel = string.Format(CultureInfo.InvariantCulture, pattern, args); }
             catch (FormatException) { why = "패턴 형식이 잘못됨: " + pattern; return null; }
             string path = Path.GetFullPath(Path.Combine(dir, rel));
-            if (!File.Exists(path)) { why = "파일이 없습니다: " + rel; return null; }
+            if (!Exists(path)) { why = "파일이 없습니다: " + rel; return null; }
             return path;
         }
 
@@ -526,7 +552,7 @@ namespace GameViewer.App.Render
             try { rel = string.Format(CultureInfo.InvariantCulture, pattern, args); }
             catch (FormatException) { why = "패턴 형식이 잘못됨: " + pattern; return null; }
             string path = Path.GetFullPath(Path.Combine(dir, rel));
-            if (!File.Exists(path)) { why = "파일이 없습니다: " + rel; return null; }
+            if (!Exists(path)) { why = "파일이 없습니다: " + rel; return null; }
             Bitmap b = ReadArgb(path, out why);
             if (b == null) return null;
             if (b.Width != w || b.Height != h) { b.Dispose(); why = "이미지 크기가 맞지 않습니다(" + w + "x" + h + " 필요): " + rel; return null; }
@@ -535,11 +561,98 @@ namespace GameViewer.App.Render
 
         private static AssetSet Fail(Bitmap[] frames) { return null; }
 
+        private static Bitmap Crop(AtlasRef a, out string why)
+        {
+            why = null;
+            Bitmap dst = new Bitmap(a.Fw, a.Fh, PixelFormat.Format32bppArgb);          // 새 비트맵은 완전히 투명하다
+            if (a.W == 0 || a.H == 0) return dst;                                        // 완전히 비어 있던 그림
+            Bitmap page = a.Page.Get(out why);
+            if (page == null) { dst.Dispose(); return null; }
+            if (a.X + a.W > page.Width || a.Y + a.H > page.Height) { dst.Dispose(); why = "시트 색인이 시트 크기를 벗어납니다: " + a.Page.Path; return null; }
+            BitmapData sd = page.LockBits(new Rectangle(a.X, a.Y, a.W, a.H), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                BitmapData dd = dst.LockBits(new Rectangle(a.Ox, a.Oy, a.W, a.H), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+                try
+                {
+                    int[] row = new int[a.W];
+                    for (int y = 0; y < a.H; ++y)
+                    {
+                        Marshal.Copy(new IntPtr(sd.Scan0.ToInt64() + (long)y * sd.Stride), row, 0, a.W);
+                        Marshal.Copy(row, 0, new IntPtr(dd.Scan0.ToInt64() + (long)y * dd.Stride), a.W);
+                    }
+                }
+                finally { dst.UnlockBits(dd); }
+            }
+            finally { page.UnlockBits(sd); }
+            return dst;
+        }
+
+        /// <summary>최상위 "atlases" 의 색인 JSON 을 읽어 전체 경로 -> 시트 위치 표를 만든다. 색인이나 시트가 잘못돼도 그 시트만 건너뛰고(개별 파일로 대신 읽음) warnings 에 적는다.
+        /// 색인 형식: { "pages": ["atlas.png"], "files": { "warrior/000.png": [쪽, x, y, w, h, ox, oy, 원래폭, 원래높이] } }</summary>
+        private static void LoadAtlasIndex(string dir, Dictionary<string, object> root, List<string> warnings)
+        {
+            _atlas = new Dictionary<string, AtlasRef>(StringComparer.OrdinalIgnoreCase);
+            _atlasPages = new List<AtlasPage>();
+            List<object> list = root.ContainsKey("atlases") ? MiniJson.AsArray(root["atlases"]) : null;
+            if (list == null) return;
+            foreach (object item in list)
+            {
+                string rel = item as string;
+                if (string.IsNullOrEmpty(rel)) { warnings.Add("atlases: 경로가 아닌 항목이 있습니다"); continue; }
+                string ipath = Path.GetFullPath(Path.Combine(dir, rel));
+                try
+                {
+                    if (!File.Exists(ipath)) { warnings.Add("시트 색인이 없습니다(개별 파일로 대신 읽음): " + rel); continue; }
+                    Dictionary<string, object> io = MiniJson.AsObject(MiniJson.Parse(File.ReadAllText(ipath, System.Text.Encoding.UTF8)));
+                    List<object> pageNames = io == null ? null : MiniJson.AsArray(io.ContainsKey("pages") ? io["pages"] : null);
+                    Dictionary<string, object> files = io == null || !io.ContainsKey("files") ? null : MiniJson.AsObject(io["files"]);
+                    if (pageNames == null || pageNames.Count == 0 || files == null) { warnings.Add(rel + ": pages/files 가 없습니다"); continue; }
+                    List<AtlasPage> pages = new List<AtlasPage>();
+                    foreach (object n in pageNames)
+                    {
+                        string pn = n as string;
+                        if (string.IsNullOrEmpty(pn)) { pages = null; break; }
+                        AtlasPage ap = new AtlasPage(); ap.Path = Path.Combine(Path.GetDirectoryName(ipath), pn);
+                        if (!File.Exists(ap.Path)) { warnings.Add("시트 이미지가 없습니다(개별 파일로 대신 읽음): " + pn); pages = null; break; }
+                        pages.Add(ap);
+                    }
+                    if (pages == null) continue;
+                    Dictionary<string, AtlasRef> added = new Dictionary<string, AtlasRef>(StringComparer.OrdinalIgnoreCase);
+                    bool ok = true;
+                    foreach (KeyValuePair<string, object> kv in files)
+                    {
+                        List<object> v = MiniJson.AsArray(kv.Value);
+                        if (v == null || v.Count != 9) { ok = false; break; }
+                        int[] r = new int[9];
+                        for (int i = 0; i < 9; ++i) { if (!(v[i] is double)) { ok = false; break; } r[i] = (int)(double)v[i]; }
+                        if (!ok) break;
+                        // r: 쪽, x, y, w, h, ox, oy, fw, fh
+                        if (r[0] < 0 || r[0] >= pages.Count || r[3] < 0 || r[4] < 0 || r[7] < 1 || r[8] < 1 || r[7] > 4096 || r[8] > 4096 || r[5] < 0 || r[6] < 0 || r[5] + r[3] > r[7] || r[6] + r[4] > r[8] || r[1] < 0 || r[2] < 0) { ok = false; break; }
+                        AtlasRef a = new AtlasRef(); a.Page = pages[r[0]]; a.X = r[1]; a.Y = r[2]; a.W = r[3]; a.H = r[4]; a.Ox = r[5]; a.Oy = r[6]; a.Fw = r[7]; a.Fh = r[8];
+                        added[Path.GetFullPath(Path.Combine(dir, kv.Key.Replace('\\', '/')))] = a;
+                    }
+                    if (!ok) { warnings.Add(rel + ": 색인 값이 잘못되어 이 시트는 쓰지 않습니다(개별 파일로 대신 읽음)"); continue; }
+                    foreach (KeyValuePair<string, AtlasRef> kv in added) _atlas[kv.Key] = kv.Value;
+                    _atlasPages.AddRange(pages);
+                }
+                catch (Exception e) { warnings.Add(rel + ": " + e.Message); }
+            }
+        }
+
         /// <summary>파일을 읽어 32비트 ARGB 비트맵으로(파일 잠금 없이) 만든다. GDI+ 가 못 읽는 형식(WebP 등)은 오류.</summary>
         private static Bitmap ReadArgb(string path, out string why)
         {
             why = null;
             _done += 1; Report(false);
+            AtlasRef ar;
+            if (_atlas != null && _atlas.TryGetValue(path, out ar)) return Crop(ar, out why);
+            return ReadArgbFile(path, out why);
+        }
+
+        private static Bitmap ReadArgbFile(string path, out string why)
+        {
+            why = null;
             try
             {
                 using (Image src = Image.FromFile(path))

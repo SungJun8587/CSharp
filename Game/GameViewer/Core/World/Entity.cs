@@ -55,6 +55,7 @@ namespace GameViewer.Core.World
         public readonly Dictionary<uint, StatusInstance> Statuses = new Dictionary<uint, StatusInstance>();
 
         public bool IsMonster { get { return Type == (byte)EntityType.Monster; } }
+        public bool IsItem { get { return Type == (byte)EntityType.Item; } }
         public bool IsPlayer { get { return Type == (byte)EntityType.Player; } }
         public bool Casting { get { return CastSkillId != 0; } }
 

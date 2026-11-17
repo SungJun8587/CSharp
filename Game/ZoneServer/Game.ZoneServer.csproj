@@ -12,9 +12,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../GameCommon/ZoneCommon/Game.Protocol.csproj" />
+    <ProjectReference Include="../GameCommon/Generated/Game.Generated.csproj" />
     <ProjectReference Include="../GameCommon/ZoneCore/Game.ZoneCore.csproj" />
-    <ProjectReference Include="../ServerCommon/Game.ServerCommon.csproj" />
+    <ProjectReference Include="../GameCommon/ZoneCommon/Game.ZoneCommon.csproj" />
     <ProjectReference Include="../../Library/Core/Net/Core.Net.csproj" />
     <ProjectReference Include="../../Library/Core/Util/Core.Util.csproj" />
   </ItemGroup>

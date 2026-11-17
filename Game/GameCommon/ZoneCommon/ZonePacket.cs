@@ -1,10 +1,12 @@
 ﻿// ZonePacket.cs : 존 서버 분리 구조(Gateway / ZoneServer) 패킷 도우미.
-// 패킷 구조체와 열거형은 생성 파일(Packets.gen.cs, ProtocolTypes.gen.cs)에 있고, 여기에는 손으로 쓰는 도우미(헤더/문자열 입출력, 중계 패킷 조립)만 둔다.
+// 패킷 구조체와 열거형은 생성 파일(Packets.gen.cs, ProtocolTypes.gen.cs)에 있고, 여기에는 손으로 쓰는 도우미(IPacket, 헤더/문자열 입출력, 중계 패킷 조립)만 둔다.
+// 생성 파일이 IPacket, PacketIO를 쓰므로 네임스페이스는 --cs-gen-namespace(Game.Generated)와 같게 둔다.
+// 이 폴더의 Game.ZoneCommon 프로젝트가 생성 파일 Packets.gen.cs, ProtocolTypes.gen.cs도 함께 컴파일한다.
 using System;
 using System.Buffers.Binary;
 using System.Text;
 
-namespace Game.Protocol;
+namespace Game.Generated;
 
 /// <summary>
 /// 고정 크기 패킷 구조체의 공통 모양. 구조체마다 Size(const)와 Write가 있어서, 이 인터페이스로 묶으면

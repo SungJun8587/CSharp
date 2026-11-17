@@ -77,6 +77,17 @@ namespace GameViewer.Tests
             T.Run("ping meter", PingTests.Meter);
             T.Run("ping packets", PingTests.Packets);
             T.Run("ping session", PingTests.Session);
+            T.Run("forest: path", ForestTests.Path);
+            T.Run("forest: camera", ForestTests.Camera);
+            T.Run("forest: layout", ForestTests.Layout);
+            T.Run("forest: meshes", ForestTests.Meshes);
+            T.Run("forest: textures", ForestTests.Textures);
+            T.Run("forest: shadow and sun", ForestTests.Shadow);
+            T.Run("forest: shader text", ForestTests.ShaderText);
+            T.Run("forest: assets", ForestTests.Assets);
+            T.Run("forest: hero models", ForestTests.HeroModels);
+            T.Run("forest: hero meshes", ForestTests.HeroMeshes);
+            T.Run("forest: hero stage", ForestTests.HeroStage);
             T.Run("config", DataTests.Config);
             T.Run("world: move/spawn", WorldTests.MoveAndSpawn);
             T.Run("world: damage/death/respawn", WorldTests.DamageDeathRespawn);

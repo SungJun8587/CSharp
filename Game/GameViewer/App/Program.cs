@@ -28,7 +28,7 @@ namespace GameViewer.App
 
             bool demo = false;
             System.Collections.Generic.List<string> rest = new System.Collections.Generic.List<string>();
-            foreach (string a in args) { if (a == "--demo") demo = true; else rest.Add(a); }
+            foreach (string a in args) { if (a == "--demo") demo = true; else if (a == "--no-3d") GameViewer.App.Forest.ForestBackdrop.Enabled = false; else rest.Add(a); }
 
             // 옵션이 하나도 없으면 실행 파일 옆의 GameViewer.json 을 기본 설정으로 쓴다.
             if (!rest.Contains("--config") && !rest.Contains("--help") && !rest.Contains("--dump-config"))
@@ -41,12 +41,12 @@ namespace GameViewer.App
             ViewerConfig cfg = ViewerConfig.FromArgs(rest.ToArray(), out error, out exitNow);
             if (cfg == null)
             {
-                MessageBox.Show(error + "\r\n\r\n" + ViewerConfig.Usage + "\r\n  --demo                서버 없이 로컬 시뮬레이션으로 실행", "GameViewer 옵션 오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(error + "\r\n\r\n" + ViewerConfig.Usage + "\r\n  --demo                서버 없이 로컬 시뮬레이션으로 실행\r\n  --no-3d               3D 숲 배경(OpenGL)을 쓰지 않음", "GameViewer 옵션 오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return 1;
             }
             if (exitNow)
             {
-                MessageBox.Show(ViewerConfig.Usage + "\r\n  --demo                서버 없이 로컬 시뮬레이션으로 실행", "GameViewer", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(ViewerConfig.Usage + "\r\n  --demo                서버 없이 로컬 시뮬레이션으로 실행\r\n  --no-3d               3D 숲 배경(OpenGL)을 쓰지 않음", "GameViewer", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return 0;
             }
 
@@ -71,8 +71,10 @@ namespace GameViewer.App
             foreach (string w in backWarn) Console.Error.WriteLine("assets: " + w);
             StartupLoader loader = new StartupLoader(cfg, baseDir);
             loader.Start();
+            GameViewer.App.Forest.ForestBackdrop.Prepare();         // 3D 숲 재료는 로딩바가 도는 동안 백그라운드에서 만든다(GL 을 못 쓰면 예전 2D 배경)
 
-            Application.Run(new MainForm(cfg, loader, demo));
+            try { Application.Run(new MainForm(cfg, loader, demo)); }
+            finally { GameViewer.App.Forest.ForestBackdrop.Shutdown(); }          // GL 자원과 숨은 창 정리
             return 0;
         }
     }

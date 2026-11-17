@@ -6,8 +6,7 @@ using System.Threading;
 using Core.Net;
 using Core.Util;
 using Game.Generated;
-using Game.Protocol;
-using Game.ServerCommon;
+using Game.ZoneCommon;
 using Game.ZoneCore;
 
 namespace Game.ZoneServer;
@@ -17,7 +16,7 @@ namespace Game.ZoneServer;
 /// Gateway가 아직 떠 있지 않아도 Start()는 성공하며, 링크 스레드가 연결될 때까지 지수 백오프로 재접속한다.
 /// 정지 순서: 링크 스레드 → 클라이언트 서비스(세션 종료까지 대기) → 존. 서비스를 존보다 먼저 닫아야 Gateway 패킷이 정지한 존으로 Post되지 않는다.
 /// </summary>
-public sealed class ZoneServerMain : IZoneLink, Game.ServerCommon.IServerHost
+public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
 {
     private const int LinkTickMs = 200;         // 링크 스레드 틱 간격
     private const int ReconnectMinMs = 500;     // 재접속 최소 대기

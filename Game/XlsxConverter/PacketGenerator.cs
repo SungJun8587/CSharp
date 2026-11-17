@@ -423,7 +423,7 @@ namespace XlsxConverter
             int before = errors.Count;
             if (!CodeGenCommon.IsValidNamespace(ns))
             {
-                errors.Add("패킷 C# 네임스페이스 '" + ns + "': 형식이 아닙니다 (--cs-client-proto-namespace, 없으면 --cs-namespace)");
+                errors.Add("패킷 C# 네임스페이스 '" + ns + "': 형식이 아닙니다 (--cs-client-proto-namespace, 없으면 --cs-gen-namespace)");
                 return false;
             }
 
@@ -463,7 +463,7 @@ namespace XlsxConverter
             int before = errors.Count;
             if (!CodeGenCommon.IsValidNamespace(ns))
             {
-                errors.Add("서버 패킷 C# 네임스페이스 '" + ns + "': 형식이 아닙니다 (--cs-server-proto-namespace, 없으면 --cs-namespace)");
+                errors.Add("서버 패킷 C# 네임스페이스 '" + ns + "': 형식이 아닙니다 (--cs-gen-namespace)");
                 return false;
             }
 

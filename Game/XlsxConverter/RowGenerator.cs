@@ -352,7 +352,7 @@ namespace XlsxConverter
             int errBefore = errors.Count;
 
             // 네임스페이스: 점으로 구분된 식별자들
-            if (!CodeGenCommon.IsValidNamespace(ns)) { errors.Add("--cs-namespace '" + ns + "': C# 네임스페이스 형식이 아닙니다"); return false; }
+            if (!CodeGenCommon.IsValidNamespace(ns)) { errors.Add("--cs-gen-namespace '" + ns + "': C# 네임스페이스 형식이 아닙니다"); return false; }
 
             // 같은 네임스페이스에 만들어지는 형식 이름끼리 겹치면 C# 컴파일이 깨지므로 미리 막는다.
             {

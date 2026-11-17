@@ -129,13 +129,14 @@ namespace XlsxConverter
         // 같은 인자, 같은 도구 빌드로 만든 출력인지 가리는 문자열.
         public static string MakeSignature(Options opt)
         {
-            string s = "XlsxConverter stamp v3 exe=" + ExeStamp() + "\n";
+            string s = "XlsxConverter stamp v4 exe=" + ExeStamp() + "\n";
             s += "xlsx=" + AbsolutePath(opt.XlsxPath) + "\n";
             s += "out=" + AbsolutePath(opt.OutDir) + "\n";
             if (opt.HasCppOut) s += "cpp=" + AbsolutePath(opt.CppOutDir) + "\n";
             if (opt.HasCsOut) s += "cs=" + AbsolutePath(opt.CsOutDir) + "\nns=" + opt.CsNamespace + "\n";
-            if (opt.HasCsClientProtoOut) s += "pcs=" + AbsolutePath(opt.CsClientProtoOutDir) + "\npns=" + opt.CsClientProtoNamespace + "\n";
-            if (opt.HasCsServerProtoOut) s += "spo=" + AbsolutePath(opt.CsServerProtoOutDir) + "\nsns=" + opt.CsServerProtoNamespace + "\n";
+            // 패킷 C#의 네임스페이스는 비워 두면 --cs-gen-namespace를 따른다. 그래서 명시한 값이 아니라 실제로 쓰이는 값을 적는다.
+            // (--cs-gen-out 없이 --cs-gen-namespace만 바꿔도 서명이 달라져야 다시 생성한다)
+            if (opt.HasCsClientProtoOut) s += "pcs=" + AbsolutePath(opt.CsClientProtoOutDir) + "\npns=" + opt.EffectiveClientProtoNamespace + "\n";
             if (opt.HasProtoSizesOut) s += "psz=" + AbsolutePath(opt.ProtoSizesOut) + "\n";
             if (opt.HasSheets) foreach (string n in opt.Sheets) s += "sheet=" + n + "\n";
             return s + "--\n";

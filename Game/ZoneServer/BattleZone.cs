@@ -5,9 +5,8 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using Core.Util;
 using Game.Generated;
-using Game.Protocol;
 using Game.ZoneCore;
-using ProtoCancel = Game.Protocol.SkillCancelReason;
+using ProtoCancel = Game.Generated.SkillCancelReason;
 using CoreCancel = Game.ZoneCore.SkillCancelReason;
 
 namespace Game.ZoneServer;

@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using GameViewer.App.Forest;
 using GameViewer.Core.Data;
 using GameViewer.Core.Logic;
 using GameViewer.Core.Net;
@@ -61,6 +62,13 @@ namespace GameViewer.App.Render
 
         private const float CardGap = 16f;
 
+        /// <summary>3D 숲이 켜져 있으면 왼쪽 일부를 비워 고른 영웅이 숲 길에 서 있게 한다(카드, 시작 버튼, 서버 칸은 나머지 오른쪽 영역에 놓는다). 숲이 없으면 0.</summary>
+        public static float Inset(int w)
+        {
+            if (!ForestBackdrop.Enabled || !ForestBackdrop.IsReady || w < 900) return 0f;
+            return Math.Min(w * 0.30f, 440f);
+        }
+
         private static float CardW(int w, int n) { return Math.Max(120f, Math.Min(230f, (w - 80f - (n - 1) * CardGap) / Math.Max(1, n))); }
         private static float CardH(int h) { return Math.Max(270f, Math.Min(420f, h * 0.56f)); }
         private static float CardTop(int h) { return Math.Max(90f, h * 0.22f); }
@@ -68,15 +76,17 @@ namespace GameViewer.App.Render
         /// <summary>영웅 카드 i 의 화면 영역.</summary>
         public static RectangleF CardRect(int w, int h, int n, int i)
         {
-            float cw = CardW(w, n), total = n * cw + (n - 1) * CardGap;
-            return new RectangleF((w - total) / 2f + i * (cw + CardGap), CardTop(h), cw, CardH(h));
+            float ox = Inset(w), aw = w - ox;
+            float cw = CardW((int)aw, n), total = n * cw + (n - 1) * CardGap;
+            return new RectangleF(ox + (aw - total) / 2f + i * (cw + CardGap), CardTop(h), cw, CardH(h));
         }
 
         /// <summary>"게임 시작" 버튼 영역.</summary>
         public static RectangleF StartRect(int w, int h)
         {
             float y = Math.Min(h - 96f, CardTop(h) + CardH(h) + 28f);
-            return new RectangleF((w - 240f) / 2f, y, 240f, 50f);
+            float ox = Inset(w);
+            return new RectangleF(ox + (w - ox - 240f) / 2f, y, 240f, 50f);
         }
 
         /// <summary>맵(존) 선택 칸 i: "게임 시작" 버튼 오른쪽에 나란히 놓는다.</summary>
@@ -154,7 +164,9 @@ namespace GameViewer.App.Render
 
         private void Background(Graphics g, int w, int h, int dark)
         {
-            if (Backdrop.Draw(g, w, h)) g.FillRectangle(_res.Brush(dark, 4, 10, 6), 0, 0, w, h);
+            // 배경 우선순위: 3D 숲(OpenGL) > Assets/backdrop 이미지 > 초록 그라데이션. 숲을 만드는 동안(Pending)과 GL 을 못 쓸 때(Unavailable)는 다음 것으로 넘어간다.
+            if (ForestBackdrop.Draw(g, w, h) == ForestResult.Drawn) g.FillRectangle(_res.Brush(Math.Max(40, dark - 90), 4, 10, 6), 0, 0, w, h);
+            else if (Backdrop.Draw(g, w, h)) g.FillRectangle(_res.Brush(dark, 4, 10, 6), 0, 0, w, h);
             else
             {
                 using (LinearGradientBrush b = new LinearGradientBrush(new Rectangle(0, 0, w, h + 1), Color.FromArgb(22, 54, 34), Color.FromArgb(6, 14, 10), LinearGradientMode.Vertical))
@@ -167,6 +179,14 @@ namespace GameViewer.App.Render
             RectangleF r = new RectangleF(0, Math.Max(14f, h * 0.05f), w, 50);
             _res.OutlinedText(g, "GAME VIEWER", _res.Huge, Color.FromArgb(255, 235, 150), w / 2f, r.Y, TitleFmt(w));
             g.DrawString("MMORPG 필드 전투 뷰어", _res.Normal, _res.Brush(Color.FromArgb(210, 225, 210)), new RectangleF(0, r.Y + 42, w, 22), _res.Center);
+        }
+
+        /// <summary>3D 숲을 쓰지 못할 때(사용 안 함/오류) 원인을 화면 왼쪽 아래에 작게 적는다. 정상이면 아무것도 그리지 않는다.</summary>
+        private void ForestNote(Graphics g, int w, int h)
+        {
+            string st = ForestBackdrop.Status;
+            if (!ForestBackdrop.Enabled || ForestBackdrop.IsReady || st == null || !st.StartsWith("사용 안 함", StringComparison.Ordinal)) return;
+            g.DrawString("3D 숲 " + st + " (ForestGL.log)", _res.Small, _res.Brush(Color.FromArgb(220, 255, 190, 150)), 10, h - 22);
         }
 
         private StringFormat _titleFmt;
@@ -184,6 +204,7 @@ namespace GameViewer.App.Render
             shown = Math.Max(0f, Math.Min(1f, shown));
             Background(g, w, h, 150);
             Title(g, w, h);
+            ForestNote(g, w, h);
             float bw = Math.Min(560f, w - 80f), bh = 18f, x = (w - bw) / 2f, y = h * 0.60f;
             g.DrawString(label.Length > 0 ? "불러오는 중 - " + label : (shown >= 1f ? "준비 완료" : "불러오는 중"), _res.Normal, _res.Brush(Color.FromArgb(235, 240, 235)), x, y - 30);
             g.DrawString((int)(shown * 100f) + "%", _res.Bold, _res.Brush(Color.FromArgb(255, 235, 150)), new RectangleF(x, y - 30, bw, 22), RightFmt());
@@ -214,6 +235,16 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 영웅 선택
 
+        /// <summary>선택된 영웅을 이번 그리기의 3D 숲 위에 세우도록 부탁해 둔다(Background 보다 먼저). 영웅 템플릿 1~4 = 전사/궁수/마법사/창기사, 그 밖은 영웅 없이 숲만 보인다.</summary>
+        private static void RequestHero(List<uint> ids, int sel, int w)
+        {
+            float ox = Inset(w);
+            if (ox <= 0f || ids.Count == 0) return;
+            uint id = ids[Math.Max(0, Math.Min(ids.Count - 1, sel))];
+            if (id < 1 || id > 4) return;
+            ForestBackdrop.ShowHero((int)id - 1, (ox * 0.5f) / Math.Max(1, w) * 2f - 1f);
+        }
+
         /// <summary>영웅 선택 화면. sel 은 선택된 카드, hover 는 마우스가 올라간 카드(-1 없음), target 은 접속 대상 설명.</summary>
         public void DrawSelect(Graphics g, int w, int h, GameData data, int sel, int hover, string target, long now) { DrawSelect(g, w, h, data, sel, hover, target, now, 0); }
 
@@ -222,15 +253,17 @@ namespace GameViewer.App.Render
         {
             List<uint> ids = data.HeroIds();
             ComputeMaxes(data, ids);
+            RequestHero(ids, sel, w);
             Background(g, w, h, 130);
             Title(g, w, h);
+            ForestNote(g, w, h);
             if (ids.Count == 0)
             {
                 g.DrawString("GameData 에 Hero 시트가 없어 서버 기본 영웅으로 시작합니다", _res.Normal, _res.Brush(Color.FromArgb(255, 200, 170)), new RectangleF(0, h * 0.4f, w, 24), _res.Center);
             }
             else
             {
-                g.DrawString("영웅을 선택하세요", _res.Big, _res.Brush(Color.FromArgb(240, 245, 235)), new RectangleF(0, CardTop(h) - 38, w, 30), _res.Center);
+                g.DrawString("영웅을 선택하세요", _res.Big, _res.Brush(Color.FromArgb(240, 245, 235)), new RectangleF(Inset(w), CardTop(h) - 38, w - Inset(w), 30), _res.Center);
                 sel = Math.Max(0, Math.Min(ids.Count - 1, sel));
                 for (int i = 0; i < ids.Count; ++i) DrawCard(g, w, h, data, ids, i, i == sel, i == hover, now);
             }

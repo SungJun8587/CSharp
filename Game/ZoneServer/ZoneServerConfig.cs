@@ -1,8 +1,8 @@
 ﻿// ZoneServerConfig.cs : 존 서버 실행 옵션과 설정 파일(zoneserver_config.json).
 using System.Collections.Generic;
 using Core.Util;
-using Game.Protocol;
-using Game.ServerCommon;
+using Game.Generated;
+using Game.ZoneCommon;
 using Game.ZoneCore;
 
 namespace Game.ZoneServer;
@@ -35,7 +35,7 @@ public sealed class ZoneServerOptions
 }
 
 /// <summary>zoneserver_config.json 읽기/쓰기. C++ 설정 파일과 같은 키를 쓴다.</summary>
-public sealed class ZoneServerConfig : Game.ServerCommon.IServerConfig<ZoneServerOptions>
+public sealed class ZoneServerConfig : Game.ZoneCommon.IServerConfig<ZoneServerOptions>
 {
     public string ServerName = "ZoneServer";
     public int WorkerThreadCnt = 1;                 // C# 포팅에서는 쓰지 않는다(소켓 I/O는 .NET 스레드 풀). 키 호환용

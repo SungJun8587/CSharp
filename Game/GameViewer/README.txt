@@ -18,7 +18,12 @@
     Logic/     AutoPilot(자동 전투), DemoDirector(서버 없는 로컬 시뮬레이션)
     ViewerSession.cs  접속 흐름 + 월드 + 명령(이동/공격/스킬/쿨다운)
     ViewerConfig.cs   JSON + 명령행 옵션
-  Assets/  (선택) 이미지 에셋과 sprites.json - 아래 [이미지 에셋]
+  Assets/  (선택) 이미지 에셋과 sprites.json - 아래 [3D 숲 배경]  App\Forest (OpenGL 3.3, 외부 에셋 없이 코드로 만든 숲과 4영웅 모델)
+  - 시작 화면(로딩바, 영웅 선택)과 게임 중 H 영웅 선택 창의 배경으로 쓴다. H 창에서는 고른 영웅(전사/궁수/마법사/창기사)이 숲 길 위에 서 있고 목록은 오른쪽으로 비킨다.
+  - 숲은 로딩바가 도는 동안 백그라운드에서 만든다. GL 을 쓸 수 없으면(드라이버 3.3 미만, 원격 데스크톱 등) 원인을 ForestGL.log 에 남기고 Assets\backdrop 이미지나 초록 배경으로 대신한다.
+  - 끄려면 --no-3d 또는 환경변수 GAMEVIEWER_NO3D 를 둔다.
+
+[이미지 에셋]
   App/     WinForms 뷰어 (GDI+ 더블 버퍼). Render/ 는 System.Drawing 만 쓰는 렌더러
   Tests/   콘솔 테스트 (가짜 Gateway 왕복 포함)
   Tools/   RenderSnapshot - 서버/창 없이 데모 장면을 PNG 로 저장 (렌더러 확인용)

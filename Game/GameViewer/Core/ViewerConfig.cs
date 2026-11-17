@@ -1,4 +1,4 @@
-﻿//***************************************************************************
+//***************************************************************************
 // ViewerConfig.cs : 뷰어 실행 옵션. BotClient 와 같은 방식 — JSON 파일(--config) + 명령행(명령행이 우선).
 //***************************************************************************
 using System;
@@ -24,8 +24,8 @@ namespace GameViewer.Core
         public bool Auto = false;           // 시작하자마자 자동 전투
         public bool SkipHeroSelect = false; // true 면 시작 화면의 영웅 선택을 건너뛰고 HeroId 로 바로 접속한다
         public double PixelsPerUnit = 20;   // 화면 배율(월드 1 unit = N 픽셀)
-        public int WindowWidth = 1280;
-        public int WindowHeight = 800;
+        public int WindowWidth = 1600;
+        public int WindowHeight = 960;
         public int ConnectTimeoutMs = 3000;
         public int MoveIntervalMs = 120;    // 이동 요청 최소 간격
         public bool HostPortExplicit = false;   // 명령행으로 --host/--port 를 줬는가(그러면 마지막으로 고른 서버를 쓰지 않는다)

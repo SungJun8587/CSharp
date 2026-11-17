@@ -1,10 +1,22 @@
 @ECHO OFF
-Bin\Release\Game.ZoneServer.exe --config "Config\zoneserver_config.json" %*
+chcp 65001 >nul
+CD /D "%~dp0"
+SET EXE=Bin\Release\Game.ZoneServer.exe
+IF NOT EXIST "%EXE%" SET EXE=Bin\Debug\Game.ZoneServer.exe
+IF NOT EXIST "%EXE%" (
+    ECHO [ZoneServer] Game.ZoneServer.exe not found in Bin\Release or Bin\Debug. Build Game.sln first.
+    PAUSE
+    EXIT /B 1
+)
+"%EXE%" --config "Config\zoneserver_config.json" %*
+SET RC=%ERRORLEVEL%
+ECHO.
+ECHO [ZoneServer] exit code=%RC%
 PAUSE
-EXIT /B
+EXIT /B %RC%
 
 :: ---- 아래는 설명(주석)이며 EXIT /B 이후라 실행되지 않는다. 한글 주석이 cmd 파싱에 영향을 주지 않도록 실행 줄 뒤에 둔다. ----
-:: ZoneServer.bat [옵션...]   (C# 서버: Game.sln을 Release로 빌드하면 Bin\AnyCPU\Release에 Game.ZoneServer.exe가 만들어진다)
+:: ZoneServer.bat [옵션...]   (C# 서버: Game.sln을 Release로 빌드하면 Bin\Release에 Game.ZoneServer.exe가 만들어진다)
 :: [설명]
 ::  - 존 하나를 호스팅하는 프로세스. Gateway의 존 서버 포트에 접속해 등록하고, 틱 루프로 이동/AOI/전투/몬스터 AI를 처리
 ::  - 필드/던전마다 zone-id를 다르게 해서 프로세스를 여러 개 띄운다(설정 파일을 공유하고 --zone-id만 바꿔도 됨). 예) ZoneServer.bat --zone-id 2

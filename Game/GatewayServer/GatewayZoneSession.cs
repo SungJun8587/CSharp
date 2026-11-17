@@ -2,7 +2,7 @@
 using System;
 using System.Threading;
 using Core.Net;
-using Game.Protocol;
+using Game.Generated;
 
 namespace Game.GatewayServer;
 

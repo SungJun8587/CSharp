@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Game.ZoneCommon</RootNamespace>
+    <AssemblyName>Game.ZoneCommon</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- XlsxConverter가 만든 서버 패킷 구조체. Generated 폴더에 두되 이 프로젝트에서 컴파일한다. -->
+    <Compile Include="../Generated/Packets.gen.cs" Link="Generated/Packets.gen.cs" />
+    <Compile Include="../Generated/ProtocolTypes.gen.cs" Link="Generated/ProtocolTypes.gen.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Generated/Game.Generated.csproj" />
+    <ProjectReference Include="../../../Library/Core/Net/Core.Net.csproj" />
+    <ProjectReference Include="../../../Library/Core/Util/Core.Util.csproj" />
+  </ItemGroup>
+
+</Project>

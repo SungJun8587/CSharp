@@ -1,7 +1,7 @@
 ﻿// GatewayServerConfig.cs : Gateway 실행 옵션과 설정 파일(gatewayserver_config.json).
 using Core.Util;
-using Game.Protocol;
-using Game.ServerCommon;
+using Game.Generated;
+using Game.ZoneCommon;
 
 namespace Game.GatewayServer;
 
@@ -21,7 +21,7 @@ public sealed class GatewayOptions
 }
 
 /// <summary>gatewayserver_config.json 읽기/쓰기. C++ 설정 파일과 같은 키를 쓴다.</summary>
-public sealed class GatewayServerConfig : Game.ServerCommon.IServerConfig<GatewayOptions>
+public sealed class GatewayServerConfig : Game.ZoneCommon.IServerConfig<GatewayOptions>
 {
     public string ServerName = "GatewayServer";
     public int WorkerThreadCnt;                 // 쓰지 않는다(소켓 I/O는 .NET 스레드 풀). 키 호환용

@@ -2,7 +2,7 @@
 using System;
 using System.Net.Sockets;
 using Core.Net;
-using Game.Protocol;
+using Game.Generated;
 
 namespace Game.ZoneServer;
 

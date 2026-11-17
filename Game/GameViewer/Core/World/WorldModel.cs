@@ -153,6 +153,7 @@ namespace GameViewer.Core.World
             if (e == null) return "?";
             if (e.IsMonster) return Data.MonsterName(e.TemplateId);
             if (e.IsPlayer) return e.Id == SelfId ? "나(" + Data.HeroName(e.TemplateId) + ")" : Data.HeroName(e.TemplateId) + "#" + e.Id;
+            if (e.IsItem) return "아이템 " + e.TemplateId + " x" + e.MaxHp;      // 지면 아이템: templateId=아이템 ID, MaxHp=수량
             return "#" + e.Id;
         }
 

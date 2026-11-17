@@ -8,6 +8,10 @@ namespace XlsxConverter
     /// <summary>값 표기 규칙과 숫자 읽기.</summary>
     public static class ValueFormat
     {
+        // 셀마다 부르는 곳에서 배열을 새로 만들지 않도록 한 번만 만든다.
+        private static readonly char[] ExpMarks = { 'E', 'e' };
+        private static readonly char[] NonIntegerMarks = { '.', 'e', 'E' };
+
         /// <summary>
         /// double을 Python repr(float)과 같은 최단 왕복 표기로 바꿉니다. (예: 5.0, 0.1, 1e-07, 1.5e+20)
         /// 정수 값도 ".0"을 붙여 실수임을 드러낸다.
@@ -19,7 +23,7 @@ namespace XlsxConverter
             // .NET의 "R"은 최단 왕복 표기다. 가수 자릿수와 10의 지수로 풀어 다시 조립한다.
             string r = Math.Abs(v).ToString("R", CultureInfo.InvariantCulture);
             int exp = 0;
-            int e = r.IndexOfAny(new[] { 'E', 'e' });
+            int e = r.IndexOfAny(ExpMarks);
             string mant = r;
             if (e >= 0)
             {
@@ -66,7 +70,7 @@ namespace XlsxConverter
         {
             if (c.Kind == CellKind.Bool) return c.Boolean ? "True" : "False";
             if (c.Kind == CellKind.Str) return c.Text;
-            if (c.Text.IndexOfAny(new[] { '.', 'e', 'E' }) < 0) return c.Text;
+            if (c.Text.IndexOfAny(NonIntegerMarks) < 0) return c.Text;
             if (!TextUtil.ParseDouble(c.Text, out double v)) v = 0;
             return FloatRepr(v);
         }

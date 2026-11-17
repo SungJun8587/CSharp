@@ -189,6 +189,20 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 엔티티
 
+        /// <summary>지면 아이템(드롭): 영웅/몬스터 몸 대신 바닥에서 살짝 떠서 반짝이는 보석 모양으로 그린다.</summary>
+        private void DrawGroundItem(Graphics g, Entity e, ViewState v, long now, float sx, float sy)
+        {
+            float r = v.Px(0.55f);
+            float bob = (float)Math.Sin(now / 260.0 + (e.Id & 15)) * v.Px(0.12f);
+            float cy = sy - v.Px(0.55f) + bob;
+            g.FillEllipse(_res.Brush(70, 0, 0, 0), sx - r * 1.1f, sy - r * 0.28f, r * 2.2f, r * 0.56f);
+            _fx.Glow(g, Color.FromArgb(255, 235, 140), sx, cy, r * 2.4f, r * 2.4f, 0.55f + 0.2f * (float)Math.Sin(now / 200.0));
+            PointF[] d = new PointF[] { new PointF(sx, cy - r), new PointF(sx + r * 0.8f, cy), new PointF(sx, cy + r), new PointF(sx - r * 0.8f, cy) };
+            g.FillPolygon(_res.Brush(255, 255, 214, 90), d);
+            g.DrawPolygon(_res.Pen(255, 140, 90, 20, 1.5f), d);
+            if (e.Id == v.SelectedId) g.DrawEllipse(_res.Pen(210, 255, 232, 130, 2f), sx - r * 1.3f, sy - r * 0.5f, r * 2.6f, r);
+        }
+
         private void DrawEntity(Graphics g, ViewerSession s, Entity e, ViewState v, long now)
         {
             float x, y; e.PosAt(now, out x, out y);
@@ -197,6 +211,8 @@ namespace GameViewer.App.Render
             float pr = v.Px(1.0f);
             float reach = v.Px(Math.Max(look.H, look.HalfW)) + 40;
             if (sx < -reach || sy < -40 || sx > v.Width + reach || sy > v.Height + reach) return;
+
+            if (e.IsItem) { DrawGroundItem(g, e, v, now, sx, sy); return; }
 
             bool self = e.Id == s.World.SelfId;
             bool selected = e.Id == v.SelectedId;
@@ -645,7 +661,7 @@ namespace GameViewer.App.Render
                 bool self = e.Id == w.SelfId;
                 bool selected = e.Id == v.SelectedId;
                 string name = w.NameOf(e);
-                Color nameColor = self ? Color.FromArgb(255, 235, 120) : (e.IsMonster ? Color.FromArgb(255, 200, 200) : Color.FromArgb(190, 225, 255));
+                Color nameColor = e.IsItem ? Color.FromArgb(255, 240, 150) : self ? Color.FromArgb(255, 235, 120) : (e.IsMonster ? Color.FromArgb(255, 200, 200) : Color.FromArgb(190, 225, 255));
                 if (e.IsBoss) { nameColor = Color.FromArgb(255, 214, 90); name = "★ " + name; }
                 if (selected) nameColor = Color.White;
                 if (e.Dead) nameColor = Color.FromArgb(160, 170, 170, 170);
@@ -653,7 +669,7 @@ namespace GameViewer.App.Render
                 float barW = e.IsBoss ? Math.Max(80f, v.Px(5f)) : Math.Max(34f, v.Px(2.6f)), barH = e.IsBoss ? 8f : 7f;
                 _res.OutlinedText(g, name, e.IsBoss ? _res.Bold : _res.Small, nameColor, sx, sy - 12, _res.Center);
 
-                if (e.MaxHp > 0 && !e.Dead && !e.IsBoss)       // 보스는 화면 위쪽의 큰 체력바가 대신한다
+                if (e.MaxHp > 0 && !e.Dead && !e.IsBoss && !e.IsItem)       // 보스는 화면 위쪽의 큰 체력바가 대신한다
                 {
                     float ratio = Math.Max(0f, Math.Min(1f, e.Hp / (float)e.MaxHp));
                     float ghost = Math.Max(ratio, Math.Min(1f, e.GhostHp / (float)e.MaxHp));

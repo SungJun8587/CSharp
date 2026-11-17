@@ -20,10 +20,10 @@ Game/
   Config/                  gatewayserver_config.json, zoneserver_config.json
   GameData/                기획 엑셀과 XlsxConverter가 만든 JSON (Hero, Monster, Spawn, Skill, Block 등)
   GameCommon/
-    Generated/             Game.Data      생성 행/테이블 클래스(*.gen.cs), GameDataJson
-    ZoneCommon/            Game.Protocol  Packets.gen.cs, ProtocolTypes.gen.cs, ZonePacket.cs
+    Generated/             Game.Generated 생성 행/테이블 클래스(*.gen.cs). 생성 파일만 둔다. Packets.gen.cs, ProtocolTypes.gen.cs는 Game.ZoneCommon이 컴파일
+    ZoneCommon/            Game.ZoneCommon  JsonConfig, MainArgs, PacketSend
+                           ZonePacket.cs (IPacket, PacketIO, 중계 패킷)
     ZoneCore/              Game.ZoneCore  존 틱 루프, AOI, 전투, 차단 맵, 몬스터/보스
-  ServerCommon/            Game.ServerCommon  JsonConfig, MainArgs, PacketSend
   GatewayServer/           Game.GatewayServer
   ZoneServer/              Game.ZoneServer
   Game.Tests/              테스트 러너
@@ -37,9 +37,9 @@ Game/
 | 프로젝트 | 내용 |
 |---|---|
 | Game.Data | XlsxConverter가 만든 행/테이블 클래스, `GameDataJson`(엄격 JSON 로더) |
-| Game.Protocol | 패킷 구조체(와이어 크기는 C++ static_assert와 동일), `ZonePacket` 중계 패킷 |
+| Game.Generated | XlsxConverter가 만든 행/테이블 클래스, 상수/열거형 |
 | Game.ZoneCore | 존 틱 루프, AOI, 이동/공격/스킬/상태효과/투사체, 차단 맵(A*), 몬스터 AI, 보스 |
-| Game.ServerCommon | JSON 설정 읽기/쓰기, 명령행 인자 |
+| Game.ZoneCommon | JSON 설정, 명령행 인자, 패킷 전송, `IPacket`/`PacketIO`/`ZonePacket`, 생성된 패킷 구조체(와이어 크기는 C++ static_assert와 동일) |
 | Game.ZoneServer | 전투 존 + Gateway 접속(등록/하트비트/재접속/입장·퇴장·중계) |
 | Game.GatewayServer | 클라이언트/존 서버 이중 리슨, 라우터, 정원 관리, 하트비트 감시 |
 | Game.Tests | 콘솔 러너(단위 + 소켓 E2E) |

@@ -11,4 +11,37 @@
     <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- 패킷 구조체는 IPacket, PacketIO(ZoneCommon/ZonePacket.cs)가 필요해서 Game.ZoneCommon 프로젝트가 컴파일한다. -->
+    <Compile Remove="Packets.gen.cs" />
+    <Compile Remove="ProtocolTypes.gen.cs" />
+  </ItemGroup>
+
+  <!-- 변환기를 먼저 빌드하도록 순서만 건다(어셈블리는 참조하지 않는다).
+       전체 다시 빌드에서는 모든 프로젝트가 같은 Bin 폴더를 쓰므로, 이 순서가 없으면 변환기 exe가 지워지거나 쓰이는 중에 아래 이벤트가 실행될 수 있다. -->
+  <ItemGroup Condition="'$(SkipXlsxConverterBuild)' != 'true'">
+    <ProjectReference Include="../../XlsxConverter/XlsxConverter.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- 빌드 전 XlsxConverter 실행: 이 저장소의 GameData(엑셀)로 이 폴더의 생성 코드만 만든다(증분 실행이라 엑셀이 그대로면 바로 끝난다).
+       C++ 저장소 쪽 출력(헤더, 뷰어 프로토콜, 크기 목록)은 XlsxConverter.bat이 만든다. 기본값은 이 프로젝트 기준 Game 폴더다. -->
+  <PropertyGroup>
+    <CsGameDir Condition="'$(CsGameDir)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..'))</CsGameDir>
+    <XlsxConverterExe Condition="'$(XlsxConverterExe)' == ''">$(CsGameDir)\Bin\$(Configuration)\XlsxConverter.exe</XlsxConverterExe>
+  </PropertyGroup>
+
+  <Target Name="GenerateFromXlsx" BeforeTargets="BeforeBuild" Condition="Exists('$(XlsxConverterExe)')">
+    <Exec Command="&quot;$(XlsxConverterExe)&quot; &quot;$(CsGameDir)\GameData&quot; --out &quot;$(CsGameDir)\GameData&quot; --cs-gen-out &quot;$(MSBuildProjectDirectory)&quot; --cs-gen-namespace Game.Generated --incremental" />
+
+    <!-- 파일 목록은 프로젝트를 읽을 때 한 번 정해지므로, 아직 생성 파일이 없던 첫 빌드에서는 컴파일 목록이 비어 있다.
+         변환기가 끝난 뒤 목록을 다시 채운다. (Packets.gen.cs, ProtocolTypes.gen.cs는 Game.ZoneCommon이 컴파일한다) -->
+    <ItemGroup>
+      <Compile Remove="*.gen.cs" />
+      <Compile Include="*.gen.cs" Exclude="Packets.gen.cs;ProtocolTypes.gen.cs" />
+    </ItemGroup>
+  </Target>
+  <Target Name="WarnNoXlsxConverter" BeforeTargets="BeforeBuild" Condition="!Exists('$(XlsxConverterExe)')">
+    <Warning Code="XLSXCONV" Text="XlsxConverter.exe를 찾지 못해 생성 코드를 갱신하지 않았습니다: $(XlsxConverterExe)" />
+  </Target>
+
 </Project>

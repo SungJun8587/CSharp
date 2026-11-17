@@ -1,10 +1,22 @@
 @ECHO OFF
-Bin\Release\Game.GatewayServer.exe --config "Config\gatewayserver_config.json" %*
+chcp 65001 >nul
+CD /D "%~dp0"
+SET EXE=Bin\Release\Game.GatewayServer.exe
+IF NOT EXIST "%EXE%" SET EXE=Bin\Debug\Game.GatewayServer.exe
+IF NOT EXIST "%EXE%" (
+    ECHO [GatewayServer] Game.GatewayServer.exe not found in Bin\Release or Bin\Debug. Build Game.sln first.
+    PAUSE
+    EXIT /B 1
+)
+"%EXE%" --config "Config\gatewayserver_config.json" %*
+SET RC=%ERRORLEVEL%
+ECHO.
+ECHO [GatewayServer] exit code=%RC%
 PAUSE
-EXIT /B
+EXIT /B %RC%
 
 :: ---- 아래는 설명(주석)이며 EXIT /B 이후라 실행되지 않는다. 한글 주석이 cmd 파싱에 영향을 주지 않도록 실행 줄 뒤에 둔다. ----
-:: GatewayServer.bat [옵션...]   (C# 서버: Game.sln을 Release로 빌드하면 Bin\AnyCPU\Release에 Game.GatewayServer.exe가 만들어진다)
+:: GatewayServer.bat [옵션...]   (C# 서버: Game.sln을 Release로 빌드하면 Bin\Release에 Game.GatewayServer.exe가 만들어진다)
 :: [설명]
 ::  - 클라이언트(봇 포함)가 접속하는 클라이언트 포트와, 존 서버가 접속하는 존 서버 포트를 열고
 ::    클라이언트 패킷(2000번대)을 해석 없이 현재 존으로 중계. 존 서버 하트비트가 끊기면 해당 존의 클라이언트에 존 소실을 알림
