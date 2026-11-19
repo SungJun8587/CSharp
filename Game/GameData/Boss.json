@@ -2,17 +2,31 @@
   "Boss": [
     {
       "Id": 1,
-      "MonsterId": 9,
-      "Name": "오우거",
+      "MonsterId": 122,
+      "Name": "거대 골렘",
       "EnrageAfterMs": 180000,
       "EnrageStatusId": 5
     },
     {
       "Id": 2,
-      "MonsterId": 10,
+      "MonsterId": 101,
       "Name": "왕 슬라임",
       "EnrageAfterMs": 0,
       "EnrageStatusId": 0
+    },
+    {
+      "Id": 3,
+      "MonsterId": 108,
+      "Name": "거미 여왕",
+      "EnrageAfterMs": 0,
+      "EnrageStatusId": 0
+    },
+    {
+      "Id": 4,
+      "MonsterId": 121,
+      "Name": "설인 왕",
+      "EnrageAfterMs": 150000,
+      "EnrageStatusId": 5
     }
   ]
 }

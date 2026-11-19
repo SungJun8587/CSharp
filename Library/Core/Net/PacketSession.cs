@@ -36,12 +36,14 @@ public abstract class PacketSession : Session
         : base(recvBufferSize)
     {
         // 수신 버퍼가 최대 패킷(ushort 한계)보다 작으면 큰 패킷이 올 때 이유 없이 끊기므로 생성 시점에 막는다.
+        // 이 세션이 받아들이는 최대 패킷(MaxRecvPacketSize, 재정의는 상수여야 한다)만 들어가면 된다. 작은 버퍼를 쓰면 세션이 많을 때 메모리가 줄고 풀 반복 대여도 없어진다.
+        int maxPacket = MaxRecvPacketSize;
         int capacity = RecvBuffer.ComputeCapacity(recvBufferSize);
-        if (capacity < PacketHeader.MaxPacketSize)
+        if (capacity < maxPacket)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(recvBufferSize),
-                $"수신 버퍼 용량({capacity})이 최대 패킷 크기 {PacketHeader.MaxPacketSize} 보다 작습니다.");
+                $"수신 버퍼 용량({capacity})이 최대 패킷 크기 {maxPacket} 보다 작습니다.");
         }
     }
 

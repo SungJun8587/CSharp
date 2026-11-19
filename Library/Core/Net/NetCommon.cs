@@ -14,6 +14,10 @@ public static class NetConstants
     /// <summary>수신 버퍼 전체 용량 = 단위 크기 * 이 값.</summary>
     public const int RecvBufferCount = 10;
 
+    /// <summary>이 용량 이하의 수신 버퍼는 데이터를 다 처리해도 풀에 돌려주지 않고 세션이 계속 쥔다. 패킷마다 대여/반납을 반복하면
+    /// 풀 용량이 모자라 큰 배열을 새로 만들게 되고(LOH, gen2 GC 유발), 이 크기는 세션 수천 개가 쥐어도 부담이 작다. 더 큰 버퍼는 비면 반납한다.</summary>
+    public const int RecvKeepCapacity = 64 * 1024;
+
     /// <summary>송신 청크 크기. LOH(85,000바이트) 진입을 피하기 위해 64KB로 고정.</summary>
     public const int SendChunkSize = 64 * 1024;
 
@@ -66,7 +70,7 @@ public enum CloseReason
 /// <summary>
 /// 서버/클라이언트 서비스 공통 설정.
 /// </summary>
-public sealed class NetServiceOptions
+public sealed class NetServiceOptions : ISocketServiceOptions
 {
     /// <summary>동시 최대 세션 수. 초과 접속은 즉시 닫는다.</summary>
     public int MaxSessionCount { get; init; } = 1000;

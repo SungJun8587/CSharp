@@ -39,8 +39,11 @@ public static class RedisConst
     /// <summary>미완성 RESP 스트림의 최대 누적 크기.</summary>
     public const int MaxPendingBufferSize = 16 * 1024 * 1024;
 
-    /// <summary>하나의 배열이 가질 수 있는 최대 원소 수 — 악의적/손상된 스트림의 대량 할당 시도를 막는다.</summary>
-    public const long MaxArrayElements = 4096;
+    /// <summary>
+    /// 하나의 배열이 가질 수 있는 최대 원소 수. 원소는 최소 4바이트(":0\r\n")이므로 누적 상한 안에 들어올 수 있는 개수가 곧 한계다.
+    /// 선언된 개수만큼 미리 할당하지 않고(파서는 받은 바이트로 가능한 개수까지만 잡는다) 누적 상한이 있어서 큰 값을 선언하는 것만으로는 메모리를 쓰게 할 수 없다.
+    /// </summary>
+    public const long MaxArrayElements = MaxPendingBufferSize / 4;
 
     /// <summary>중첩 배열의 최대 재귀 깊이 — 스택 오버플로 방지.</summary>
     public const int MaxParseDepth = 64;
@@ -62,9 +65,6 @@ public static class RedisConst
 
     /// <summary>접속(이름 해석 포함) 기본 제한 시간.</summary>
     public const int ConnectTimeoutMs = 3000;
-
-    /// <summary>동시에 살아 있을 수 있는 이름 해석 작업 수의 프로세스 전체 상한.</summary>
-    public const int MaxActiveResolvers = 4;
 
     // ---- 커넥션 풀 (RedisConnectionPool) ----
 

@@ -14,6 +14,7 @@ namespace Game.ZoneCommon;
 public sealed class MainArgs
 {
     private readonly Dictionary<string, string> _values = new Dictionary<string, string>(StringComparer.Ordinal);
+    private readonly HashSet<string> _used = new HashSet<string>(StringComparer.Ordinal);
 
     public MainArgs(string[] args)
     {
@@ -34,18 +35,43 @@ public sealed class MainArgs
         }
     }
 
-    public string GetString(string key, string defaultValue) => _values.TryGetValue(key, out string? v) ? v : defaultValue;
+    /// <summary>읽기 함수가 한 번이라도 조회한 키를 기록한다(오타 난 옵션을 찾아내기 위해).</summary>
+    private bool TryGet(string key, out string value)
+    {
+        _used.Add(key);
+        return _values.TryGetValue(key, out value!);
+    }
+
+    /// <summary>
+    /// 주어졌지만 어떤 읽기 함수도 조회하지 않은 옵션(오타 등)을 경고로 남긴다. 옵션을 모두 읽은 뒤에 부른다.
+    /// 경고만 하고 실행은 막지 않는다(서버 구동 스크립트가 쓰는 보조 인자를 깨지 않기 위해).
+    /// </summary>
+    /// <returns>알 수 없는 옵션 수</returns>
+    public int WarnUnknown()
+    {
+        int n = 0;
+        foreach (string key in _values.Keys)
+        {
+            if (_used.Contains(key))
+                continue;
+            ++n;
+            LogManager.Warning("[Args] unknown option ignored. --{0}", key);
+        }
+        return n;
+    }
+
+    public string GetString(string key, string defaultValue) => TryGet(key, out string v) ? v : defaultValue;
 
     public bool ReadString(string key, ref string value)
     {
-        if (_values.TryGetValue(key, out string? v))
+        if (TryGet(key, out string v))
             value = v;
         return true;
     }
 
     public bool ReadUInt(string key, ref uint value, uint min, uint max)
     {
-        if (!_values.TryGetValue(key, out string? s))
+        if (!TryGet(key, out string s))
             return true;
         if (!uint.TryParse(s, NumberStyles.None, CultureInfo.InvariantCulture, out uint v) || v < min || v > max)
         {
@@ -58,7 +84,7 @@ public sealed class MainArgs
 
     public bool ReadInt(string key, ref int value, int min, int max)
     {
-        if (!_values.TryGetValue(key, out string? s))
+        if (!TryGet(key, out string s))
             return true;
         if (!int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) || v < min || v > max)
         {
@@ -80,7 +106,7 @@ public sealed class MainArgs
 
     public bool ReadFloat(string key, ref float value, double min, double max)
     {
-        if (!_values.TryGetValue(key, out string? s))
+        if (!TryGet(key, out string s))
             return true;
         if (!double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out double v) || !double.IsFinite(v) || v < min || v > max)
         {
@@ -110,30 +136,15 @@ public interface IServerHost : IDisposable
 /// <summary>서버 진입점 공용 도우미: Ctrl+C 종료 플래그, --dump-config 처리, 공통 실행 흐름.</summary>
 public static class ServerMain
 {
-    private static int s_exit;
-
-    /// <summary>종료 요청(Ctrl+C 등)이 들어왔는지. 실제 정지(Stop)는 메인 스레드에서 한다.</summary>
-    public static bool ShouldExit => Volatile.Read(ref s_exit) != 0;
-
-    /// <summary>Ctrl+C / SIGTERM 을 종료 플래그로 연결한다.</summary>
-    public static void Startup()
-    {
-        Console.CancelKeyPress += (_, e) =>
-        {
-            e.Cancel = true;
-            Volatile.Write(ref s_exit, 1);
-        };
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => Volatile.Write(ref s_exit, 1);
-    }
-
     /// <summary>
-    /// 서버 실행의 공통 흐름: 종료 플래그 연결, --dump-config, 설정 파일 읽기, 명령행 덮어쓰기, 시작, 종료 대기, 정지.
+    /// 서버 실행의 공통 흐름: --dump-config, 설정 파일 읽기, 명령행 덮어쓰기, 시작, 종료 신호 대기, 정지.
+    /// 종료 신호(Ctrl+C, SIGTERM, SIGQUIT)는 ShutdownCoordinator가 받아 host.Stop()을 한 번만 실행한다.
     /// </summary>
     /// <param name="defaultConfigFile">--config 가 없을 때 읽을 설정 파일</param>
     /// <param name="readArgs">명령행 값을 옵션에 반영한다. 형식/범위 오류가 있으면 false</param>
     /// <param name="start">서버를 만들어 시작하고 돌려준다. 실패하면 null(실패 로그는 이 함수가 남긴다)</param>
     /// <param name="pollAbort">실행 중 100ms마다 부른다. 문자열을 돌려주면 그 내용을 오류로 남기고 종료한다</param>
-    /// <returns>프로세스 종료 코드</returns>
+    /// <returns>프로세스 종료 코드. 종료 신호로 끝나면 0, 서버가 pollAbort 로 중단을 요청했거나 시작에 실패하면 -1</returns>
     public static int Run<TOptions>(
         string[] argv,
         string defaultConfigFile,
@@ -142,7 +153,8 @@ public static class ServerMain
         Func<TOptions, IServerHost?> start,
         Func<IServerHost, string?>? pollAbort = null)
     {
-        Startup();
+        using ShutdownCoordinator shutdown = new ShutdownCoordinator(StopTimeoutMs + 5_000);
+        shutdown.AttachProcessSignals();
         MainArgs args = new MainArgs(argv);
 
         // --dump-config=경로 : 기본값 설정 파일을 만들고 종료한다(기존 파일이 있으면 알 수 없는 키를 보존한 채 값만 갱신).
@@ -157,25 +169,35 @@ public static class ServerMain
         TOptions options = config.ToOptions();
         if (!readArgs(args, options))
             return -1;
+        args.WarnUnknown();
 
         using IServerHost? host = start(options);
         if (host == null)
             return -1;
 
-        while (!ShouldExit)
+        shutdown.Register("server-stop", host.Stop, order: 0, timeoutMs: StopTimeoutMs);
+
+        int exitCode = 0;
+        while (!shutdown.IsRequested)
         {
             string? abort = pollAbort?.Invoke(host);
             if (abort != null)
             {
                 LogManager.Error("{0}", abort);
+                exitCode = -1;      // 서버가 스스로 중단을 요청한 경우는 실패로 끝낸다(프로세스 관리자가 정상 종료로 오인해 재시작을 멈추지 않게)
                 break;
             }
-            Thread.Sleep(100);
+            shutdown.WhenRequested.Wait(100);
         }
 
-        host.Stop();
-        return 0;
+        foreach (HookResult r in shutdown.Run())
+            if (r.Outcome != HookOutcome.Completed)
+                LogManager.Error("[Shutdown] {0} {1} ({2}ms) {3}", r.Name, r.Outcome, r.ElapsedMs, r.Error?.Message ?? string.Empty);
+        return exitCode;
     }
+
+    /// <summary>host.Stop()에 주는 시간 제한. 넘으면 기다리지 않고 프로세스를 끝낸다.</summary>
+    private const int StopTimeoutMs = 20_000;
 
     /// <summary>--dump-config=경로 가 있으면 save(경로)를 호출해 기본값 템플릿을 저장한다.</summary>
     /// <returns>--dump-config가 주어져 처리했으면 true (exitCode로 종료한다)</returns>

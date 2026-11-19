@@ -38,4 +38,7 @@ public sealed class Inventory
         _items[itemId] = total;
         return true;
     }
+
+    /// <summary>보유 중인 (아이템 ID, 수량) 목록의 복사본. 존 이동/재접속 때 상태를 넘기는 데 쓴다.</summary>
+    public List<KeyValuePair<uint, uint>> ToList() => new List<KeyValuePair<uint, uint>>(_items);
 }

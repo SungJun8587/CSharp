@@ -29,6 +29,29 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
     private readonly ConcurrentDictionary<ulong, GatewayClientSession> _clients = new ConcurrentDictionary<ulong, GatewayClientSession>();      // 클라이언트 세션 ID -> 세션
     private readonly ConcurrentDictionary<ulong, ulong> _chars = new ConcurrentDictionary<ulong, ulong>();    // 로그인 중인 캐릭터 ID -> 클라이언트 세션 ID (중복 로그인 차단)
     private readonly object _maintenanceLock = new object();
+
+    // 존 이동/재접속 상태 유지. 존 서버가 플레이어가 떠날 때 보내는 상태(ZoneStateSave)를 잠시 보관했다가 같은 캐릭터의 다음 입장 직전에 돌려준다.
+    private const long StateTtlMs = 120000;         // 보관 시간: 이 안에 다시 입장하면 체력/가방/관문 도착 지점이 이어진다
+    private const long SaveWaitMs = 2000;           // 떠난 존의 상태가 도착하기를 기다리는 최대 시간(그 뒤엔 상태 없이 입장)
+    private readonly ConcurrentDictionary<ulong, StoredState> _states = new ConcurrentDictionary<ulong, StoredState>();
+    private readonly object _travelLock = new object();
+    private readonly Dictionary<ulong, long> _savePending = new Dictionary<ulong, long>();             // 캐릭터 ID -> 상태를 기다리는 마감 시각(TickCount64). _travelLock으로 보호
+    private readonly Dictionary<ulong, ParkedEnter> _parkedEnters = new Dictionary<ulong, ParkedEnter>();   // 상태를 기다리느라 보류된 입장 요청. _travelLock으로 보호
+
+    private sealed class StoredState
+    {
+        public readonly PlayerState State;
+        public readonly long ExpireMs;
+        public StoredState(PlayerState state, long expireMs) { State = state; ExpireMs = expireMs; }
+    }
+
+    private sealed class ParkedEnter
+    {
+        public readonly GatewayClientSession Client;
+        public readonly uint ZoneId;
+        public readonly uint HeroId;
+        public ParkedEnter(GatewayClientSession client, uint zoneId, uint heroId) { Client = client; ZoneId = zoneId; HeroId = heroId; }
+    }
     private GatewayOptions _options = new GatewayOptions();
     private ServerService? _clientService;
     private ServerService? _zoneService;
@@ -122,6 +145,10 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
     internal void OnClientDisconnected(GatewayClientSession session)
     {
         DetachFromZone(session);
+        if (session.IsLoggedIn)
+            lock (_travelLock)
+                if (_parkedEnters.TryGetValue(session.CharId, out ParkedEnter? pe) && ReferenceEquals(pe.Client, session))
+                    _parkedEnters.Remove(session.CharId);      // 끊긴 클라이언트의 보류 입장은 바로 버린다(저장 대기 자체는 상태 수신/마감 때 풀린다)
         ulong sessionId = session.ClientSessionId;
         if (session.IsLoggedIn)
             _chars.TryRemove(new KeyValuePair<ulong, ulong>(session.CharId, sessionId));
@@ -134,7 +161,7 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
     {
         if (!client.AllowPacket(_options.ClientMaxPacketsPerSec))
         {
-            LogManager.Warning("[GatewayServerMain] client packet rate exceeded. sessionId={0}", client.ClientSessionId);
+            LogThrottle.Warning("gw.rate-exceeded", 2000, "[GatewayServerMain] client packet rate exceeded. sessionId={0}", client.ClientSessionId);
             return false;
         }
 
@@ -148,7 +175,7 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
             case GatewayPacketType.GwEnterZoneReq: return HandleEnterZone(client, packet);
             case GatewayPacketType.GwLeaveZoneReq: return HandleLeaveZone(client);
             default:
-                LogManager.Error("[GatewayServerMain] unknown client packet type: {0}", type);
+                LogThrottle.Error("gw.unknown-client-packet", 5000, "[GatewayServerMain] unknown client packet type: {0}", type);
                 return false;
         }
     }
@@ -169,10 +196,11 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
             case ZoneServerPacketType.ZoneHeartbeat: return HandleZoneHeartbeat(session, packet);
             case ZoneServerPacketType.ZoneEnterRes: return HandleZoneEnterRes(session, packet);
             case ZoneServerPacketType.ZoneKickNotify: return HandleZoneKick(session, packet);
+            case (ZoneServerPacketType)PlayerStatePacketType.Save: return HandleStateSave(packet);
             case ZoneServerPacketType.ZoneRelayToClient: return HandleRelayToClient(session, packet);
             case ZoneServerPacketType.ZoneRelayToClients: return HandleRelayToClients(session, packet);
             default:
-                LogManager.Error("[GatewayServerMain] unknown zone packet type: {0}", (ushort)type);
+                LogThrottle.Error("gw.unknown-zone-packet", 5000, "[GatewayServerMain] unknown zone packet type: {0}", (ushort)type);
                 return false;
         }
     }
@@ -271,10 +299,33 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
             SendEnterZoneRes(client, GatewayResult.ZoneNotFound, zoneId, 0.0f, 0.0f);
             return true;
         }
+        // 방금 떠난 존이 이 캐릭터의 상태를 아직 보내지 않았다면(존 이동/빠른 재접속) 도착할 때까지 입장을 잠시 보류한다.
+        // 그래야 체력/가방/도착 지점이 새 존의 입장에 실린다. 마감(SaveWaitMs)이 지나면 상태 없이 입장한다.
+        lock (_travelLock)
+        {
+            if (_savePending.ContainsKey(client.CharId))
+            {
+                if (_parkedEnters.ContainsKey(client.CharId))       // 이미 보류된 입장이 있으면 중복 요청은 거부(앞 요청이 응답 없이 사라지지 않게)
+                {
+                    SendEnterZoneRes(client, GatewayResult.AlreadyInZone, zoneId, 0.0f, 0.0f);
+                    return true;
+                }
+                _parkedEnters[client.CharId] = new ParkedEnter(client, zoneId, heroId);
+                return true;
+            }
+        }
+
+        EnterZoneCore(client, zoneId, heroId);
+        return true;
+    }
+
+    /// <summary>입장 요청의 본 처리: 존 점유 -> 노드/슬롯 확인 -> 보관 상태가 있으면 복원 패킷 -> 존 서버에 입장 요청. 결과는 클라이언트에 비동기로 간다.</summary>
+    private void EnterZoneCore(GatewayClientSession client, uint zoneId, uint heroId)
+    {
         if (!client.TryAssignZone(zoneId))
         {
             SendEnterZoneRes(client, GatewayResult.AlreadyInZone, zoneId, 0.0f, 0.0f);
-            return true;
+            return;
         }
 
         ZoneNode? node = _router.Find(zoneId);
@@ -283,18 +334,22 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
         {
             client.ClearZoneIf(zoneId);
             SendEnterZoneRes(client, GatewayResult.ZoneNotFound, zoneId, 0.0f, 0.0f);
-            return true;
+            return;
         }
 
         if (!ZoneRouter.TryReserveSlot(node))
         {
             client.ClearZoneIf(zoneId);
             SendEnterZoneRes(client, GatewayResult.ZoneFull, zoneId, 0.0f, 0.0f);
-            return true;
+            return;
         }
 
         // 입장한 노드와 존 서버 세션을 기억한다. 패킷 중계가 라우터 조회 없이 이 세션을 쓰고, 노드가 교체됐을 때 식별에도 쓴다.
         client.SetZoneRoute(node.Seq, zoneSession);
+
+        // 보관해 둔 상태는 입장 요청보다 먼저 보낸다(같은 연결이라 존에도 이 순서로 도착한다).
+        if (_states.TryRemove(client.CharId, out StoredState? stored) && stored.ExpireMs > Environment.TickCount64)
+            zoneSession.SendPacket(new ZoneStateRestore { State = stored.State });
 
         ZoneEnterReq enter = new ZoneEnterReq { ClientSessionId = client.ClientSessionId, CharId = client.CharId, HeroId = heroId };
         if (!zoneSession.SendPacket(enter))
@@ -303,7 +358,6 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
             client.ClearZoneIf(zoneId);
             SendEnterZoneRes(client, GatewayResult.ZoneError, zoneId, 0.0f, 0.0f);
         }
-        return true;
     }
 
     private bool HandleLeaveZone(GatewayClientSession client)
@@ -495,6 +549,72 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
         return true;
     }
 
+    /// <summary>존 서버가 보낸 떠난 플레이어의 상태를 보관하고, 그 상태를 기다리던 입장이 있으면 이어서 처리한다.</summary>
+    private bool HandleStateSave(ReadOnlySpan<byte> packet)
+    {
+        if (!ZoneStateSave.TryRead(packet, out ZoneStateSave save) || save.State.CharId == 0)
+            return false;
+
+        ulong charId = save.State.CharId;
+        _states[charId] = new StoredState(save.State, Environment.TickCount64 + StateTtlMs);
+        ReleaseSavePending(charId);
+        return true;
+    }
+
+    /// <summary>상태 대기를 풀고, 보류된 입장이 있으면 지금 처리한다(그 사이 연결이 끊겼으면 버린다).</summary>
+    private void ReleaseSavePending(ulong charId)
+    {
+        ParkedEnter? parked;
+        lock (_travelLock)
+        {
+            _savePending.Remove(charId);
+            _parkedEnters.Remove(charId, out parked);
+        }
+        RunParkedEnter(parked);
+    }
+
+    private void RunParkedEnter(ParkedEnter? parked)
+    {
+        if (parked == null)
+            return;
+        GatewayClientSession c = parked.Client;
+        if (!c.IsLoggedIn || !_clients.TryGetValue(c.ClientSessionId, out GatewayClientSession? alive) || !ReferenceEquals(alive, c))
+            return;
+        EnterZoneCore(c, parked.ZoneId, parked.HeroId);
+    }
+
+    /// <summary>상태가 끝내 오지 않은 대기(존 서버가 죽었거나 지연)를 마감 시각에 풀고, 오래된 보관 상태를 지운다.</summary>
+    internal void CheckTravel()
+    {
+        long now = Environment.TickCount64;
+        List<ParkedEnter>? release = null;
+        lock (_travelLock)
+        {
+            if (_savePending.Count != 0)
+            {
+                List<ulong>? expired = null;
+                foreach (KeyValuePair<ulong, long> kv in _savePending)
+                    if (kv.Value <= now)
+                        (expired ??= new List<ulong>()).Add(kv.Key);
+                if (expired != null)
+                    foreach (ulong id in expired)
+                    {
+                        _savePending.Remove(id);
+                        if (_parkedEnters.Remove(id, out ParkedEnter? p))
+                            (release ??= new List<ParkedEnter>()).Add(p);
+                    }
+            }
+        }
+        if (release != null)
+            foreach (ParkedEnter p in release)
+                RunParkedEnter(p);
+
+        if (!_states.IsEmpty)
+            foreach (KeyValuePair<ulong, StoredState> kv in _states)
+                if (kv.Value.ExpireMs <= now)
+                    _states.TryRemove(new KeyValuePair<ulong, StoredState>(kv.Key, kv.Value));
+    }
+
     // ------------------------------------------------------------------------------------------------
     // 도우미
     // ------------------------------------------------------------------------------------------------
@@ -526,7 +646,12 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
         ZoneRouter.ReleaseSlot(node);
 
         ZoneLeaveReq leave = new ZoneLeaveReq { ClientSessionId = client.ClientSessionId, CharId = client.CharId };
-        node.Session.SendPacket(leave);
+        if (node.Session.SendPacket(leave) && client.IsLoggedIn)
+        {
+            // 존이 떠나는 플레이어의 상태를 ZoneStateSave로 보내 준다. 도착하기 전의 다음 입장은 보류한다.
+            lock (_travelLock)
+                _savePending[client.CharId] = Environment.TickCount64 + SaveWaitMs;
+        }
         return zoneId;
     }
 
@@ -569,6 +694,7 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
                     return;
             }
             CheckZoneHeartbeats();
+            CheckTravel();
         }
     }
 

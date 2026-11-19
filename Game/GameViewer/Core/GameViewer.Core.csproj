@@ -1,12 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- UI/엔진 비의존 코어. netstandard2.0 이라 WinForms 앱, Unity(2018.4+), 콘솔 테스트 어디서든 참조할 수 있다. -->
+  <!-- UI/엔진 비의존 코어. 접속은 라이브러리 Core.Net 을 쓰므로 .NET 8 대상이다. -->
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
-    <LangVersion>7.3</LangVersion>
+    <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>GameViewer.Core</RootNamespace>
     <AssemblyName>GameViewer.Core</AssemblyName>
     <Nullable>disable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Library\Core\Net\Core.Net.csproj" />
+  </ItemGroup>
 
 </Project>

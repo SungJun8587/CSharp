@@ -63,7 +63,7 @@ namespace GameViewer.Tests
             for (int i = 1; i < ids.Count; ++i) T.Check(ids[i - 1] < ids[i], "ascending hero ids");
         }
 
-        /// <summary>Core 는 UI/엔진에 의존하지 않아야 Unity 에서 그대로 쓸 수 있다. 참조하는 어셈블리로 확인한다.</summary>
+        /// <summary>Core 는 UI/엔진에 의존하지 않아야 어느 호스트에서나 쓸 수 있다. 참조하는 어셈블리로 확인한다.</summary>
         public static void CoreHasNoUiDependency()
         {
             System.Reflection.Assembly core = typeof(GameData).Assembly;
@@ -144,6 +144,22 @@ namespace GameViewer.Tests
             T.Eq(7777, c.Port, "file value used"); T.Eq(2u, c.HeroId, "command line overrides file");
             File.Delete(tmp);
 
+            c = ViewerConfig.FromArgs(new string[] { "--port=7100", "--char-id", "5" }, out err, out exit);
+            T.Check(c != null && c.Port == 7100 && c.CharId == 5UL, "--name=value form");
+            c = ViewerConfig.FromArgs(new string[] { "--host", "--port", "7000" }, out err, out exit);
+            T.Check(c == null && err != null, "option as a value rejected");
+            File.WriteAllText(tmp, "{ // 주석\n \"Port\": 7001, }");
+            c = ViewerConfig.FromArgs(new string[] { "--config", tmp }, out err, out exit);
+            T.Check(c != null && c.Port == 7001, "config file allows comments and trailing commas: " + err);
+            File.WriteAllText(tmp, "{ \"Prot\": 7001 }");
+            c = ViewerConfig.FromArgs(new string[] { "--config", tmp }, out err, out exit);
+            T.Check(c == null && err != null, "unknown key in config file rejected");
+            File.Delete(tmp);
+
+            File.WriteAllText(tmp, "{ \"EntityScale\": 9 }");
+            c = ViewerConfig.FromArgs(new string[] { "--config", tmp }, out err, out exit);
+            T.Check(c == null && err != null, "EntityScale out of range rejected");
+            T.Near(1.15, new ViewerConfig().EntityScale, 1e-9, "default entity scale");
             File.WriteAllText(tmp, "{ \"Port\": 0 }");
             c = ViewerConfig.FromArgs(new string[] { "--config", tmp }, out err, out exit);
             T.Check(c == null, "bad port in file rejected");

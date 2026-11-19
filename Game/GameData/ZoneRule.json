@@ -1,0 +1,54 @@
+{
+  "ZoneRule": [
+    {
+      "ZoneId": 1,
+      "AllowPvp": false,
+      "AllowDuel": false
+    },
+    {
+      "ZoneId": 2,
+      "AllowPvp": false,
+      "AllowDuel": true
+    },
+    {
+      "ZoneId": 3,
+      "AllowPvp": false,
+      "AllowDuel": true
+    },
+    {
+      "ZoneId": 4,
+      "AllowPvp": false,
+      "AllowDuel": true
+    },
+    {
+      "ZoneId": 5,
+      "AllowPvp": false,
+      "AllowDuel": true
+    },
+    {
+      "ZoneId": 6,
+      "AllowPvp": false,
+      "AllowDuel": true
+    },
+    {
+      "ZoneId": 7,
+      "AllowPvp": false,
+      "AllowDuel": true
+    },
+    {
+      "ZoneId": 8,
+      "AllowPvp": false,
+      "AllowDuel": true
+    },
+    {
+      "ZoneId": 9,
+      "AllowPvp": false,
+      "AllowDuel": true
+    },
+    {
+      "ZoneId": 10,
+      "AllowPvp": true,
+      "AllowDuel": false
+    }
+  ]
+}

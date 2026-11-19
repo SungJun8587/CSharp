@@ -14,6 +14,10 @@ public static class TimeUtil
     /// 시스템 시계 조정과 무관하게 단조 증가하는 밀리초. 기준점은 임의이므로 같은 프로세스 안에서
     /// 두 값의 차이(타임아웃, 경과 시간)에만 쓴다.
     /// </summary>
+    /// <summary>a + b를 long 범위에서 넘치지 않게(상한에서 멈춤) 더한다. 만료 시각 = 지금 + 지속시간 계산용(b는 0 이상).</summary>
+    public static long AddSaturated(long a, long b)
+        => b > 0 && a > long.MaxValue - b ? long.MaxValue : a + b;
+
     public static long MonotonicNowMillis() => TicksToMillis(Stopwatch.GetTimestamp(), Stopwatch.Frequency);
 
     /// <summary>

@@ -54,6 +54,8 @@ dotnet run --project GatewayServer -- --config=Config/gatewayserver_config.json
 dotnet run --project ZoneServer   -- --config=Config/zoneserver_config.json --zone-id=1
 ```
 
+Windows에서는 `ZoneServers_All.bat`이 존 1~10을 각각 새 창으로 엽니다(`ZoneServers_All.bat /G`는 Gateway를 먼저 엽니다). 일부만 열려면 `SET ZONES=1 2 6`을 먼저 지정합니다. 존 서버는 Gateway로 나가는 연결만 맺으므로 한 PC에서 여러 개를 띄워도 포트가 겹치지 않습니다.
+
 - 설정 파일 키와 명령행 옵션은 C++ 버전과 같습니다. `--dump-config=경로`로 기본값 파일을 만듭니다.
 - `GameDataDir`(기본 `GameData`)에 XlsxConverter가 만든 JSON(Hero/Monster/Spawn 필수, Skill/Status/HeroSkill/Boss*/Block/Drop 선택)을 두세요. 빈 문자열이면 데이터 없이(기본 영웅 1명, 몬스터 없음) 뜹니다.
 - Gateway는 세션당 초당 `ClientMaxPacketsPerSec`(기본 120, 0이면 제한 없음)를 넘는 클라이언트를 끊는다. 존 서버의 종류별 빈도 제한(`RequestGuard`) 합계보다 커야 한다.
@@ -66,7 +68,8 @@ dotnet run --project ZoneServer   -- --config=Config/zoneserver_config.json --zo
 - **밀치기/끌어당기기/속박**: `KnockbackDistance` 양수는 밀어내고 음수는 끌어당긴다(기준점은 Area면 중심, 아니면 시전자). 장애물에서 멈추고 끌어당기기는 `PullStopDistance`(1.0)에서 멈추며 보스는 면역이다. `Root` 상태는 이동만 막는다. 쫓던 몬스터는 포기하거나 집으로 순간이동하지 않고 풀릴 때까지 기다린다.
 - **드롭/줍기**: `Drop` 표(몬스터별 확률 1000분율, 수량 범위)로 몬스터가 죽을 때 지면 아이템 엔티티(`ItemIds.Base` 대역, 스폰 통지의 entityType=3, templateId=아이템 ID, hp=maxHp=수량)를 만든다. 처치자(플레이어)가 `DropOwnerMs` 동안 먼저 줍고 `DropLifetimeMs`가 지나면 사라진다. 존당 `MaxGroundItems`가 상한이고 소환 몬스터는 드롭하지 않는다. 가방(`Inventory`)은 메모리에만 있다(`MaxInventorySlots` 종류, 종류당 `MaxItemStack`).
 - **채팅**: `ZcChatReq`의 채널은 Say(내 시야 안 + 본인), Zone(존 전체, 플레이어마다 `ChatZoneCooldownMs` 쿨다운), Whisper(같은 존의 `targetId` + 본인 에코). 본문은 고정 128바이트 UTF-8 필드(한글 약 42자)이며 앞뒤 공백을 자르고, 비었거나 제어/서식 문자(줄바꿈, 제로 폭 공백, 방향 전환), 대체 문자(잘못된 UTF-8)가 있으면 `InvalidText`로 거부한다. 서버는 검증한 문자열을 다시 인코딩해 보내므로 클라이언트 바이트를 그대로 퍼뜨리지 않는다. 귓속말 대상이 없거나 자기 자신이거나 몬스터 ID여도 같은 `NoTarget`이라 존재 여부가 새지 않는다. 형식 위반(없는 채널, 잘못된 본문)은 위반 점수도 올리고, 채팅은 종류별 빈도 제한(2/s, 버스트 5)을 받는다. 보낸 사람 이름은 싣지 않는다(`senderId`만). 존을 넘는 채팅(월드/길드/파티)과 차단·금칙어는 아직 없다.
-- **요청 빈도 제한**: 종류별(`RequestKind`) 토큰 버킷(이동 20/s 버스트 40, 공격·스킬 8/s 버스트 16, 줍기 10/s 버스트 20, 핑 2/s 버스트 6)으로 넘치는 요청을 버리고 위반 점수를 쌓는다. 점수가 `ViolationLimit`(60)에 이르면 `ZoneKickNotify(RateLimited)`로 존에서 내보낸다(초당 5점 감소). 비정상 값(NaN/Inf, 크기 부족)은 가중치가 크다. `RequestGuardEnabled=false`로 끈다.
+- **PvP/결투**: 존별 규칙은 `GameData/ZoneRule.json`(World.xlsx의 `ZoneRule` 시트: `ZoneId`, `AllowPvp`, `AllowDuel`)에 둔다. `AllowPvp`가 켜진 존은 누구나 서로 공격할 수 있고(자유 PvP), 꺼진 존은 결투로만 싸운다. `AllowDuel`이 꺼진 존은 결투 신청을 `RejectNotAllowed`로 거부한다. 행이 없는 존은 zoneserver_config.json의 `AllowPvp`(기본 꺼짐)/`AllowDuel`(기본 켜짐)을 쓰고, 형식이 틀리거나 같은 존의 행이 둘이면 그 존 서버는 구동하지 않는다. 규칙은 존 서버를 시작할 때 한 번 읽으므로 바꾸면 그 존 서버를 다시 시작한다. 입장 직후 본인에게 `ZcDuelNotify(ZoneRules)`로 규칙을 알린다(`RemainMs` 비트 1 = 자유 PvP, 2 = 결투 가능). `AllowPvp`와 `AllowDuel`을 둘 다 끄면 플레이어끼리 싸울 수 없는 안전 존이다(몬스터 전투는 그대로). 현재 데이터는 존 1이 안전 존, 존 2~9가 결투만, 존 10이 자유 PvP다. `ZcDuelReq`(2030)로 신청(Request, 상대 `DuelRequestRange` 40 이내)·수락/거절(신청자 ID)·취소(Cancel)를 보내고, 서버는 본인과 상대에게만 `ZcDuelNotify`(2031)를 보낸다. 수락하면 3초 카운트다운 뒤 시작하며, 시작부터 끝까지 서로만 `CanAttack`이 참이다(기본 공격과 스킬 범위 공격 모두 같은 판정을 거치므로 피해·사거리·무적 처리는 몬스터 전투와 같다). 한쪽이 쓰러지거나(승자 통지) 기권, 상대가 존을 떠남, `DuelLeaveRange`(120) 밖으로 멀어짐, 제한 5분이 지나면 끝난다. 신청은 15초 안에 응답이 없으면 만료되고, 한 명은 동시에 결투/신청 하나만 가질 수 있다. 쓰러진 쪽은 기존 부활 정책을 따른다. 패킷은 Packet.xlsx가 아니라 `DuelPackets.cs`에 손으로 썼다. 결투 요청은 종류별 빈도 제한 2/s(버스트 4)를 받는다.
+- **요청 빈도 제한**: 종류별(`RequestKind`) 토큰 버킷(이동 20/s 버스트 40, 공격·스킬 8/s 버스트 16, 줍기 10/s 버스트 20, 핑 2/s 버스트 6, 채팅·결투 2/s)으로 넘치는 요청을 버리고 위반 점수를 쌓는다. 점수가 `ViolationLimit`(60)에 이르면 `ZoneKickNotify(RateLimited)`로 존에서 내보낸다(초당 5점 감소). 비정상 값(NaN/Inf, 크기 부족)은 가중치가 크다. `RequestGuardEnabled=false`로 끈다.
 - **지표**: `MetricsIntervalMs`(30000, 0이면 끔)마다 `[Metrics]` 한 줄을 남긴다. 인원/몬스터/지면 아이템 수, 틱 평균·최대와 지연 구간 분포(1ms·2ms·5ms·10ms·25ms·50ms 경계), 수신/송신/중계/팬아웃/버린 요청/비정상/추방/줍기 수.
 
 ## C++ 대비 차이
@@ -94,3 +97,20 @@ dotnet run --project ZoneServer   -- --config=Config/zoneserver_config.json --zo
 - Boss 표가 있으면 BossAction 표(비어 있어도)도 있어야 한다.
 - 스폰 중심은 장애물(Block) 안에 있으면 안 된다.
 `GameData/`는 이 조건을 맞춘 샘플이다.
+
+## 공용 유틸 사용 위치
+
+- 요청 빈도 제한(`ZoneServer/RequestGuard`): 종류별 `Core.Util.TokenBucket`.
+- Gateway 클라이언트 패킷 제한: `Core.Util.SlidingWindowCounter`(최근 1초 창).
+- 알 수 없는 패킷/속도 초과 로그: `Core.Util.LogThrottle`(같은 로그는 간격당 한 줄).
+- 종료 처리(`ServerMain.Run`): `Core.Util.ShutdownCoordinator`가 Ctrl+C·SIGTERM·SIGQUIT를 받아 `host.Stop()`을 한 번만 실행한다(제한 20초, 넘으면 기다리지 않고 종료). 실패/시간 초과는 로그로 남긴다.
+- 명령행(`MainArgs`): 읽기 함수가 조회한 키를 기록하고, 옵션을 모두 읽은 뒤 `WarnUnknown()`이 조회되지 않은 옵션(오타)을 경고한다. 실행은 막지 않는다.
+- 게이트웨이 재접속(`ZoneServerMain.LinkLoop`): `Core.Util.BackoffState`(500ms→5s 지수, 지터 250ms). 게이트웨이가 재시작될 때 여러 존 서버가 같은 순간에 몰리지 않게 한다. 지터를 포함해 상한 5초를 넘기지 않는다(상한에서는 지터가 없다). 백오프는 연결 완료가 아니라 등록 성공 때 되돌리므로, 연결만 받고 바로 끊는 게이트웨이에는 간격이 5초까지 늘어난다.
+- 반복될 수 있는 오류 로그(`Zone` 틱 단계 예외, 존 만원 입장 거절, 존 입력 큐 가득 참으로 인한 상태 복원/퇴장 누락, 몬스터 소환 실패): `LogThrottle`(키별 1초에 한 줄, 억제 횟수 표시).
+
+### 공용 유틸을 쓰지 않는 곳
+
+- `BlockMap` 경로 탐색: 희소 가중치 A*(노드 상한 8192, 칸 수 최대 6400만). `GridPathfinder`는 칸당 17바이트를 미리 잡는 밀집 배열이라 큰 맵에는 맞지 않는다. 작은 맵(수십만 칸 이하)에서만 대안이다.
+- 스킬 쿨다운·상태 효과: 존 논리 시간(`ulong` ms)과 `ref readyAtMs`, DoT/HoT 틱 따라잡기 로직이 이미 맞물려 있어 `CooldownSet`/`BuffTimerSet`으로 바꾸면 이득 없이 동작만 바뀐다.
+- `TimerHeap<T>`: `ulong` 타이머 ID, 지연 삭제(+압축), 논리 시간 기준 실행이 `Zone` 계약에 들어 있다. `MinHeap`은 BCL `PriorityQueue`보다 느려(약 2배) 바꿀 이유가 없다.
+- 난수(`Random`), `Environment.TickCount64`, Gateway 상태 맵, 설정 로더: 바꿔도 동작·성능 이득이 없어 그대로 둔다.

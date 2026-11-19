@@ -1,27 +1,5 @@
 @ECHO OFF
 chcp 65001 >nul
-CD /D "%~dp0"
-REM DATA: GameData folder read by the server (XlsxConverter output). Edit it if needed, e.g. SET DATA=D:\Game\GameData
-SET DATA=%~dp0..\GameData
-SET EXE=%~dp0Bin\Release\GameViewer.App.exe
-IF NOT EXIST "%EXE%" SET EXE=%~dp0..\Bin\Release\GameViewer.App.exe
-IF NOT EXIST "%EXE%" SET EXE=%~dp0Bin\Debug\GameViewer.App.exe
-IF NOT EXIST "%EXE%" SET EXE=%~dp0..\Bin\Debug\GameViewer.App.exe
-IF NOT EXIST "%EXE%" (
-    ECHO GameViewer.App.exe not found. Build GameViewer.sln first.
-    PAUSE
-    EXIT /B 1
-)
-"%EXE%" --config "%~dp0GameViewer.json" --data "%DATA%" %*
-SET RC=%ERRORLEVEL%
-IF NOT %RC%==0 (
-    ECHO.
-    ECHO [GameViewer] exit code=%RC%
-    PAUSE
-)
-EXIT /B %RC%
-
-:: ---- 아래는 설명(주석)이며 EXIT /B 이후라 실행되지 않는다. ----
 :: GameViewer.App.exe [옵션...]
 :: [설명]
 ::  - Gateway 클라이언트 포트에 접속해 로그인 -> 존 입장 후, 주변(AOI) 전투를 숲 필드 화면으로 보여주는 전투 뷰어
@@ -36,11 +14,20 @@ EXIT /B %RC%
 ::      --data <dir>          : GameData JSON 폴더(서버의 GameDataDir 와 같은 폴더, 기본 GameData)
 ::      --auto                : 접속하자마자 자동 전투
 ::      --skip-select         : 시작 화면의 영웅 선택을 건너뛰고 --hero 영웅으로 바로 시작
-::      --scale <n>           : 화면 배율 px/unit(기본 20)
+::      --scale <n>           : 화면 배율 px/unit(기본 24)
 ::      --width <n> --height <n> : 창 크기
 ::      --demo                : 서버 없이 로컬 시뮬레이션으로 실행(화면/조작 확인용)
 ::      --config <file>       : 설정 JSON 파일
 ::      --dump-config <file>  : 기본값 설정 파일 템플릿을 저장하고 종료
 ::  조작: 좌클릭 땅=이동/적=선택·추적공격, 우클릭 누른 채 이동, 1~9 스킬, Q 기본공격, Tab 대상 전환,
 ::        A 자동전투, F 시점고정, 휠 확대/축소, Space 내 위치, F5 재접속, F1 도움말, L 로그
-:: SET DATA 줄은 서버가 읽는 GameData 폴더(XlsxConverter 출력)로 고치세요. 예) SET DATA=D:\Game\GameData
+SET DATA=%~dp0..\GameData
+:: (위 줄) 서버가 읽는 GameData 폴더(XlsxConverter 출력)로 고치세요. 예) SET DATA=D:\Game\GameData
+SET EXE=%~dp0Bin\Release\GameViewer.App.exe
+IF NOT EXIST "%EXE%" SET EXE=%~dp0Bin\Debug\GameViewer.App.exe
+IF NOT EXIST "%EXE%" (
+    ECHO GameViewer.App.exe 가 없습니다. GameViewer.sln 을 먼저 빌드하세요.
+    PAUSE
+    EXIT /B 1
+)
+"%EXE%" --config "%~dp0GameViewer.json" --data "%DATA%" %*

@@ -3,6 +3,7 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading.Tasks;
 
 namespace Core.Net;
 
@@ -83,6 +84,32 @@ public static class SocketUtils
     /// <summary>SO_RCVBUF 설정.</summary>
     public static bool SetRecvBufferSize(Socket socket, int size)
         => TrySet(() => socket.ReceiveBufferSize = size);
+
+    /// <summary>
+    /// 연결된(또는 연결할) TCP 소켓에 서비스 공통 옵션을 적용한다. TCP/TLS 서비스가 같은 경로를 써서 옵션이 서로 어긋나지 않는다.
+    /// 개별 옵션이 플랫폼에서 지원되지 않아도 연결 자체는 쓸 수 있으므로 실패는 무시한다.
+    /// </summary>
+    /// <param name="socket">대상 소켓.</param>
+    /// <param name="noDelay">Nagle 비활성화 여부.</param>
+    /// <param name="keepAlive">true 이면 KeepAlive 를 켠다. FIN 없이 사라진 상대(전원 차단, 경로 단절)를 감지하는 유일한 수단이다.</param>
+    /// <param name="keepAliveTimeSec">유휴 후 첫 프로브까지 대기 시간(초).</param>
+    /// <param name="keepAliveIntervalSec">프로브 간격(초).</param>
+    /// <param name="sendBufferSize">0 이하이면 OS 기본값을 쓴다.</param>
+    /// <param name="recvBufferSize">0 이하이면 OS 기본값을 쓴다.</param>
+    public static void ConfigureTcp(Socket socket, bool noDelay, bool keepAlive, int keepAliveTimeSec, int keepAliveIntervalSec,
+        int sendBufferSize = 0, int recvBufferSize = 0)
+    {
+        SetNoDelay(socket, noDelay);
+
+        if (keepAlive)
+            SetKeepAlive(socket, true, keepAliveTimeSec, keepAliveIntervalSec);
+
+        if (sendBufferSize > 0)
+            SetSendBufferSize(socket, sendBufferSize);
+
+        if (recvBufferSize > 0)
+            SetRecvBufferSize(socket, recvBufferSize);
+    }
 
     /// <summary>TCP KeepAlive 설정.</summary>
     /// <param name="socket">대상 소켓.</param>
@@ -206,10 +233,16 @@ public readonly struct NetAddress
 
     /// <summary>
     /// IP 문자열 또는 호스트명을 해석해 주소를 만든다. 호스트명이면 IPv4를 우선한다.
+    /// host 가 null/공백이거나 포트가 범위(0~65535)를 벗어나거나 해석할 수 없는 이름이면 예외 없이 false 를 돌려준다.
+    /// 호스트명 해석은 동기 DNS 조회이므로 블로킹될 수 있다.
     /// </summary>
     public static bool TryCreate(string host, int port, out NetAddress address)
     {
         address = default;
+
+        // 빈 문자열을 DNS 에 넘기면 로컬 호스트의 주소로 해석돼 성공해 버린다. 설정이 비어 있는 경우를 성공으로 오인하지 않게 막는다.
+        if (string.IsNullOrWhiteSpace(host) || port < IPEndPoint.MinPort || port > IPEndPoint.MaxPort)
+            return false;
 
         if (IPAddress.TryParse(host, out IPAddress? ip))
         {
@@ -220,18 +253,31 @@ public readonly struct NetAddress
         try
         {
             IPAddress[] list = Dns.GetHostAddresses(host);
-            IPAddress? pick = list.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork)
-                              ?? list.FirstOrDefault();
+            IPAddress? pick = HostResolver.PickPreferred(list);
             if (pick == null)
                 return false;
 
             address = new NetAddress(new IPEndPoint(pick, port));
             return true;
         }
-        catch (SocketException)
+        catch (Exception e) when (e is SocketException || e is ArgumentException)
         {
+            // SocketException: 해석 실패. ArgumentException(ArgumentOutOfRange 포함): 255자를 넘는 이름 등 형식이 잘못된 호스트명.
             return false;
         }
+    }
+
+    /// <summary>
+    /// TryCreate 의 비동기 버전. 이름 해석에 제한 시간(<paramref name="timeoutMs"/>)을 두고, 동시 해석 수 상한(<see cref="HostResolver.MaxActiveResolvers"/>)을 따른다.
+    /// 실패 조건은 TryCreate 와 같고, 시간 초과·상한 초과도 실패(false)다.
+    /// </summary>
+    public static async Task<(bool Ok, NetAddress Address)> TryCreateAsync(string host, int port, int timeoutMs = 3000)
+    {
+        if (string.IsNullOrWhiteSpace(host) || port < IPEndPoint.MinPort || port > IPEndPoint.MaxPort)
+            return (false, default);
+
+        IPAddress? pick = HostResolver.PickPreferred(await HostResolver.ResolveAsync(host, timeoutMs).ConfigureAwait(false));
+        return pick == null ? (false, default) : (true, new NetAddress(new IPEndPoint(pick, port)));
     }
 
     public override string ToString() => EndPoint?.ToString() ?? string.Empty;

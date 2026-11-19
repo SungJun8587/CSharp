@@ -3,54 +3,54 @@
     {
       "Id": 1,
       "Name": "전사",
-      "MaxHp": 450,
-      "Attack": 12,
-      "Defense": 3,
+      "MaxHp": 4500,
+      "Attack": 60,
+      "Defense": 30,
       "AttackRange": 2.5,
       "AttackIntervalMs": 800,
       "Speed": 6.0,
-      "MaxMp": 100,
-      "HpRegen": 5,
-      "MpRegen": 8
+      "MaxMp": 300,
+      "HpRegen": 50,
+      "MpRegen": 24
     },
     {
       "Id": 2,
       "Name": "궁수",
-      "MaxHp": 300,
-      "Attack": 15,
-      "Defense": 1,
+      "MaxHp": 3000,
+      "Attack": 75,
+      "Defense": 10,
       "AttackRange": 12.0,
       "AttackIntervalMs": 1000,
       "Speed": 6.5,
-      "MaxMp": 80,
-      "HpRegen": 3,
-      "MpRegen": 10
+      "MaxMp": 240,
+      "HpRegen": 30,
+      "MpRegen": 30
     },
     {
       "Id": 3,
       "Name": "마법사",
-      "MaxHp": 240,
-      "Attack": 24,
-      "Defense": 0,
+      "MaxHp": 2400,
+      "Attack": 120,
+      "Defense": 5,
       "AttackRange": 8.0,
       "AttackIntervalMs": 1500,
       "Speed": 5.5,
-      "MaxMp": 150,
-      "HpRegen": 2,
-      "MpRegen": 12
+      "MaxMp": 450,
+      "HpRegen": 20,
+      "MpRegen": 36
     },
     {
       "Id": 4,
       "Name": "창술사",
-      "MaxHp": 360,
-      "Attack": 16,
-      "Defense": 2,
+      "MaxHp": 3600,
+      "Attack": 80,
+      "Defense": 20,
       "AttackRange": 3.6,
       "AttackIntervalMs": 800,
       "Speed": 6.5,
-      "MaxMp": 90,
-      "HpRegen": 4,
-      "MpRegen": 8
+      "MaxMp": 270,
+      "HpRegen": 40,
+      "MpRegen": 24
     }
   ]
 }

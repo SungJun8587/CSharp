@@ -66,37 +66,22 @@ namespace GameViewer.Core.Net
         private void Run(int idx, ServerEntry e)
         {
             ProbeResult r = new ProbeResult();
-            Socket s = null;
             try
             {
                 // 이름 해석(DNS)은 연결 시간에 넣지 않는다: 주소를 먼저 구하고 그 뒤부터 잰다
-                System.Net.IPAddress ip;
-                if (!System.Net.IPAddress.TryParse(e.Host, out ip))
+                var addr = global::Core.Net.NetAddress.TryCreateAsync(e.Host, e.Port, TimeoutMs).GetAwaiter().GetResult();
+                if (!addr.Ok) throw new SocketException((int)SocketError.HostNotFound);
+
+                using (Socket s = new Socket(addr.Address.EndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp))
+                using (CancellationTokenSource cts = new CancellationTokenSource(TimeoutMs))
                 {
-                    System.Net.IPAddress[] all = System.Net.Dns.GetHostAddresses(e.Host);
-                    ip = all.Length > 0 ? all[0] : null;
-                    for (int i = 0; i < all.Length; ++i) if (all[i].AddressFamily == AddressFamily.InterNetwork) { ip = all[i]; break; }
-                    if (ip == null) throw new SocketException((int)SocketError.HostNotFound);
+                    System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
+                    s.ConnectAsync(addr.Address.EndPoint, cts.Token).AsTask().GetAwaiter().GetResult();
+                    r.State = ProbeState.Online; r.Ms = (int)sw.ElapsedMilliseconds;
                 }
-                s = new Socket(ip.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-                s.Blocking = false;
-                System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
-                try { s.Connect(new System.Net.IPEndPoint(ip, e.Port)); }
-                catch (SocketException se) { if (se.SocketErrorCode != SocketError.WouldBlock && se.SocketErrorCode != SocketError.InProgress) throw; }
-                if (!s.Connected)
-                {
-                    // 연결이 끝나면 쓰기 가능(성공) 또는 오류(실패, Windows 는 오류 목록)로 알려 준다. 폴링 간격 없이 바로 깨어난다.
-                    List<Socket> w = new List<Socket> { s }, err = new List<Socket> { s };
-                    Socket.Select(null, w, err, TimeoutMs * 1000);
-                    if (err.Count > 0) { int code = (int)s.GetSocketOption(SocketOptionLevel.Socket, SocketOptionName.Error); throw new SocketException(code != 0 ? code : (int)SocketError.ConnectionRefused); }
-                    if (w.Count == 0) { r.State = ProbeState.Offline; r.Error = "timeout"; lock (_lock) _res[idx] = r; return; }
-                    int so = (int)s.GetSocketOption(SocketOptionLevel.Socket, SocketOptionName.Error);
-                    if (so != 0) throw new SocketException(so);
-                }
-                r.State = ProbeState.Online; r.Ms = (int)sw.ElapsedMilliseconds;
             }
+            catch (OperationCanceledException) { r.State = ProbeState.Offline; r.Error = "timeout"; }
             catch (Exception ex) { r.State = ProbeState.Offline; r.Error = ex.Message; }
-            finally { try { if (s != null) s.Close(); } catch { } }
             lock (_lock) _res[idx] = r;
         }
 

@@ -1,16 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- 전투 뷰어 창(WinForms + GDI+). .NET Framework 4.8 대상이라 VS 의 ".NET 데스크톱 개발" 워크로드만 있으면 빌드된다.
-       .NET 8 이상으로 올리려면 TargetFramework 를 net8.0-windows 로 바꾸고 UseWindowsForms 를 true 로 둔다. -->
+  <!-- 전투 뷰어 창(WinForms + GDI+). .NET 8 Windows 대상이라 .NET 8 SDK(VS 의 ".NET 데스크톱 개발" 워크로드)가 있으면 빌드된다. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net48</TargetFramework>
-    <LangVersion>7.3</LangVersion>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <RootNamespace>GameViewer.App</RootNamespace>
     <AssemblyName>GameViewer.App</AssemblyName>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>disable</Nullable>
-    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
 
   <ItemGroup>

@@ -2,6 +2,7 @@
 using System;
 using System.Threading;
 using Core.Net;
+using Core.Util;
 using Game.Generated;
 
 namespace Game.GatewayServer;
@@ -21,10 +22,9 @@ public sealed class GatewayClientSession : PacketSession
     private int _enterConfirmed;
     private long _zoneSeq;
     private GatewayZoneSession? _zoneSession;       // 입장한 존 서버 연결 세션 (입장 처리 후 중계 경로에서 읽는다)
-    private long _pktWindowStartMs;                 // 수신 속도 제한 윈도우 시작 시각 (수신 처리 전용)
-    private int _pktCount;
+    private SlidingWindowCounter? _pktLimiter;         // 수신 속도 제한 (수신 처리 전용, 처음 필요할 때 만든다)
 
-    public GatewayClientSession(GatewayServerMain server)
+    public GatewayClientSession(GatewayServerMain server) : base(RecvUnitBytes)
     {
         _server = server;
     }
@@ -92,19 +92,14 @@ public sealed class GatewayClientSession : PacketSession
         return true;
     }
 
-    /// <summary>패킷 한 건을 처리해도 되는지 판정한다(초당 maxPerSec건 고정 윈도우(0이면 제한 없음)). 수신 처리는 세션당 직렬이라 동기화가 필요 없다.</summary>
+    /// <summary>패킷 한 건을 처리해도 되는지 판정한다(최근 1초 슬라이딩 윈도우에 maxPerSec건, 0이면 제한 없음). 수신 처리는 세션당 직렬이라 동기화가 필요 없다.</summary>
     internal bool AllowPacket(uint maxPerSec)
     {
         if (maxPerSec == 0)
             return true;
 
-        long now = Environment.TickCount64;
-        if (now - _pktWindowStartMs >= 1000)
-        {
-            _pktWindowStartMs = now;
-            _pktCount = 0;
-        }
-        return (uint)++_pktCount <= maxPerSec;
+        _pktLimiter ??= new SlidingWindowCounter((int)Math.Min(maxPerSec, int.MaxValue), 1000);
+        return _pktLimiter.TryAcquire(Environment.TickCount64);
     }
 
     protected override void OnConnected() => _server.OnClientConnected(this);
@@ -112,6 +107,8 @@ public sealed class GatewayClientSession : PacketSession
     protected override void OnDisconnected(CloseReason reason) => _server.OnClientDisconnected(this);
 
     protected override int MaxRecvPacketSize => ProtocolConst.MaxClientPacketBytes;
+
+    private const int RecvUnitBytes = 1024;     // 수신 버퍼 단위(용량 16KB >= 클라이언트 패킷 상한). 세션 수천 개가 계속 쥐어도 부담이 작고 풀 대여/반납이 없다
 
 
     protected override void OnRecvPacket(ReadOnlySpan<byte> packet)

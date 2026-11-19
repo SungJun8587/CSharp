@@ -13,6 +13,10 @@ namespace Core.Redis;
 /// 중첩 깊이(<see cref="RedisConst.MaxParseDepth"/>). Feed()가 false를 돌려주거나 TryParse()가 ProtocolError를
 /// 돌려주면 스트림을 신뢰할 수 없으므로 호출부는 연결을 끊어야 한다.
 /// </para>
+/// <para>
+/// 큰 응답(수만 개 원소의 배열 등)이 여러 조각으로 도착해도 조각마다 처음부터 다시 파싱하지 않는다. 한 번 모자라다고 판명된 값은
+/// 구조만 훑는 스캐너가 읽은 위치와 남은 원소 수(중첩 스택)를 저장해 두고 다음 조각부터 거기서 이어서 훑는다. 값이 완성되면 한 번만 실제로 파싱한다.
+/// </para>
 /// 스레드 안전하지 않다 — 연결 하나의 수신 루프만 쓴다.
 /// </summary>
 /// <example>
@@ -40,6 +44,12 @@ public sealed class RedisParser
     // 큰 Bulk String이 여러 조각으로 도착하는 동안 매 조각마다 처음부터 다시 파싱하는 낭비를 막는다.
     private int _minBytesNeeded;
 
+    // 증분 스캔 상태. 위치는 모두 미처리 데이터 시작(_start) 기준이라 Feed()의 앞당기기와 무관하다.
+    private bool _scanning;
+    private int _scanOffset;        // 지금까지 구조 검사를 마친 위치
+    private int _scanDepth;         // 열려 있는 배열 단계(0 = 최상위 값)
+    private long[]? _scanRemain;    // 단계별로 더 읽어야 하는 원소 수
+
     private static readonly string s_ok = "OK";
     private static readonly string s_pong = "PONG";
     private static readonly string s_queued = "QUEUED";
@@ -53,6 +63,7 @@ public sealed class RedisParser
         _start = 0;
         _end = 0;
         _minBytesNeeded = 0;
+        ResetScan();
         if (_buf.Length > RedisConst.ParserRetainLimit)
             _buf = new byte[InitialBufferSize];
     }
@@ -107,11 +118,63 @@ public sealed class RedisParser
             return RedisParseResult.NeedMoreData;
         _minBytesNeeded = 0;
 
-        int offset = 0;
-        RedisParseResult result = ParseValue(new ReadOnlySpan<byte>(_buf, _start, pending), ref offset, out RedisValue parsed, 0);
-        if (result != RedisParseResult.Success)
-            return result;
+        var span = new ReadOnlySpan<byte>(_buf, _start, pending);
 
+        if (!_scanning)
+        {
+            // 대부분의 응답은 한 번에 완성되므로 곧바로 파싱한다(스캔을 거치지 않는다).
+            int offset = 0;
+            RedisParseResult result = ParseValue(span, ref offset, out RedisValue parsed, 0);
+            if (result == RedisParseResult.Success)
+            {
+                Consume(offset);
+                value = parsed;
+                return RedisParseResult.Success;
+            }
+
+            if (result != RedisParseResult.NeedMoreData)
+                return result;
+
+            // 처음으로 모자라다고 판명됐다: 이후 조각은 이미 훑은 부분을 다시 읽지 않도록 증분 스캔으로 이어 간다.
+            _scanning = true;
+            _scanOffset = 0;
+            _scanDepth = 0;
+            _scanRemain ??= new long[RedisConst.MaxParseDepth + 2];
+            _scanRemain[0] = 1;
+        }
+
+        RedisParseResult scan = Scan(span, out int end);
+        if (scan != RedisParseResult.Success)
+        {
+            if (scan == RedisParseResult.ProtocolError)
+                ResetScan();
+            return scan;
+        }
+
+        // 구조가 완성됐음을 확인했으므로 값을 한 번만 만든다.
+        int off = 0;
+        RedisParseResult built = ParseValue(span.Slice(0, end), ref off, out RedisValue full, 0);
+        ResetScan();
+
+        // 스캐너가 완전하다고 본 구간을 파서가 못 읽는다면 둘의 판단이 어긋난 것이다 — 스트림을 신뢰할 수 없다.
+        if (built != RedisParseResult.Success)
+            return RedisParseResult.ProtocolError;
+
+        Consume(off);
+        value = full;
+        return RedisParseResult.Success;
+    }
+
+    private void ResetScan()
+    {
+        _scanning = false;
+        _scanOffset = 0;
+        _scanDepth = 0;
+    }
+
+    // 값 하나를 소비한 뒤 미처리 영역을 앞으로 보낸다. 다 비면 커서를 되돌리고 커진 버퍼는 작은 것으로 바꾼다.
+    private void Consume(int offset)
+    {
         _start += offset;
         if (_start == _end)
         {
@@ -120,9 +183,103 @@ public sealed class RedisParser
             if (_buf.Length > RedisConst.ParserRetainLimit)
                 _buf = new byte[InitialBufferSize];
         }
+    }
 
-        value = parsed;
-        return RedisParseResult.Success;
+    // 값을 만들지 않고 구조(접두, 길이, CRLF, 중첩)만 검사하며 저장해 둔 위치부터 이어서 훑는다.
+    // 값 하나는 헤더와 본문이 모두 도착했을 때에만 소비로 확정하므로, 모자라면 그 값의 시작 위치에서 멈춘다.
+    private RedisParseResult Scan(ReadOnlySpan<byte> buf, out int end)
+    {
+        end = 0;
+        long[] remain = _scanRemain!;
+        int d = _scanDepth;
+        int offset = _scanOffset;
+
+        while (true)
+        {
+            while (d >= 0 && remain[d] == 0)
+                --d;
+
+            if (d < 0)
+            {
+                end = offset;
+                return RedisParseResult.Success;
+            }
+
+            // 값의 깊이는 그 값이 속한 단계(d)다. ParseValue 의 깊이 제한과 같은 기준이다.
+            if (d > RedisConst.MaxParseDepth)
+                return RedisParseResult.ProtocolError;
+
+            if (offset >= buf.Length)
+                break;
+
+            byte prefix = buf[offset];
+            int idx = buf.Slice(offset + 1).IndexOf("\r\n"u8);
+            if (idx < 0)
+                break;
+
+            ReadOnlySpan<byte> line = buf.Slice(offset + 1, idx);
+            int next = offset + 1 + idx + 2;
+
+            switch ((char)prefix)
+            {
+                case '+':
+                case '-':
+                    break;
+
+                case ':':
+                    if (!RedisHelper.ParseInteger(line, out long _))
+                        return RedisParseResult.ProtocolError;
+                    break;
+
+                case '$':
+                {
+                    if (!RedisHelper.ParseInteger(line, out long len) || len < -1 || len > RedisConst.MaxPendingBufferSize)
+                        return RedisParseResult.ProtocolError;
+
+                    if (len >= 0)
+                    {
+                        if (buf.Length - next < len + 2)
+                        {
+                            _minBytesNeeded = (int)(next + len + 2);
+                            goto NeedMore;
+                        }
+
+                        int crlf = next + (int)len;
+                        if (buf[crlf] != (byte)'\r' || buf[crlf + 1] != (byte)'\n')
+                            return RedisParseResult.ProtocolError;
+
+                        next = crlf + 2;
+                    }
+                    break;
+                }
+
+                case '*':
+                {
+                    if (!RedisHelper.ParseInteger(line, out long count) || count < -1 || count > RedisConst.MaxArrayElements)
+                        return RedisParseResult.ProtocolError;
+
+                    if (count > 0)
+                    {
+                        --remain[d];
+                        remain[++d] = count;
+                        offset = next;
+                        continue;
+                    }
+                    break;
+                }
+
+                default:
+                    return RedisParseResult.ProtocolError;
+            }
+
+            --remain[d];
+            offset = next;
+        }
+
+    NeedMore:
+        _scanOffset = offset;
+        _scanDepth = d;
+        return RedisParseResult.NeedMoreData;
     }
 
     // RESP 접두 타입에 따라 재귀적으로 값 구조를 파싱한다. 실패하면 offset을 호출 시점으로 되돌린다.

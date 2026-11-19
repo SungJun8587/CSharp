@@ -232,10 +232,13 @@ public abstract partial class FieldZoneBase : Zone
         entity._attackGate.Reset();
         entity._invulnerableUntilMs = 0;
         entity._dead = false;
-        entity._hp = entity._stats.MaxHp;
+        // 다른 존에서 이어받은 체력/MP(RestoreVitals)가 있으면 그 값으로, 아니면 가득 채워 시작한다.
+        entity._hp = entity._restoreHp >= 1 ? Math.Min(entity._restoreHp, entity._stats.MaxHp) : entity._stats.MaxHp;
         entity._nextAttackMs = NowMs;
         entity._respawnTimerId = 0;
-        entity._mp = entity._stats.MaxMp;
+        entity._mp = entity._restoreMp >= 0 ? Math.Min(entity._restoreMp, entity._stats.MaxMp) : entity._stats.MaxMp;
+        entity._restoreHp = -1;
+        entity._restoreMp = -1;
         entity._combatUntilMs = 0;
 
         _entities.Add(id, entity);

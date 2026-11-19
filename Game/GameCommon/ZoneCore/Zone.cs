@@ -354,7 +354,7 @@ public class Zone : IDisposable
         }
         catch (Exception e)
         {
-            LogManager.Error("[Zone] exception in {0}. zoneId={1}, what={2}", phase, _config.ZoneId, e);
+            LogThrottle.Error("zone.phase-failed." + phase, 1000, "[Zone] exception in {0}. zoneId={1}, what={2}", phase, _config.ZoneId, e);
         }
     }
 

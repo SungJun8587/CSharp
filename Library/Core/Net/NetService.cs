@@ -14,24 +14,14 @@ namespace Core.Net;
 public abstract class NetService : IDisposable, IAsyncDisposable
 {
     private readonly Func<Session> _sessionFactory;
-    private readonly TaskCompletionSource<bool> _allClosed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly object _idleLock = new object();
-    private Timer? _idleTimer;
-    private int _closing;
-    private int _sessionSlots;
-
-    // 통계: 종료된 세션의 누적값(연결 중인 세션은 조회 시 세션별 카운터에서 합산)
-    private long _totalConnected;
-    private long _totalDisconnected;
-    private long _totalRejected;
-    private long _closedBytesReceived;
-    private long _closedBytesSent;
+    private readonly ServiceCore _core;
 
     protected NetService(IPEndPoint endPoint, Func<Session> sessionFactory, NetServiceOptions? options)
     {
         EndPoint = endPoint ?? throw new ArgumentNullException(nameof(endPoint));
         _sessionFactory = sessionFactory ?? throw new ArgumentNullException(nameof(sessionFactory));
         Options = options ?? new NetServiceOptions();
+        _core = new ServiceCore(Options);
         Sessions = new SessionManager();
     }
 
@@ -43,37 +33,15 @@ public abstract class NetService : IDisposable, IAsyncDisposable
     public SessionManager Sessions { get; }
 
     /// <summary>Close() 가 시작되었는지 여부.</summary>
-    public bool IsClosing => Volatile.Read(ref _closing) == 1;
+    public bool IsClosing => _core.IsClosing;
 
     internal bool HasLogger => Options.Logger != null;
 
     /// <summary>로거가 있고 해당 레벨이 켜져 있는지. 로거의 예외는 삼킨다.</summary>
-    internal bool IsLogEnabled(NetLogLevel level)
-    {
-        INetLogger? logger = Options.Logger;
-        if (logger == null)
-            return false;
-
-        try { return logger.IsEnabled(level); }
-        catch (Exception) { return false; }
-    }
+    internal bool IsLogEnabled(NetLogLevel level) => _core.IsLogEnabled(level);
 
     /// <summary>로거로 기록한다. 로거가 없거나 예외를 던져도 서비스 동작에는 영향이 없다.</summary>
-    internal void Log(NetLogLevel level, string message, Exception? exception = null)
-    {
-        INetLogger? logger = Options.Logger;
-        if (logger == null)
-            return;
-
-        try
-        {
-            if (logger.IsEnabled(level))
-                logger.Log(level, message, exception);
-        }
-        catch (Exception)
-        {
-        }
-    }
+    internal void Log(NetLogLevel level, string message, Exception? exception = null) => _core.Log(level, message, exception);
 
     /// <summary>
     /// 서비스를 종료하고 모든 세션이 정리될 때까지 기다린다.
@@ -99,7 +67,7 @@ public abstract class NetService : IDisposable, IAsyncDisposable
     }
 
     /// <summary>종료 상태로 전환한다. 처음 전환한 호출만 true.</summary>
-    protected bool BeginClose() => Interlocked.Exchange(ref _closing, 1) == 0;
+    protected bool BeginClose() => _core.BeginClose();
 
     /// <summary>
     /// 모든 세션 종료를 요청하고 정리 완료를 기다린다.
@@ -112,7 +80,7 @@ public abstract class NetService : IDisposable, IAsyncDisposable
         if (Sessions.AreAllSessionsClosed)
             return true;
 
-        return _allClosed.Task.Wait(timeoutMs);
+        return _core.WaitAllClosed(timeoutMs);
     }
 
     /// <summary>CloseAllSessionsAndWait 의 비동기 버전.</summary>
@@ -123,59 +91,14 @@ public abstract class NetService : IDisposable, IAsyncDisposable
         if (Sessions.AreAllSessionsClosed)
             return true;
 
-        using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        Task delay = Task.Delay(timeoutMs, delayCts.Token);
-
-        Task finished = await Task.WhenAny(_allClosed.Task, delay).ConfigureAwait(false);
-        if (ReferenceEquals(finished, _allClosed.Task))
-        {
-            delayCts.Cancel();
-            return true;
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        return false;
+        return await _core.WaitAllClosedAsync(timeoutMs, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>IdleTimeoutMs 가 설정된 경우 유휴 검사 타이머를 시작한다(중복 호출 허용).</summary>
-    protected void StartIdleMonitor()
-    {
-        int timeout = Options.IdleTimeoutMs;
-        if (timeout <= 0)
-            return;
-
-        lock (_idleLock)
-        {
-            if (_idleTimer != null)
-                return;
-
-            int period = Math.Max(100, timeout / 4);
-            _idleTimer = new Timer(_ => SweepIdle(), null, period, period);
-        }
-    }
+    protected void StartIdleMonitor() => _core.StartIdleMonitor(now => Sessions.CheckIdle(now, Options.IdleTimeoutMs));
 
     /// <summary>유휴 검사 타이머를 멈춘다.</summary>
-    protected void StopIdleMonitor()
-    {
-        lock (_idleLock)
-        {
-            _idleTimer?.Dispose();
-            _idleTimer = null;
-        }
-    }
-
-    private void SweepIdle()
-    {
-        try
-        {
-            Sessions.CheckIdle(Environment.TickCount64, Options.IdleTimeoutMs);
-        }
-        catch (Exception e)
-        {
-            // 타이머 콜백의 예외가 프로세스를 죽이지 않도록 기록만 하고 삼킨다(개별 세션 예외는 Session 내부에서 처리).
-            Log(NetLogLevel.Error, "유휴 세션 검사 실패", e);
-        }
-    }
+    protected void StopIdleMonitor() => _core.StopIdleMonitor();
 
     internal Session CreateSession() => _sessionFactory();
 
@@ -187,49 +110,20 @@ public abstract class NetService : IDisposable, IAsyncDisposable
         int connected = 0;
         long received = 0, sent = 0, pending = 0;
         Sessions.Accumulate(ref connected, ref received, ref sent, ref pending);
-
-        return new NetStatsSnapshot(
-            connected,
-            Interlocked.Read(ref _totalConnected),
-            Interlocked.Read(ref _totalDisconnected),
-            Interlocked.Read(ref _totalRejected),
-            received + Interlocked.Read(ref _closedBytesReceived),
-            sent + Interlocked.Read(ref _closedBytesSent),
-            pending);
+        return _core.MakeStats(connected, received, sent, pending);
     }
 
-    internal void OnSessionStarted() => Interlocked.Increment(ref _totalConnected);
+    internal void OnSessionStarted() => _core.OnSessionStarted();
 
-    internal void OnSessionClosed(long bytesReceived, long bytesSent)
-    {
-        Interlocked.Add(ref _closedBytesReceived, bytesReceived);
-        Interlocked.Add(ref _closedBytesSent, bytesSent);
-        Interlocked.Increment(ref _totalDisconnected);
-    }
+    internal void OnSessionClosed(long bytesReceived, long bytesSent) => _core.OnSessionClosed(bytesReceived, bytesSent);
 
     /// <summary>거부 카운트를 올리고 누적값을 돌려준다.</summary>
-    internal long CountRejected() => Interlocked.Increment(ref _totalRejected);
+    internal long CountRejected() => _core.CountRejected();
 
-    /// <summary>
-    /// 세션 슬롯 하나를 원자적으로 예약한다. 동시에 여러 접속이 몰려도 MaxSessionCount 를 넘지 않는다.
-    /// 예약한 슬롯은 세션이 제거될 때(RemoveSession) 또는 세션 생성에 실패했을 때(ReleaseSlot) 반환한다.
-    /// </summary>
-    internal bool TryReserveSlot()
-    {
-        int max = Options.MaxSessionCount;
+    /// <summary>세션 슬롯 하나를 원자적으로 예약한다(MaxSessionCount 초과 방지). 예약한 슬롯은 RemoveSession/ReleaseSlot 으로 반환한다.</summary>
+    internal bool TryReserveSlot() => _core.TryReserveSlot();
 
-        while (true)
-        {
-            int current = Volatile.Read(ref _sessionSlots);
-            if (current >= max)
-                return false;
-
-            if (Interlocked.CompareExchange(ref _sessionSlots, current + 1, current) == current)
-                return true;
-        }
-    }
-
-    internal void ReleaseSlot() => Interlocked.Decrement(ref _sessionSlots);
+    internal void ReleaseSlot() => _core.ReleaseSlot();
 
     internal void RemoveSession(Session session)
     {
@@ -239,23 +133,11 @@ public abstract class NetService : IDisposable, IAsyncDisposable
         ReleaseSlot();
 
         if (IsClosing && Sessions.AreAllSessionsClosed)
-            _allClosed.TrySetResult(true);
+            _core.SignalAllClosed();
     }
 
     /// <summary>NoDelay, KeepAlive, 버퍼 크기 등 서비스 옵션을 소켓에 적용한다.</summary>
-    internal void ConfigureSocket(Socket socket)
-    {
-        SocketUtils.SetNoDelay(socket, Options.NoDelay);
-
-        if (Options.KeepAlive)
-            SocketUtils.SetKeepAlive(socket, true, Options.KeepAliveTimeSec, Options.KeepAliveIntervalSec);
-
-        if (Options.SocketSendBufferSize > 0)
-            SocketUtils.SetSendBufferSize(socket, Options.SocketSendBufferSize);
-
-        if (Options.SocketRecvBufferSize > 0)
-            SocketUtils.SetRecvBufferSize(socket, Options.SocketRecvBufferSize);
-    }
+    internal void ConfigureSocket(Socket socket) => _core.ConfigureSocket(socket);
 }
 
 /// <summary>

@@ -30,6 +30,8 @@ public static class Program
             o.ServerName = name;
         ok &= args.ReadString("gateway-ip", ref o.GatewayIp);
         ok &= args.ReadUShort("gateway-port", ref o.GatewayPort, 1, 65535);
+        ok &= args.ReadUInt("register-timeout-ms", ref o.RegisterTimeoutMs, 0, 600000);
+        ok &= args.ReadUInt("duplicate-retry-ms", ref o.DuplicateRetryMs, 0, 3600000);
         ok &= args.ReadUInt("tick-ms", ref o.TickIntervalMs, 1, 60000);
         ok &= args.ReadFloat("min-x", ref o.MinX, -1e9, 1e9);
         ok &= args.ReadFloat("min-y", ref o.MinY, -1e9, 1e9);

@@ -1,10 +1,10 @@
-XlsxConverter stamp v4 exe=639304984791426680/639304984791426680
+XlsxConverter stamp v4 exe=639306765068382256/639306765068382256
 xlsx=K:\GitHub\CSharp\Game\GameData
 out=K:\GitHub\CSharp\Game\GameData
 cs=K:\GitHub\CSharp\Game\GameCommon\Generated
 ns=Game.Generated
 --
-src=Definitions.xlsx=639304964325509546/10084;Hero.xlsx=639304964325158198/12628;Monster.xlsx=639304964324991875/10837;Packet.xlsx=639304964325659641/22377;World.xlsx=639304964324718565/9033;
+src=Definitions.xlsx=639306754135240901/10084;Hero.xlsx=639306763444147056/13549;Monster.xlsx=639306763443970730/12494;Packet.xlsx=639306754135392774/22377;World.xlsx=639306764011667494/11253;
 K:\GitHub\CSharp\Game\GameData\Hero.json
 K:\GitHub\CSharp\Game\GameData\Skill.json
 K:\GitHub\CSharp\Game\GameData\Status.json
@@ -15,6 +15,7 @@ K:\GitHub\CSharp\Game\GameData\BossPhase.json
 K:\GitHub\CSharp\Game\GameData\BossAction.json
 K:\GitHub\CSharp\Game\GameData\Drop.json
 K:\GitHub\CSharp\Game\GameData\Spawn.json
+K:\GitHub\CSharp\Game\GameData\ZoneRule.json
 K:\GitHub\CSharp\Game\GameData\Block.json
 K:\GitHub\CSharp\Game\GameCommon\Generated\Enums.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\Consts.gen.cs
@@ -28,6 +29,7 @@ K:\GitHub\CSharp\Game\GameCommon\Generated\BossPhase.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\BossAction.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\Drop.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\Spawn.gen.cs
+K:\GitHub\CSharp\Game\GameCommon\Generated\ZoneRule.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\Block.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\ProtocolTypes.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\Packets.gen.cs

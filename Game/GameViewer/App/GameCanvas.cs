@@ -156,7 +156,14 @@ namespace GameViewer.App
                 CloseForm(); return;
             }
             _data = _loader.Data;
-            foreach (string w in _loader.AssetWarnings) Console.Error.WriteLine("assets: " + w);
+            List<string> assetWarn = _loader.AssetWarnings;
+            foreach (string w in assetWarn) Console.Error.WriteLine("assets: " + w);
+            if (assetWarn.Count > 0)
+            {
+                int shown = Math.Min(assetWarn.Count, 8);
+                string msg = string.Join("\r\n", assetWarn.GetRange(0, shown).ToArray()) + (assetWarn.Count > shown ? "\r\n... 외 " + (assetWarn.Count - shown) + "건" : "");
+                MessageBox.Show("이미지 에셋을 읽는 중 문제가 있습니다 (해당 이미지는 코드로 그린 기본 그림으로 대체됩니다).\r\n\r\n" + msg, "GameViewer", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
             if (_data.Warnings.Count > 0 && _data.Heroes.Count == 0)
             {
                 DialogResult r = MessageBox.Show("GameData 를 읽지 못했습니다 (이름/사거리/스킬 정보 없이 실행됩니다).\r\n\r\n폴더: " + _loader.DataDir + "\r\n" + string.Join("\r\n", _data.Warnings.ToArray()) + "\r\n\r\n계속할까요?",

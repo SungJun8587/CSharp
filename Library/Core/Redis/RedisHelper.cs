@@ -2,6 +2,7 @@
 using System;
 using System.Globalization;
 using System.Numerics;
+using Core.Util;
 
 namespace Core.Redis;
 
@@ -78,15 +79,7 @@ public static class RedisHelper
     /// 1차 실패=ReconnectBackoffBaseMs, 이후 두 배씩 늘며 상한까지. jitterMs가 양수면 0~jitterMs를 무작위로 더한다.
     /// </summary>
     public static long ComputeReconnectBackoffMs(int failCount, int jitterMs = 0)
-    {
-        int shift = Math.Max(0, Math.Min(failCount - 1, RedisConst.ReconnectBackoffMaxShift));
-        long delayMs = Math.Min(RedisConst.ReconnectBackoffBaseMs << shift, RedisConst.ReconnectBackoffMaxMs);
-
-        if (jitterMs > 0)
-            delayMs = Math.Min(delayMs + Random.Shared.Next(0, jitterMs + 1), RedisConst.ReconnectBackoffMaxMs);
-
-        return delayMs;
-    }
+        => BackoffState.ComputeDelayMs(failCount, RedisConst.ReconnectBackoffBaseMs, RedisConst.ReconnectBackoffMaxMs, RedisConst.ReconnectBackoffMaxShift, jitterMs);
 }
 
 /// <summary>
@@ -95,20 +88,14 @@ public static class RedisHelper
 /// </summary>
 public sealed class ReconnectBackoff
 {
-    public int FailCount { get; private set; }
-    public long NextRetryMs { get; private set; }
+    private readonly BackoffState _state = new BackoffState(RedisConst.ReconnectBackoffBaseMs, RedisConst.ReconnectBackoffMaxMs, RedisConst.ReconnectBackoffMaxShift);
 
-    public bool ShouldSkip(long nowMs) => FailCount > 0 && nowMs < NextRetryMs;
+    public int FailCount => _state.FailCount;
+    public long NextRetryMs => _state.NextRetryMs;
 
-    public void OnFail(long nowMs, int jitterMs = 0)
-    {
-        ++FailCount;
-        NextRetryMs = nowMs + RedisHelper.ComputeReconnectBackoffMs(FailCount, jitterMs);
-    }
+    public bool ShouldSkip(long nowMs) => _state.ShouldSkip(nowMs);
 
-    public void Reset()
-    {
-        FailCount = 0;
-        NextRetryMs = 0;
-    }
+    public void OnFail(long nowMs, int jitterMs = 0) => _state.OnFail(nowMs, jitterMs);
+
+    public void Reset() => _state.Reset();
 }

@@ -11,6 +11,10 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GameViewer.Tests", "Tests\G
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RenderSnapshot", "Tools\RenderSnapshot.csproj", "{B1206BDC-27CE-4EFE-B71D-D2B9A94181BA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Core.Util", "..\..\Library\Core\Util\Core.Util.csproj", "{B2D4947D-0A10-4B1C-2199-ED4DFD78175D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Core.Net", "..\..\Library\Core\Net\Core.Net.csproj", "{05CBEB9F-2A66-BD0C-2A24-B3610E688720}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +37,14 @@ Global
 		{B1206BDC-27CE-4EFE-B71D-D2B9A94181BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B1206BDC-27CE-4EFE-B71D-D2B9A94181BA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B1206BDC-27CE-4EFE-B71D-D2B9A94181BA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B2D4947D-0A10-4B1C-2199-ED4DFD78175D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B2D4947D-0A10-4B1C-2199-ED4DFD78175D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B2D4947D-0A10-4B1C-2199-ED4DFD78175D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B2D4947D-0A10-4B1C-2199-ED4DFD78175D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{05CBEB9F-2A66-BD0C-2A24-B3610E688720}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{05CBEB9F-2A66-BD0C-2A24-B3610E688720}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{05CBEB9F-2A66-BD0C-2A24-B3610E688720}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{05CBEB9F-2A66-BD0C-2A24-B3610E688720}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

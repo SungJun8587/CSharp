@@ -57,7 +57,6 @@ public sealed class RedisClient : IDisposable
     }
 
     private static readonly RedisCallback s_noopCallback = static _ => { };
-    private static int s_activeResolvers;       // 진행 중인 이름 해석 수(프로세스 전체)
 
     private readonly object _commandLock = new object();    // 현재 연결의 Pending/SendQueue/Sending 동기화
     private Conn? _conn;                                    // Interlocked/Volatile로만 접근
@@ -169,7 +168,7 @@ public sealed class RedisClient : IDisposable
     // 주소 목록을 순서대로 시도하되, 전체 시간은 deadline을 넘지 않게 남은 시간으로 자른다.
     private static async Task<Socket?> ConnectSocketAsync(string host, ushort port, long deadlineMs, int timeoutMs)
     {
-        IPAddress[]? addresses = await ResolveAsync(host, timeoutMs).ConfigureAwait(false);
+        IPAddress[]? addresses = await HostResolver.ResolveAsync(host, timeoutMs).ConfigureAwait(false);
         if (addresses == null || addresses.Length == 0)
             return null;
 
@@ -193,46 +192,6 @@ public sealed class RedisClient : IDisposable
         }
 
         return null;
-    }
-
-    // IP 문자열이면 DNS 없이 즉시 풀고(일반적 경로), 이름이면 제한 시간을 두고 푼다. 해석 작업은 취소할 수 없어
-    // 시간이 지나도 백그라운드에서 계속될 수 있으므로, 동시에 살아 있는 해석 수에 상한을 둔다(넘으면 이번 시도는 바로 실패).
-    private static async Task<IPAddress[]?> ResolveAsync(string host, int timeoutMs)
-    {
-        if (IPAddress.TryParse(host, out IPAddress? ip))
-            return new[] { ip };
-
-        if (Interlocked.Increment(ref s_activeResolvers) > RedisConst.MaxActiveResolvers)
-        {
-            Interlocked.Decrement(ref s_activeResolvers);
-            return null;
-        }
-
-        Task<IPAddress[]> task;
-        try
-        {
-            task = Dns.GetHostAddressesAsync(host);
-        }
-        catch (Exception)
-        {
-            Interlocked.Decrement(ref s_activeResolvers);
-            return null;
-        }
-
-        _ = task.ContinueWith(static (t, _) =>
-        {
-            _ = t.Exception;    // 시간 초과로 버려진 작업의 예외를 관찰해 둔다
-            Interlocked.Decrement(ref s_activeResolvers);
-        }, null, TaskScheduler.Default);
-
-        try
-        {
-            return await task.WaitAsync(TimeSpan.FromMilliseconds(timeoutMs)).ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
-            return null;
-        }
     }
 
     // ===================================================================================
@@ -264,8 +223,8 @@ public sealed class RedisClient : IDisposable
 
     private void CloseConn(Conn conn, RedisDisconnectReason reason)
     {
+        // 파서는 수신 루프만 만진다(스레드 안전하지 않다). 여기서 건드리지 않고, 수신 루프가 끝날 때 스스로 비운다.
         SocketUtils.CloseSocket(conn.Socket);
-        conn.Parser.Reset();
 
         // SendCommand()의 "연결 확인 → 콜백 등록"과 여기의 "콜백 회수"를 같은 락으로 묶는다 — 어느 한쪽에서만 콜백이
         // 발견되어 정확히 한 번 호출된다. 락 안에서 콜백을 부르면 콜백이 이 객체를 다시 건드릴 때 교착 위험이 있으므로 락 밖에서 부른다.
@@ -476,6 +435,7 @@ public sealed class RedisClient : IDisposable
         finally
         {
             ArrayPool<byte>.Shared.Return(buf);
+            conn.Parser.Reset();        // 큰 응답으로 커진 누적 버퍼를 연결과 함께 놓는다
         }
     }
 

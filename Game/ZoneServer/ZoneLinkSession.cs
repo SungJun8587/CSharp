@@ -14,7 +14,7 @@ public sealed class ZoneLinkSession : PacketSession
 {
     private readonly ZoneServerMain _server;
 
-    public ZoneLinkSession(ZoneServerMain server)
+    public ZoneLinkSession(ZoneServerMain server) : base(RecvUnitBytes)
     {
         _server = server;
     }
@@ -26,6 +26,8 @@ public sealed class ZoneLinkSession : PacketSession
     protected override void OnConnectFailed(SocketError error) => _server.OnLinkDisconnected(this);
 
     protected override int MaxRecvPacketSize => ProtocolConst.MaxServerPacketBytes;
+
+    private const int RecvUnitBytes = 2048;     // 수신 버퍼 용량 32KB >= 서버 간 패킷 상한
 
     protected override void OnRecvPacket(ReadOnlySpan<byte> packet)
     {

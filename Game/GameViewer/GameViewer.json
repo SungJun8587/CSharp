@@ -1,4 +1,4 @@
-{
+﻿{
   "Host": "127.0.0.1",
   "Port": 7000,
   "CharId": 900001,
@@ -8,9 +8,10 @@
   "DataDir": "GameData",
   "Auto": false,
   "SkipHeroSelect": false,
-  "PixelsPerUnit": 20,
-  "WindowWidth": 1600,
-  "WindowHeight": 960,
+  "PixelsPerUnit": 24,
+  "EntityScale": 1.15,
+  "WindowWidth": 1440,
+  "WindowHeight": 864,
   "ConnectTimeoutMs": 3000,
   "MoveIntervalMs": 120,
   "Servers": [

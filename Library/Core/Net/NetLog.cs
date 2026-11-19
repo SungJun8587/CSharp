@@ -40,3 +40,33 @@ public interface INetLogger
     /// <param name="exception">관련 예외(없으면 null).</param>
     void Log(NetLogLevel level, string message, Exception? exception = null);
 }
+
+/// <summary>INetLogger 호출을 안전하게 감싸는 내부 확장. 로거가 없거나 예외를 던져도 서비스 동작에는 영향이 없다.</summary>
+internal static class NetLoggerExtensions
+{
+    /// <summary>로거가 있고 해당 레벨이 켜져 있는지. 로거의 예외는 삼킨다.</summary>
+    public static bool SafeIsEnabled(this INetLogger? logger, NetLogLevel level)
+    {
+        if (logger == null)
+            return false;
+
+        try { return logger.IsEnabled(level); }
+        catch (Exception) { return false; }
+    }
+
+    /// <summary>레벨이 켜져 있으면 기록한다. 로거의 예외는 삼킨다.</summary>
+    public static void SafeLog(this INetLogger? logger, NetLogLevel level, string message, Exception? exception = null)
+    {
+        if (logger == null)
+            return;
+
+        try
+        {
+            if (logger.IsEnabled(level))
+                logger.Log(level, message, exception);
+        }
+        catch (Exception)
+        {
+        }
+    }
+}

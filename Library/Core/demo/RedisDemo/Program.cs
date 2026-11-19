@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Core.Net;
 using Core.Redis;
+using Core.Util;
 
 internal static class Program
 {
@@ -132,10 +133,11 @@ internal static class Program
         Check(pb.TryParse(out _) == RedisParseResult.ProtocolError, "parser: bad trailing CRLF");
         var pt = new RedisParser(); pt.Feed(Encoding.ASCII.GetBytes("?x\r\n"));
         Check(pt.TryParse(out _) == RedisParseResult.ProtocolError, "parser: unknown type");
-        var pa = new RedisParser(); pa.Feed(Encoding.ASCII.GetBytes("*5000\r\n"));
+        var pa = new RedisParser(); pa.Feed(Encoding.ASCII.GetBytes("*4194305\r\n"));
         Check(pa.TryParse(out _) == RedisParseResult.ProtocolError, "parser: array cap");
         var pd = new RedisParser(); pd.Feed(Encoding.ASCII.GetBytes(new string('*', 100).Replace("*", "*1\r\n")));
         Check(pd.TryParse(out _) == RedisParseResult.ProtocolError, "parser: depth cap");
+        ParserTests.Run(Check);
 
         var rs = new RedisResultSet(new RedisValue { Type = RedisType.Array, ArrayVal = new[] {
             new RedisValue { Type = RedisType.Integer, Int64Val = 7 }, new RedisValue { Type = RedisType.BulkString, StrVal = "12" },
@@ -156,6 +158,17 @@ internal static class Program
         Check(Sync(c, "SET", "k", "한글값").StrVal == "OK" && Sync(c, "GET", "k").StrVal == "한글값", "SET/GET utf8");
         string big = new string('x', 3_000_000);
         Check(Sync(c, "SET", "big", big).StrVal == "OK" && Sync(c, "GET", "big").StrVal.Length == big.Length, "3MB value roundtrip");
+        // 원소가 많은 배열 응답(예전 상한 4096 초과)과 해시 전체 조회
+        Check(Sync(c, "EVAL", "for i=1,100000 do redis.call('RPUSH', KEYS[1], 'item:'..i) end return 1", "1", "biglist").Int64Val == 1, "build 100000-element list");
+        var sw = Stopwatch.StartNew();
+        RedisValue range = Sync(c, "LRANGE", "biglist", "0", "-1");
+        sw.Stop();
+        Check(range.Type == RedisType.Array && range.ArrayVal.Length == 100_000 && range.ArrayVal[0].StrVal == "item:1" && range.ArrayVal[99_999].StrVal == "item:100000",
+            $"LRANGE 100000 elements ({sw.ElapsedMilliseconds}ms)");
+        Check(Sync(c, "EVAL", "for i=1,3000 do redis.call('HSET', KEYS[1], 'f'..i, i) end return 1", "1", "bighash").Int64Val == 1, "build 3000-field hash");
+        RedisValue all = Sync(c, "HGETALL", "bighash");
+        Check(all.Type == RedisType.Array && all.ArrayVal.Length == 6000, "HGETALL 3000 fields (6000 elements)");
+        Check(Sync(c, "PING").StrVal == "PONG", "connection still usable after large replies");
         Check(Sync(c, "NOSUCHCMD").Type == RedisType.Error, "server error returned as value");
         Check(Sync(c, "INCR", "n").Int64Val == 1, "INCR integer");
 

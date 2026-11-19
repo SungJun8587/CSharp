@@ -1,5 +1,5 @@
 ﻿//***************************************************************************
-// Sfx.cs : 효과음 합성과 "어떤 연출에 어떤 소리를 낼까" 규칙. 오디오 장치를 모르는 순수 데이터라 WinForms/Unity 어디서든 쓴다.
+// Sfx.cs : 효과음 합성과 "어떤 연출에 어떤 소리를 낼까" 규칙. 오디오 장치를 모르는 순수 데이터라 어느 호스트에서든 쓴다.
 //   SfxSynth.Make(kind, rate)      -> 모노 float 샘플(-1..1). Unity: AudioClip.Create(name, n, 1, rate, false).SetData(samples, 0)
 //   SfxSynth.ToWav16(samples,rate) -> 16비트 PCM WAV 바이트. WinForms: SoundPlayer(new MemoryStream(wav))
 //   SfxRules.TryMap(...)           -> 연출(ViewEffect) 하나에 대응하는 소리 종류와 크기(거리 감쇠 포함)

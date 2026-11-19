@@ -130,6 +130,9 @@ namespace GameViewer.App.Render
 
         // ---- 시트(아틀라스): 최상위 "atlases" 의 색인에 있는 경로는 개별 파일 대신 시트에서 잘라 읽는다(Tools/pack_atlas.py 가 만든다).
         // 그림은 처음 그릴 때 읽는 경우가 많아서(걷기/공격 자세) 시트 쪽은 읽어 둔 채로 두고, 다시 불러오거나 Clear 할 때 놓는다.
+        /// <summary>영웅/몬스터 그림 크기 배율(sprites.json 의 height 에 곱한다). Load 전에 정한다. 나무는 영향이 없다.</summary>
+        public static float SizeFactor = 1f;
+
         private static Dictionary<string, AtlasRef> _atlas;     // 전체 경로(대소문자 무시) -> 시트 안의 위치
         private static List<AtlasPage> _atlasPages;
 
@@ -265,6 +268,7 @@ namespace GameViewer.App.Render
             if (n < 1 || n > 72) { why = "angles 는 1..72"; return null; }
             double height = MiniJson.Num(o, "height", 0);
             if (!(height >= 0.5 && height <= 12.0)) { why = "height 는 0.5..12 (단위)"; return null; }
+            if (!tree) height *= SizeFactor;
             string pattern = MiniJson.Str(o, "pattern", "");
             if (pattern.Length == 0) { why = "pattern 이 없습니다"; return null; }
 

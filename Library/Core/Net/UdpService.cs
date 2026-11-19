@@ -476,19 +476,7 @@ public abstract class UdpService : IDisposable, IAsyncDisposable
         catch (Exception) { }
     }
 
-    private void Log(NetLogLevel level, string message, Exception? exception = null)
-    {
-        INetLogger? logger = _options.Logger;
-        if (logger == null)
-            return;
-
-        try
-        {
-            if (logger.IsEnabled(level))
-                logger.Log(level, message, exception);
-        }
-        catch (Exception) { }
-    }
+    private void Log(NetLogLevel level, string message, Exception? exception = null) => _options.Logger.SafeLog(level, message, exception);
 }
 
 /// <summary>상속 없이 핸들러 델리게이트만으로 쓰는 UdpService.</summary>

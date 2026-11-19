@@ -9,9 +9,9 @@
   서버 없이 화면만 확인하는 데모 모드(--demo)도 있습니다.
 
 [구성]
-  Core/    플랫폼 비의존 코어(netstandard2.0, UI/엔진 참조 없음) - Unity 에서 그대로 재사용 가능
+  Core/    UI 비의존 코어(.NET 8, 렌더링/창 참조 없음). 접속은 라이브러리 Core.Net 을 쓴다
     Protocol/  패킷 상수/구조체(Parse/Build), 프레이머 (서버 ZonePacket.h 와 1:1)
-    Net/       GatewayClient (수신 스레드 + 큐, 소비는 호출 스레드)
+    Net/       GatewayClient (Core.Net ClientService/PacketSession + 수신 큐, 소비는 호출 스레드), ServerProbe
     World/     WorldModel(엔티티/연출/로그), Entity(이동 보간), ViewEffect(연출 데이터)
     Data/      MiniJson, GameData(서버와 같은 JSON 로더)
     Audio/     Sfx(효과음 합성 + 연출별 소리 규칙. 오디오 장치를 모르는 순수 데이터)
@@ -34,8 +34,8 @@
   GameViewer.json / GameViewer.bat / GameViewer_Demo.bat
 
 [빌드]
-  GameViewer.sln 을 Visual Studio 로 열어 빌드 (".NET 데스크톱 개발" 워크로드, .NET Framework 4.8).
-  .NET 8+ 로 올리려면 App.csproj 의 TargetFramework 를 net8.0-windows 로 바꾸면 됩니다.
+  GameViewer.sln 을 Visual Studio 로 열어 빌드 (.NET 8 SDK, ".NET 데스크톱 개발" 워크로드). App/Tools 는 net8.0-windows, Core/Tests 는 net8.0.
+  라이브러리 Core(..\..\Library\Core)가 소스로 같이 빌드됩니다. 테스트: dotnet run --project Tests -c Release (Windows 가 아니어도 실행됩니다).
 
 [실행]
   1) 서버: GatewayServer 와 ZoneServer 를 띄움
@@ -125,6 +125,7 @@
 [이미지 에셋]  (선택. 사진/3D 렌더 같은 그림을 쓰려면)
   실행 파일 옆 Assets\sprites.json 에 적은 종류만 이미지로 그리고, 나머지는 위의 코드로 그린 그림을 그대로 씁니다. 파일이 없으면 모두 코드 그림입니다.
     { "sprites": [ { "kind": "monster", "template": 5, "pattern": "demon/{0:000}.png", "angles": 18, "height": 4.6 } ] }
+    (영웅/몬스터 그림은 height 에 GameViewer.json 의 EntityScale(기본 1.15)을 곱한 크기로 그린다. 지형/나무는 그대로.)
     kind monster|hero|tree, template = Monster/Hero 시트의 Id (tree 는 없음: Block 의 원 = 나무 전부를 이 이미지로 그림, height 는 반경 1 일 때 높이), pattern = sprites.json 기준 경로({0} = 각도(도)), angles = 방향 수(1..72),
     height = 그림 내용이 차지할 높이(단위, 0.5..12). 각도 = 번호*360/angles. 0도는 화면 아래(카메라 쪽)를 보는 모습이고
     커질수록 화면 오른쪽 -> 위 -> 왼쪽으로 돕니다. 이미지는 PNG/JPG/GIF/BMP(투명 배경은 PNG)이며 WebP 는 GDI+ 가 못 읽습니다.
@@ -136,7 +137,7 @@
     대기 그림은 무기를 뺀 몸이 숨 쉬듯 오르내리고 머리카락/망토가 흔들리며 한 프레임은 눈을 감습니다(260ms 마다 한 장씩, 영웅마다 시작이 다름). 손 위치는 anchors.json 의 "idleGrip"([방향][프레임])으로 무기 그림을 따라 옮깁니다.
     피격(맞은 뒤 260ms)과 사망(쓰러지는 중 -> 거의 누움 -> 누워 있음, 420ms)은 무기까지 구운 그림 한 장이라 무기 레이어를 따로 얹지 않고, 마지막 사망 그림이 시체로 남습니다. 이 그림들은 처음 쓸 때 읽어서 메모리를 아낍니다. 없으면 대기는 눌러서 숨 쉬는 흉내, 사망은 납작한 시체를 씁니다.
   - 잘못된 항목(파일 없음, 크기 불일치, 값 범위 등)은 그 항목만 건너뛰고 표준 오류에 "assets: ..." 로 적습니다.
-  - 몬스터 14종은 monsters_source.jpg(몬스터 시트)에서 잘라 만들었습니다(tools\extract_monsters.py): 1 슬라임, 2 독버섯, 3 선인장, 4 폭탄 해골, 5 늑대, 6 고블린, 7 고블린 주술사, 8 고블린 전사, 9 가시게, 10 트렌트, 11 암흑 기사, 12 대지렁이, 13 철갑 기사, 14 불의 정령(일반 몬스터 14종). 각 이미지는 Assets\<이름>\ 에 방향 4장(000 정면/090 오른쪽/180 뒤/270 왼쪽, 같은 그림과 좌우 반전)입니다.
+  - 몬스터 = 서버 Monster.json 의 Id 22종(1 슬라임, 2 두꺼비, 3 박쥐, 4 도마뱀, 5 독버섯, 6 소라게, 7 고블린, 8 독거미, 9 선인장, 10 전갈, 11 사마귀, 12 집게 게, 13 해골 병사, 14 폭탄 괴물, 15 유령, 16 독침 벌레, 17 고블린 주술사, 18 고블린 전사, 19 암흑 기사, 20 강철 기사, 21 설인, 22 골렘)과 보스 4종(101 왕 슬라임, 108 거미 여왕, 121 설인 왕, 122 거대 골렘 = 같은 모양의 큰 버전, Id = 100 + 원본 Id). sprites.json 의 "template" 이 서버 Id 이고, Assets\<이름>\ 에 방향 4장(000 정면/090 오른쪽/180 뒤/270 왼쪽)과 걷기/대기/공격/피격/사망 프레임이 있습니다. Assets 폴더 22개가 곧 몬스터 22종이며, 번호/폴더 대응은 Tools\remap_monster_sprites.py 의 WANT 표 한 곳입니다(Assets 에 없는 몬스터는 sprites.json 에서 지운다). 쓰지 않는 에셋은 Tools\prune_assets.py 로 찾는다. 재질(HitMaterial)과 보스 고유색(BossFx)도 이 Id 기준입니다.
   - 보스 몬스터는 일반 몬스터마다 하나씩 14종(몬스터 번호 = 100 + 일반 번호, 예: 101 거대 슬라임 ... 114 불의 정령 군주)입니다. 같은 그림을 1.8배로 크게 쓰고(항목 키 height x1.8, tools\bake_monster_attacks.py 가 만든다) 동작은 항상 slam 입니다. 데이터: Monster 시트에 101~114 행, Boss 시트(Id 1~14, MonsterId 101~114)와 BossPhase/BossAction 이 보스 규칙을 정합니다. 일반 몬스터는 1~14 이며 Boss 시트에 없습니다.
   - 몬스터 공격 자세(attackFrames 5, attackPattern, 무기 없음): 그림 한 장뿐이라 자세를 새로 그릴 수는 없고, tools\bake_monster_attacks.py 가 그림을 비강체로 휘어(앞은 내밀고 뒤는 처지고 위는 기울이고 눌러/늘이고 카메라 쪽이면 커짐) 방향마다 5장(자세 0=예비동작, 1~4=내지름 0.3~1.0)을 굽습니다. hop 은 웅크림/뛰어오름/늘어남/착지 퍼짐 순서. 런타임은 이 그림을 쓰는 몬스터는 기울임/눌림을 빼고 밀림만 절반 남깁니다(AttackPose.BakedFrame). 타격 연출은 App\Render\MonsterFx.cs 가 몬스터마다 다르게 얹는다(속도선, 별 모양 섬광, 슬라임 점액 튐, 버섯 포자 구름, 늑대 세 줄 발톱, 박쥐 초음파 고리, 오우거 지면 충격과 불씨, 날개 해골 기사 초승달 칼날). 확인용: Snap.exe --monfx out.png 24 1 0.2. 다시 굽기: gv 폴더에서 python3 tools/bake_monster_attacks.py [이름...]
   - 몬스터 성질(선택): "attack"(lunge|hop|slam), "fx"(타격 연출 이름: slime, spores, claws, sonic, slam, blade), "flying"(떠서 다님), "idleAnim"(가만히 있어도 움직임). 영웅 4종(Assets\warrior\, archer\, mage\, lancer\, 걷기 8프레임 포함)과 가문비나무(Assets\spruce\)는 각 18방향(20도 간격)으로 연결해 두었습니다.
@@ -159,17 +160,18 @@
   외부 소리 파일 없이 Core/Audio/Sfx.cs 가 합성합니다(쿵/퍽, 베기, 휘익, 폭발, 치유, 사망, 부활, 알림). 연출(ViewEffect)이 생길 때마다 SfxRules 가 소리와 크기를 정합니다:
   내가 맞거나 때리는 소리는 거리와 무관, 남들끼리의 타격은 11 단위 안이면 또렷하고 26 단위까지 작아지며 그 밖은 조용합니다. 큰 피해(최대 체력의 12% 이상)는 묵직한 소리입니다.
   WinForms 는 SoundPlayer 로 WAV 를 틀고(종류마다 3개를 돌려 겹쳐 울림, 같은 종류는 45ms 안에 다시 안 울림), 장치가 없으면 조용히 꺼집니다.
-  Unity 에서는 SfxSynth.Make 의 float 샘플로 AudioClip 을 만들면 됩니다. 단순한 자리표시 소리라 나중에 파일로 바꿀 때는 SfxKind 별로 교체하세요.
+  다른 엔진에서는 SfxSynth.Make 의 float 샘플로 오디오 클립을 만들면 됩니다. 단순한 자리표시 소리라 나중에 파일로 바꿀 때는 SfxKind 별로 교체하세요.
 
-[Unity 클라이언트에서 재사용]
-  Core 폴더를 Assets 아래에 그대로 복사하고(.csproj 제외) 다음 순서로 씁니다. (netstandard2.0 / C# 7.3 문법만 사용)
+[다른 클라이언트(엔진)에서 재사용]
+  Core 는 .NET 8 라이브러리이고 접속은 Core.Net 에 의존하므로, .NET 8 런타임을 쓰는 호스트(WinForms, 콘솔, Avalonia 등)에서 프로젝트 참조로 씁니다.
+  netstandard2.0 만 받는 엔진(Unity 등)에는 맞지 않습니다. 그 경우 네트워크 없는 부분(Protocol/World/Data/Logic)만 따로 옮겨야 합니다.
     var data = GameData.Load(path, zoneId);                // 폴더에서 읽기
-    var data = GameData.Load(table => Resources.Load<TextAsset>(table)?.text, zoneId);   // 파일 없이(Resources/어드레서블). 표 이름을 받아 JSON 텍스트(없으면 null)를 돌려준다
+    var data = GameData.Load(table => ReadText(table), zoneId);   // 파일 없이 읽기. 표 이름을 받아 JSON 텍스트(없으면 null)를 돌려준다
     var session = new ViewerSession(cfg, data);  session.Start(nowMs);
-    void Update() { session.Update(nowMs); pilot.Update(nowMs); ... }     // nowMs = Time.realtimeSinceStartup * 1000
-    session.World.Entities / Effects / Log 를 읽어 GameObject, 파티클, 텍스트로 표현
+    매 프레임 session.Update(nowMs); pilot.Update(nowMs)
+    session.World.Entities / Effects / Log 를 읽어 그린다
     입력 -> session.MoveTo / Attack / UseSkill
-  App/Render 의 그리기 코드만 Unity 용으로 바꾸면 되고, 패킷/월드/AI 는 그대로입니다.
+  App/Render 의 그리기 코드만 바꾸면 되고, 패킷/월드/AI 는 그대로입니다.
   ZoneCommon/ZonePacket.h 가 바뀌면 Core/Protocol/Packets.cs 를 같이 고치고, Tests 의 cpp_packet_sizes.txt 를
   새 sizeof 값으로 갱신하면 크기 불일치를 테스트가 잡아 줍니다.
 

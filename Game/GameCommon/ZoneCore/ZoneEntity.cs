@@ -291,6 +291,37 @@ public class ZoneEntity
         _mp = _stats.MaxMp;
     }
 
+    internal int _restoreHp = -1;       // RestoreVitals()로 정한 입장 시 체력(없으면 -1)
+    internal int _restoreMp = -1;
+
+    /// <summary>
+    /// 존에 등록(AddEntity)되기 전에, 다른 존에서 가져온 체력/MP로 현재 값을 정한다(존 이동/재접속 상태 유지).
+    /// 범위를 벗어난 값은 보정한다: 체력은 1~MaxHp(죽은 채로 입장하지 않는다), MP는 0~MaxMp. SetCombatStats() 뒤에 불러야 한다.
+    /// </summary>
+    public void RestoreVitals(int hp, int mp)
+    {
+        if (_inZone)
+            return;
+
+        _hp = Math.Clamp(hp, 1, _stats.MaxHp);
+        _mp = Math.Clamp(mp, 0, _stats.MaxMp);
+        _restoreHp = _hp;       // AddEntity()가 입장 시 체력/MP를 가득 채우므로, 가져온 값을 그때 적용하도록 기억해 둔다
+        _restoreMp = _mp;
+    }
+
+    /// <summary>
+    /// 존에 등록되기 전에 시작 위치만 정한다. SetSpawnPos()와 달리 리스폰 위치(SpawnPos)는 바꾸지 않는다
+    /// (관문으로 들어온 플레이어도 죽으면 존의 기본 리스폰 위치에서 부활한다).
+    /// </summary>
+    public void SetStartPos(Vec2 pos)
+    {
+        if (_inZone)
+            return;
+
+        _pos = pos;
+        _dest = pos;
+    }
+
     /// <summary>다른 엔티티가 시야(AOI)에 들어왔을 때 호출된다. 플레이어는 재정의하여 상대의 스폰 패킷을 전송한다.</summary>
     protected internal virtual void OnAoiEnter(ZoneEntity other)
     {

@@ -39,6 +39,38 @@
       "EnterStatusId": 0,
       "EnterHealPercent": 10,
       "TransitionMs": 1000
+    },
+    {
+      "BossId": 3,
+      "Phase": 1,
+      "HpBelowPercent": 100,
+      "EnterStatusId": 0,
+      "EnterHealPercent": 0,
+      "TransitionMs": 0
+    },
+    {
+      "BossId": 3,
+      "Phase": 2,
+      "HpBelowPercent": 45,
+      "EnterStatusId": 0,
+      "EnterHealPercent": 5,
+      "TransitionMs": 1000
+    },
+    {
+      "BossId": 4,
+      "Phase": 1,
+      "HpBelowPercent": 100,
+      "EnterStatusId": 0,
+      "EnterHealPercent": 0,
+      "TransitionMs": 0
+    },
+    {
+      "BossId": 4,
+      "Phase": 2,
+      "HpBelowPercent": 50,
+      "EnterStatusId": 5,
+      "EnterHealPercent": 0,
+      "TransitionMs": 1500
     }
   ]
 }

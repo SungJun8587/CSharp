@@ -16,6 +16,8 @@ public sealed class ZoneServerOptions
     public string ServerName = "ZoneServer";
     public string GatewayIp = "127.0.0.1";          // Gateway의 존 서버용 포트 주소
     public ushort GatewayPort = 7100;
+    public uint RegisterTimeoutMs = 5000;          // 연결 뒤 등록 응답을 기다리는 최대 시간. 0이면 제한 없음. 넘으면 연결을 끊고 재접속한다(응답 없이 붙잡고 있는 Gateway 대비)
+    public uint DuplicateRetryMs = 30000;           // 등록이 DuplicateZone 으로 거부돼도 이 시간 동안은 재시도한다(비정상 종료한 이전 인스턴스의 연결이 Gateway 에서 정리될 때까지). 0이면 즉시 종료
     public uint TickIntervalMs = 50;
     public float MinX = 0.0f;
     public float MinY = 0.0f;
@@ -25,7 +27,8 @@ public sealed class ZoneServerOptions
     public float SpawnX = 100.0f;
     public float SpawnY = 100.0f;
     public uint RespawnDelayMs = 5000;
-    public bool AllowPvp = true;
+    public bool AllowPvp = false;       // 존 규칙(ZoneRule.json)에 이 존의 행이 없을 때의 기본값. 기본은 끈다: 플레이어끼리는 결투(수락한 상대)로만 싸운다
+    public bool AllowDuel = true;       // 위와 같이 행이 없을 때의 기본값: 결투 신청을 받을 수 있는지
     public uint RespawnInvulnMs = 3000;
     public string GameDataDir = "GameData";         // 비어 있으면 데이터 없이 구동(몬스터 없음, 영웅은 내장 기본 영웅 하나)
     public uint MonsterThinkIntervalMs = 100;
@@ -75,6 +78,7 @@ public sealed class ZoneServerConfig : Game.ZoneCommon.IServerConfig<ZoneServerO
         r.ReadUInt("RespawnDelayMs", ref o.RespawnDelayMs, 0, uint.MaxValue - 1);   // uint.MaxValue는 "리스폰 안 함" 예약값
         r.ReadUInt("RespawnInvulnMs", ref o.RespawnInvulnMs, 0, uint.MaxValue);
         r.ReadBool("AllowPvp", ref o.AllowPvp);
+        r.ReadBool("AllowDuel", ref o.AllowDuel);
         r.ReadString("GameDataDir", ref o.GameDataDir);
         r.ReadUInt("MonsterThinkIntervalMs", ref o.MonsterThinkIntervalMs, 1, 60000);
         r.ReadUInt("MaxMonsterCount", ref o.MaxMonsterCount, 1, (uint)MonsterData.MaxSpawnPerZone);
@@ -109,6 +113,7 @@ public sealed class ZoneServerConfig : Game.ZoneCommon.IServerConfig<ZoneServerO
         w.Write("RespawnDelayMs", o.RespawnDelayMs);
         w.Write("RespawnInvulnMs", o.RespawnInvulnMs);
         w.Write("AllowPvp", o.AllowPvp);
+        w.Write("AllowDuel", o.AllowDuel);
         w.Write("GameDataDir", o.GameDataDir);
         w.Write("MonsterThinkIntervalMs", o.MonsterThinkIntervalMs);
         w.Write("MaxMonsterCount", o.MaxMonsterCount);
@@ -124,7 +129,7 @@ public sealed class ZoneServerConfig : Game.ZoneCommon.IServerConfig<ZoneServerO
         LogManager.Info("ServerName : {0}", ServerName);
         LogManager.Info("ZoneId : {0}, ZoneKind : {1}, Capacity : {2}, TickIntervalMs : {3}", o.ZoneId, (uint)o.Kind, o.Capacity, o.TickIntervalMs);
         LogManager.Info("Bounds : ({0}, {1}) - ({2}, {3}), CellSize : {4}, Spawn : ({5}, {6})", o.MinX, o.MinY, o.MaxX, o.MaxY, o.CellSize, o.SpawnX, o.SpawnY);
-        LogManager.Info("RespawnDelayMs : {0}, RespawnInvulnMs : {1}, AllowPvp : {2}", o.RespawnDelayMs, o.RespawnInvulnMs, o.AllowPvp);
+        LogManager.Info("RespawnDelayMs : {0}, RespawnInvulnMs : {1}, AllowPvp : {2}, AllowDuel : {3} (기본값. 존 규칙이 있으면 그것을 쓴다)", o.RespawnDelayMs, o.RespawnInvulnMs, o.AllowPvp, o.AllowDuel);
         LogManager.Info("GameDataDir : {0}, MonsterThinkIntervalMs : {1}, MaxMonsterCount : {2}", o.GameDataDir, o.MonsterThinkIntervalMs, o.MaxMonsterCount);
         LogManager.Info("MetricsIntervalMs : {0}, RequestGuardEnabled : {1}", o.MetricsIntervalMs, o.RequestGuardEnabled);
         foreach (ServerNode n in ServerNodes)

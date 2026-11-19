@@ -112,11 +112,13 @@ namespace GameViewer.Core
                 }
             }
 
+            // 끊김 여부는 큐를 비우기 전에 읽는다: 비운 뒤에 읽으면 그 사이 도착한 마지막 패킷이 큐에 남은 채 끊김으로 처리돼 버려진다
+            bool alive = Net.Connected;
             Frame f;
             while (Net.TryDequeue(out f))
                 Dispatch(f, now);
 
-            if (SendOverride == null && !Net.Connected && (State == SessionState.LoggingIn || State == SessionState.Entering || State == SessionState.InZone))
+            if (SendOverride == null && !alive && (State == SessionState.LoggingIn || State == SessionState.Entering || State == SessionState.InZone))
             {
                 State = SessionState.Disconnected;
                 StatusText = "연결 끊김: " + (Net.DisconnectReason ?? "unknown");

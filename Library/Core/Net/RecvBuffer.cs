@@ -74,8 +74,10 @@ public sealed class RecvBuffer
     /// <summary>처리할 데이터가 남아 있지 않으면 배열을 풀에 반납한다.</summary>
     internal void ReleaseIfEmpty()
     {
-        if (_buffer != null && DataSize == 0)
-            Release();
+        if (_buffer != null && DataSize == 0 && Capacity > NetConstants.RecvKeepCapacity)
+            Release();       // 작은 버퍼는 계속 쥔다(NetConstants.RecvKeepCapacity)
+        else if (_buffer != null && DataSize == 0)
+            _readPos = _writePos = 0;
     }
 
     /// <summary>배열을 무조건 풀에 반납하고 커서를 초기화한다. 진행 중인 수신이 없을 때만 호출해야 한다.</summary>

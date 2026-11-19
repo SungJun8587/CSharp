@@ -16,7 +16,7 @@ public sealed class GatewayZoneSession : PacketSession
     private int _zoneId;
     private ZoneNode? _node;
 
-    public GatewayZoneSession(GatewayServerMain server)
+    public GatewayZoneSession(GatewayServerMain server) : base(RecvUnitBytes)
     {
         _server = server;
     }
@@ -41,6 +41,8 @@ public sealed class GatewayZoneSession : PacketSession
     }
 
     protected override int MaxRecvPacketSize => ProtocolConst.MaxServerPacketBytes;
+
+    private const int RecvUnitBytes = 2048;     // 수신 버퍼 용량 32KB >= 서버 간 패킷 상한
 
     protected override void OnRecvPacket(ReadOnlySpan<byte> packet)
     {

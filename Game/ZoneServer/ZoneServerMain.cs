@@ -1,5 +1,6 @@
 ﻿// ZoneServerMain.cs : 존 서버 본체. 전투 존을 띄우고 Gateway에 접속해 등록/하트비트/입장/중계를 처리한다.
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -18,9 +19,11 @@ namespace Game.ZoneServer;
 /// </summary>
 public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
 {
+    private const int GatewayResolveTimeoutMs = 3000;   // Gateway 주소 이름 해석 제한 시간
     private const int LinkTickMs = 200;         // 링크 스레드 틱 간격
     private const int ReconnectMinMs = 500;     // 재접속 최소 대기
     private const int ReconnectMaxMs = 5000;    // 재접속 최대 대기(지수 백오프 상한)
+    private const int ReconnectJitterMs = 250;  // 게이트웨이 재시작 뒤 여러 존 서버가 같은 순간에 몰리지 않게 대기에 더하는 무작위 폭
 
     private const int RelayJobPoolMax = 4096;
     private static readonly System.Collections.Concurrent.ConcurrentQueue<RelayJob> s_relayJobs = new System.Collections.Concurrent.ConcurrentQueue<RelayJob>();
@@ -33,11 +36,14 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
     private Thread? _linkThread;
     private volatile ZoneLinkSession? _link;    // 현재 연결. 쓰기는 _linkLock 안에서, 읽기(송신 경로)는 락 없이
     private bool _needReconnect;                // 재접속이 필요하다 (_linkLock으로 보호)
-    private int _reconnectBackoffMs = ReconnectMinMs;
+    private readonly BackoffState _reconnectBackoff = new BackoffState(ReconnectMinMs, ReconnectMaxMs, jitterMs: ReconnectJitterMs);   // (_linkLock으로 보호)
     private bool _stopRequested;                // (_linkLock으로 보호)
     private ulong _lastRejectedJobs;           // 링크 스레드 전용
     private ulong _lastFailedJobs;
     private int _registered;
+    private readonly PendingRequests<bool> _registerPending = new PendingRequests<bool>(maxPerOwner: 1);   // 등록 응답 대기(연결당 하나). 링크 스레드가 Advance()로 만료시킨다
+    private long _registerRequestId;
+    private long _duplicateSinceMs;            // 처음 DuplicateZone 으로 거부된 시각(0이면 없음). 등록에 성공하면 비운다
     private int _registerRejected;
     private int _heartbeatIntervalMs = (int)ProtocolConst.DefaultHeartbeatIntervalMs;
 
@@ -63,8 +69,9 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
         {
             _stopRequested = false;
             _needReconnect = false;
-            _reconnectBackoffMs = ReconnectMinMs;
+            _reconnectBackoff.Reset();
         }
+        _duplicateSinceMs = 0;
         Volatile.Write(ref _registered, 0);
         Volatile.Write(ref _registerRejected, 0);
 
@@ -78,7 +85,23 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
         zoneConfig.MaxY = options.MaxY;
         zoneConfig.CellSize = options.CellSize;
         zoneConfig.RespawnDelayMs = options.RespawnDelayMs;
-        zoneConfig.AllowPvp = options.AllowPvp;
+        // 존별 규칙: 규칙 파일(ZoneRule.json)에 이 존의 행이 있으면 그것을, 없으면 옵션의 기본값을 쓴다. 형식이 틀리면 구동하지 않는다.
+        bool allowPvp = options.AllowPvp;
+        bool allowDuel = options.AllowDuel;
+        if (options.GameDataDir.Length != 0)
+        {
+            if (!ZoneRuleTable.TryLoad(options.GameDataDir, options.ZoneId, out ZoneRuleEntry? rule))
+            {
+                LogManager.Error("[ZoneServerMain] zone rule load failed. dir={0}", options.GameDataDir);
+                return false;
+            }
+            if (rule != null)
+            {
+                allowPvp = rule.AllowPvp;
+                allowDuel = rule.AllowDuel;
+            }
+        }
+        zoneConfig.AllowPvp = allowPvp;
         zoneConfig.RespawnInvulnMs = options.RespawnInvulnMs;
 
         Vec2 spawnPos = new Vec2(options.SpawnX, options.SpawnY);
@@ -120,6 +143,7 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
             zone = new BattleZone(zoneConfig, this, spawnPos, heroData, monsterData, monsterConfig, bossData, dropData);
             zone.Capacity = options.Capacity;
             zone.GuardEnabled = options.RequestGuardEnabled;
+            zone.SetRules(allowPvp, allowDuel);
         }
         catch (ArgumentException e)
         {
@@ -135,6 +159,19 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
             return false;
         }
 
+        // 존 사이 관문(ZoneLink.json). 없으면 관문 없이 동작하고, 있는데 형식이 틀리면 구동하지 않는다.
+        if (options.GameDataDir.Length != 0)
+        {
+            List<ZoneGateLink>? gates = ZoneLinkTable.Load(options.GameDataDir, options.ZoneId);
+            if (gates == null)
+            {
+                LogManager.Error("[ZoneServerMain] zone link load failed. dir={0}", options.GameDataDir);
+                zone.Shutdown();
+                return false;
+            }
+            zone.SetGateLinks(gates, zoneConfig.MinX, zoneConfig.MinY, zoneConfig.MaxX, zoneConfig.MaxY);
+        }
+
         uint spawned = zone.SpawnMonsters();
         LogManager.Info("[ZoneServerMain] monsters spawned. zoneId={0}, count={1}", options.ZoneId, spawned);
 
@@ -147,8 +184,9 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
         }
 
         // 2. Gateway 접속용 클라이언트 서비스. 세션은 1개이며, 연결이 끊기면 링크 스레드가 새 세션으로 재접속한다.
-        IPAddress? ip = ResolveGatewayAddress(options.GatewayIp);
-        if (ip == null)
+        // 이름이면 제한 시간(3초)과 동시 해석 수 상한을 두고 해석한다. IPv4 를 우선한다.
+        (bool resolved, NetAddress gateway) = NetAddress.TryCreateAsync(options.GatewayIp, options.GatewayPort, GatewayResolveTimeoutMs).GetAwaiter().GetResult();
+        if (!resolved)
         {
             LogManager.Error("[ZoneServerMain] invalid gateway address. ip={0}", options.GatewayIp);
             Stop();
@@ -163,7 +201,7 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
             KeepAlive = true,
             Logger = new LogManagerNetLogger(NetLogLevel.Warning, "ZoneLink"),
         };
-        _client = new ClientService(new IPEndPoint(ip, options.GatewayPort), () => new ZoneLinkSession(this), netOptions);
+        _client = new ClientService(gateway.EndPoint, () => new ZoneLinkSession(this), netOptions);
 
         // 3. 링크 스레드를 먼저 시작해, Start() 직후 첫 연결이 실패해도 재접속이 이어지게 한다.
         lock (_linkLock)
@@ -171,24 +209,6 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
         _linkThread = new Thread(LinkLoop) { Name = "ZoneLink", IsBackground = true };
         _linkThread.Start();
         return true;
-    }
-
-    private static IPAddress? ResolveGatewayAddress(string host)
-    {
-        if (IPAddress.TryParse(host, out IPAddress? ip))
-            return ip;
-        try
-        {
-            foreach (IPAddress a in Dns.GetHostAddresses(host))
-            {
-                if (a.AddressFamily == AddressFamily.InterNetwork)
-                    return a;
-            }
-        }
-        catch (SocketException)
-        {
-        }
-        return null;
     }
 
     public void Stop()
@@ -229,13 +249,29 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
         lock (_linkLock)
         {
             _link = session;
-            _needReconnect = false;
-            _reconnectBackoffMs = ReconnectMinMs;
+            _needReconnect = false;     // 백오프는 여기서 되돌리지 않는다: 연결만 되고 바로 끊기는 게이트웨이에 0.5초 간격으로 계속 붙지 않게, 등록 성공 때 되돌린다
         }
         Volatile.Write(ref _registered, 0);
 
         PostGatewayReset("connected");
         SendRegisterReq();
+
+        // 등록 응답이 제한 시간 안에 오지 않으면 연결을 끊는다. 끊으면 OnLinkDisconnected 가 백오프 재접속을 예약한다.
+        // (연결은 받아 놓고 응답하지 않는 Gateway 에 영원히 미등록으로 붙어 있지 않게 한다. TCP keep-alive 는 응용 계층 무응답을 못 잡는다)
+        if (_options.RegisterTimeoutMs == 0)
+            return;     // 0 이면 응답 시간 제한을 쓰지 않는다
+
+        long ownerId = session.SessionId;
+        _registerRequestId = _registerPending.Register(ownerId, (int)Math.Min(_options.RegisterTimeoutMs, int.MaxValue),
+            static _ => { },
+            reason =>
+            {
+                if (reason != PendingFailure.Timeout)
+                    return;
+
+                LogManager.Warning("[ZoneServerMain] gateway did not answer registration. zoneId={0}, timeoutMs={1}", _options.ZoneId, _options.RegisterTimeoutMs);
+                session.Disconnect(CloseReason.IdleTimeout);
+            });
     }
 
     /// <summary>
@@ -250,6 +286,7 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
         {
             if (ReferenceEquals(_link, session))
             {
+                _registerPending.CancelOwner(session.SessionId);
                 _link = null;
                 Volatile.Write(ref _registered, 0);
                 LogManager.Warning("[ZoneServerMain] gateway link lost. zoneId={0}", _options.ZoneId);
@@ -292,8 +329,9 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
             case ZoneServerPacketType.ZoneEnterReq: return HandleEnterReq(packet);
             case ZoneServerPacketType.ZoneLeaveReq: return HandleLeaveReq(packet);
             case ZoneServerPacketType.ZoneRelayToZone: return HandleRelayToZone(packet);
+            case (ZoneServerPacketType)PlayerStatePacketType.Restore: return HandleStateRestore(packet);
             default:
-                LogManager.Error("[ZoneServerMain] unknown packet type from gateway: {0}", PacketIO.ReadType(packet));
+                LogThrottle.Error("zone.unknown-packet", 5000, "[ZoneServerMain] unknown packet type from gateway: {0}", PacketIO.ReadType(packet));
                 return false;
         }
     }
@@ -304,15 +342,38 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
         if (!ZoneRegisterRes.TryRead(packet, out ZoneRegisterRes res))
             return false;
 
+        // 거부든 성공이든 응답이 왔으므로 대기를 끝낸다.
+        _registerPending.Cancel(Volatile.Read(ref _registerRequestId));
+
         if (res.Success == 0)
         {
+            // 같은 존 ID 의 이전 연결이 아직 살아 있는 것으로 보이는 경우(이전 인스턴스가 연결을 닫지 못하고 사라졌고 Gateway 의 하트비트
+            // 만료 전에 다시 뜬 경우)는 잠시 재시도한다. 살아 있는 인스턴스와 설정이 겹친 것이라면 제한 시간 뒤에 종료된다.
+            if (res.Reason == (byte)ZoneRegisterResult.DuplicateZone && _options.DuplicateRetryMs != 0)
+            {
+                long now = TimeUtil.MonotonicNowMillis();
+                if (_duplicateSinceMs == 0)
+                    _duplicateSinceMs = now;
+
+                if (now - _duplicateSinceMs < _options.DuplicateRetryMs)
+                {
+                    LogManager.Warning("[ZoneServerMain] zone id is still held by another link, retrying. zoneId={0}", _options.ZoneId);
+                    _link?.Disconnect(CloseReason.Local);     // 끊으면 OnLinkDisconnected 가 백오프 재접속을 예약한다
+                    return true;
+                }
+            }
+
             LogManager.Error("[ZoneServerMain] zone registration rejected. zoneId={0}, reason={1}", _options.ZoneId, res.Reason);
             Volatile.Write(ref _registerRejected, 1);
             return true;
         }
 
+        _duplicateSinceMs = 0;
+
         int intervalMs = (int)Math.Min(Math.Max(res.HeartbeatIntervalMs, 200u), 30000u);
         Volatile.Write(ref _heartbeatIntervalMs, intervalMs);
+        lock (_linkLock)
+            _reconnectBackoff.Reset();
         Volatile.Write(ref _registered, 1);
         LogManager.Info("[ZoneServerMain] zone registered. zoneId={0}, heartbeatIntervalMs={1}", _options.ZoneId, intervalMs);
         return true;
@@ -337,6 +398,19 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
         return true;
     }
 
+    /// <summary>Gateway가 돌려준 보관 상태(체력/MP/가방/도착 지점)를 존 입력 큐로 넘긴다. 바로 뒤의 입장 요청에 쓰인다.</summary>
+    private bool HandleStateRestore(ReadOnlySpan<byte> packet)
+    {
+        if (!ZoneStateRestore.TryRead(packet, out ZoneStateRestore req) || req.State.CharId == 0)
+            return false;
+
+        PlayerState state = req.State;
+        BattleZone? zone = _zone;
+        if (zone == null || !zone.Post(z => ((BattleZone)z).HandleRestore(state)))
+            LogThrottle.Warning("zoneserver.restore-dropped", 1000, "[ZoneServerMain] state restore dropped (zone inbox full or stopped). charId={0}", state.CharId);
+        return true;
+    }
+
     /// <summary>퇴장 요청을 존 입력 큐로 넘긴다. 큐가 가득 차 넘기지 못하면 엔티티가 존에 남을 수 있으므로 경고를 남긴다.</summary>
     private bool HandleLeaveReq(ReadOnlySpan<byte> packet)
     {
@@ -348,7 +422,7 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
         BattleZone? zone = _zone;
         bool posted = zone != null && zone.Post(z => ((BattleZone)z).HandleLeave(sessionId, charId));
         if (!posted)
-            LogManager.Warning("[ZoneServerMain] leave request dropped (zone inbox full or stopped). charId={0}", charId);
+            LogThrottle.Warning("zoneserver.leave-dropped", 1000, "[ZoneServerMain] leave request dropped (zone inbox full or stopped). charId={0}", charId);
         return true;
     }
 
@@ -581,11 +655,12 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
                 if (_needReconnect && now >= nextReconnect)
                 {
                     _needReconnect = false;
-                    backoffMs = _reconnectBackoffMs;
-                    _reconnectBackoffMs = Math.Min(_reconnectBackoffMs * 2, ReconnectMaxMs);
+                    backoffMs = (int)_reconnectBackoff.OnFail(now);
                     reconnect = true;
                 }
             }
+
+            _registerPending.Advance();
 
             if (reconnect)
             {

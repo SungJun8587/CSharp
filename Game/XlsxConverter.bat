@@ -1,6 +1,6 @@
 @ECHO OFF
 chcp 65001 >nul
-"K:\GitHub\CSharp\Game\Bin\Release\XlsxConverter.exe" "K:\GitHub\CPP\Project\Game\GameData" --out "K:\GitHub\CPP\Project\Game\GameData" --cpp-gen-out "K:\GitHub\CPP\Project\Game\GameCommon\Generated" --cs-gen-out "K:\GitHub\CSharp\Game\GameCommon\Generated" --cs-gen-namespace Game.Generated --cs-client-proto-out "K:\GitHub\CPP\Project\Game\GameViewer\Core\Protocol\Generated" --cs-client-proto-namespace GameViewer.Core.Protocol --proto-sizes-out "K:\GitHub\CPP\Project\Game\GameViewer\Tests\cpp_packet_sizes.txt"
+"K:\GitHub\CSharp\Game\Bin\AnyCPU\Release\XlsxConverter.exe" "K:\GitHub\CPP\Project\Game\GameData" --out "K:\GitHub\CPP\Project\Game\GameData" --cpp-gen-out "K:\GitHub\CPP\Project\Game\GameCommon\Generated" --cs-gen-out "K:\GitHub\CSharp\Game\GameCommon\Generated" --cs-gen-namespace Game.Generated --cs-client-proto-out "K:\GitHub\CPP\Project\Game\GameViewer\Core\Protocol\Generated" --cs-client-proto-namespace GameViewer.Core.Protocol --proto-sizes-out "K:\GitHub\CPP\Project\Game\GameViewer\Tests\cpp_packet_sizes.txt"
 SET RC=%ERRORLEVEL%
 ECHO.
 IF %RC%==0 (ECHO [XlsxConverter] 완료) ELSE (ECHO [XlsxConverter] 실패. 종료 코드=%RC%)

@@ -36,12 +36,12 @@ namespace GameViewer.Tests
         public static void Stage()
         {
             int r1, g1, b1, r2, g2, b2;
-            BossFx.Theme(116, out r1, out g1, out b1); BossFx.Theme(118, out r2, out g2, out b2);
+            BossFx.Theme(108, out r1, out g1, out b1); BossFx.Theme(122, out r2, out g2, out b2);
             T.Check(g1 > r1 && r2 > b2, "spider boss is green, golem boss is orange");
-            T.Check(BossFx.HasTheme(115) && BossFx.HasTheme(20) && BossFx.HasTheme(126) && BossFx.HasTheme(21) && !BossFx.HasTheme(7) && !BossFx.HasTheme(101), "themes only for the twelve newer monsters");
+            T.Check(BossFx.HasTheme(108) && BossFx.HasTheme(121) && BossFx.HasTheme(122) && BossFx.HasTheme(8) && !BossFx.HasTheme(7) && !BossFx.HasTheme(101), "themes for spider, yeti, golem and the other themed kinds; slime king uses the default gold");
             int ra, ga, ba, rb, gb, bb;
-            BossFx.Theme(121, out ra, out ga, out ba); BossFx.Theme(122, out rb, out gb, out bb);
-            T.Check(ba > ra && rb > bb, "yeti boss is icy blue, lava boss is orange");
+            BossFx.Theme(121, out ra, out ga, out ba); BossFx.Theme(4, out rb, out gb, out bb);
+            T.Check(ba > ra && rb > bb, "yeti boss is icy blue, lizard is lava orange");
             T.Check(BossFx.LandShake(1000 + BossFx.LandMs + 10, 1000) > 5f, "shake right at landing");
             T.Check(BossFx.LandShake(1000 + BossFx.LandMs + 600, 1000) == 0f && BossFx.LandShake(1000 + 100, 1000) == 0f, "no shake before landing or long after");
             T.Check(BossFx.Crack(1000 + BossFx.LandMs - 1, 1000) < 0f && BossFx.Crack(1000 + BossFx.LandMs + 100, 1000) >= 0f && BossFx.Crack(1000 + BossFx.LandMs + BossFx.LandAfterMs + 1, 1000) < 0f, "cracks live after landing");

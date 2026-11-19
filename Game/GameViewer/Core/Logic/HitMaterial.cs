@@ -7,22 +7,20 @@ namespace GameViewer.Core.Logic
 
     public static class HitMaterial
     {
-        /// <summary>몬스터 템플릿(보스판 101~ 포함)의 재질. 몬스터가 아니면 Flesh.</summary>
+        /// <summary>서버 몬스터 Id(보스는 100+Id)의 재질. 몬스터가 아니면 Flesh.</summary>
         public static HitMat Of(uint templateId, bool isMonster)
         {
             if (!isMonster) return HitMat.Flesh;
             switch ((int)(templateId % 100))
             {
-                case 1: return HitMat.Gel;                      // 슬라임
-                case 2: case 3: return HitMat.Plant;            // 버섯, 선인장
-                case 4: case 11: case 13: return HitMat.Metal;  // 폭탄, 암흑/강철 기사
-                case 9: case 16: case 20: case 24: case 25: return HitMat.Shell;   // 게, 거미, 전갈, 소라게, 사마귀
-                case 10: return HitMat.Wood;                    // 나무 정령
-                case 14: return HitMat.Fire;                    // 불꽃
-                case 17: return HitMat.Bone;                    // 해골
-                case 18: return HitMat.Stone;                   // 골렘
-                case 19: return HitMat.Spirit;                  // 유령
-                default: return HitMat.Flesh;                   // 늑대, 고블린, 지렁이, 박쥐, 설인, 도마뱀, 두꺼비, 독수리
+                case 1: return HitMat.Gel;                                   // 슬라임
+                case 5: case 9: return HitMat.Plant;                         // 독버섯, 선인장
+                case 14: case 19: case 20: return HitMat.Metal;              // 폭탄 괴물, 암흑/강철 기사
+                case 6: case 8: case 10: case 11: case 12: return HitMat.Shell;   // 소라게, 독거미, 전갈, 사마귀, 게
+                case 13: return HitMat.Bone;                                 // 해골 병사
+                case 22: return HitMat.Stone;                                // 골렘
+                case 15: return HitMat.Spirit;                               // 유령
+                default: return HitMat.Flesh;                                // 두꺼비, 박쥐, 도마뱀, 고블린 계열, 독침 벌레, 설인
             }
         }
 

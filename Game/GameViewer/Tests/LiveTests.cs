@@ -134,6 +134,9 @@ namespace GameViewer.Tests
         public static void ReconnectPolicyTest()
         {
             ReconnectPolicy p = new ReconnectPolicy();
+            T.Eq(5, ReconnectPolicy.DelaysMs.Length, "five attempts");
+            int[] want = { 1000, 2000, 4000, 8000, 10000 };
+            for (int i = 0; i < want.Length; ++i) T.Eq(want[i], ReconnectPolicy.DelaysMs[i], "delay table " + i);
             T.Check(!p.Waiting && !p.TryTake(0), "idle");
             T.Check(p.OnFailure(1000), "first failure schedules");
             T.Eq(1, p.Attempt, "attempt 1"); T.Eq(2000L, 1000L + p.RemainingMs(1000), "due after 1s");

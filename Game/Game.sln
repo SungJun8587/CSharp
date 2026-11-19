@@ -23,9 +23,6 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Game.GatewayServer", "GatewayServer\Game.GatewayServer.csproj", "{3B55E691-1A4E-41CA-A118-62B2AB02C0C6}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Game.Generated", "GameCommon\Generated\Game.Generated.csproj", "{C37C8706-B538-9077-13FF-F4FF13AEA185}"
-	ProjectSection(ProjectDependencies) = postProject
-		{4E81CB2B-80D8-11BD-20F7-15D8C8724B6C} = {4E81CB2B-80D8-11BD-20F7-15D8C8724B6C}
-	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -1,5 +1,6 @@
 ﻿// TlsService.cs : implementation of the TlsServiceOptions, TlsSession, TlsPacketSession, TlsService, TlsServerService and TlsClientService classes.
 using System;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -10,11 +11,12 @@ using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
+using Core.Util;
 
 namespace Core.Net;
 
 /// <summary>TLS 서비스 옵션. 서버는 ServerCertificate, 클라이언트는 TargetHost 가 필요하다.</summary>
-public sealed class TlsServiceOptions
+public sealed class TlsServiceOptions : ISocketServiceOptions
 {
     /// <summary>서버 인증서(개인 키 포함). 서버에서 필수.</summary>
     public X509Certificate? ServerCertificate { get; init; }
@@ -47,6 +49,21 @@ public sealed class TlsServiceOptions
     public long MaxSendQueueBytes { get; init; } = 16 * 1024 * 1024;
 
     public bool NoDelay { get; init; } = true;
+
+    /// <summary>TCP KeepAlive 사용 여부. FIN 없이 사라진 상대(전원 차단 등)를 감지한다. 유휴 제한(IdleTimeoutMs)을 쓰지 않을 때 특히 필요하다.</summary>
+    public bool KeepAlive { get; init; } = true;
+
+    /// <summary>KeepAlive 시작 대기 시간(초).</summary>
+    public int KeepAliveTimeSec { get; init; } = 60;
+
+    /// <summary>KeepAlive 프로브 간격(초).</summary>
+    public int KeepAliveIntervalSec { get; init; } = 10;
+
+    /// <summary>소켓 송신 버퍼 크기. 0 이하이면 OS 기본값.</summary>
+    public int SocketSendBufferSize { get; init; } = 0;
+
+    /// <summary>소켓 수신 버퍼 크기. 0 이하이면 OS 기본값.</summary>
+    public int SocketRecvBufferSize { get; init; } = 0;
 
     /// <summary>
     /// true 이면 데이터가 올 때까지 0바이트 읽기로 기다리고 도착한 뒤에만 수신 버퍼를 대여한다.
@@ -200,21 +217,23 @@ public abstract class TlsSession
     //****************************************************************
 
     /// <summary>데이터를 복사해 송신 큐에 넣는다.</summary>
-    public bool Send(ReadOnlySpan<byte> data) => Send(SendBufferManager.Create(data));
+    public bool Send(ReadOnlySpan<byte> data)
+    {
+        if (data.IsEmpty || !IsConnected)
+            return false;
+
+        return Send(SendBufferManager.Create(data));
+    }
 
     /// <summary>송신 큐에 넣는다. 같은 SendBuffer 를 여러 세션에 보내도 된다(Broadcast).</summary>
-    /// <returns>연결되어 있지 않거나 종료가 예약되었거나 송신 제한을 넘어 거부되면 false.</returns>
+    /// <returns>연결되어 있지 않거나, 비어 있는 버퍼이거나, 종료가 예약되었거나, 송신 제한을 넘어 거부되면 false.</returns>
     public bool Send(SendBuffer buffer)
     {
-        if (buffer == null)
-            throw new ArgumentNullException(nameof(buffer));
-
-        if (!IsConnected || _closeAfterSend)
+        // Session.Send 와 같은 규약: null 이거나 비어 있으면 false.
+        if (buffer == null || buffer.WriteSize == 0 || !IsConnected || _closeAfterSend)
             return false;
 
         int size = buffer.WriteSize;
-        if (size == 0)
-            return true;
 
         long queued = Interlocked.Add(ref _pendingSendBytes, size);
         if (_maxSendQueueBytes > 0 && queued > _maxSendQueueBytes)
@@ -487,8 +506,13 @@ public abstract class TlsSession
         return false;
     }
 
+    // 송신 합치기 한도: TLS 레코드의 최대 평문 크기.
+    private const int TlsCombineLimit = 16 * 1024;
+
     private async Task SendLoopAsync()
     {
+        byte[]? combineBuffer = null;   // 이 송신 루프가 도는 동안만 대여한다(유휴 세션이 메모리를 잡지 않게)
+
         try
         {
             while (true)
@@ -517,11 +541,38 @@ public abstract class TlsSession
                 if (done)
                     break;
 
+                // 작은 패킷마다 WriteAsync 를 부르면 패킷마다 TLS 레코드(헤더+MAC)와 소켓 전송이 따로 생긴다.
+                // 레코드 최대 크기(16KB)까지 모아서 쓰고, 그보다 큰 버퍼는 그대로 쓴다.
+                int combined = 0;
                 foreach (SendBuffer buffer in _sendBatch)
                 {
                     ArraySegment<byte> segment = buffer.Segment;
-                    await _ssl!.WriteAsync(new ReadOnlyMemory<byte>(segment.Array, segment.Offset, segment.Count)).ConfigureAwait(false);
+
+                    if (segment.Count >= TlsCombineLimit)
+                    {
+                        if (combined > 0)
+                        {
+                            await _ssl!.WriteAsync(new ReadOnlyMemory<byte>(combineBuffer, 0, combined)).ConfigureAwait(false);
+                            combined = 0;
+                        }
+
+                        await _ssl!.WriteAsync(new ReadOnlyMemory<byte>(segment.Array, segment.Offset, segment.Count)).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    if (combined + segment.Count > TlsCombineLimit)
+                    {
+                        await _ssl!.WriteAsync(new ReadOnlyMemory<byte>(combineBuffer, 0, combined)).ConfigureAwait(false);
+                        combined = 0;
+                    }
+
+                    combineBuffer ??= ArrayPool<byte>.Shared.Rent(TlsCombineLimit);
+                    Buffer.BlockCopy(segment.Array!, segment.Offset, combineBuffer, combined, segment.Count);
+                    combined += segment.Count;
                 }
+
+                if (combined > 0)
+                    await _ssl!.WriteAsync(new ReadOnlyMemory<byte>(combineBuffer, 0, combined)).ConfigureAwait(false);
 
                 _sendBatch.Clear();
                 Interlocked.Add(ref _pendingSendBytes, -total);
@@ -546,6 +597,9 @@ public abstract class TlsSession
         }
         finally
         {
+            if (combineBuffer != null)
+                ArrayPool<byte>.Shared.Return(combineBuffer);
+
             DecrementPending();
         }
     }
@@ -686,24 +740,15 @@ public abstract class TlsService : IDisposable, IAsyncDisposable
 {
     private readonly Func<TlsSession> _sessionFactory;
     private readonly ConcurrentDictionary<long, TlsSession> _sessions = new ConcurrentDictionary<long, TlsSession>();
-    private readonly TaskCompletionSource<bool> _allClosed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly object _idleLock = new object();
-    private Timer? _idleTimer;
+    private readonly ServiceCore _core;
     private long _lastSessionId;
-    private int _closing;
-    private int _sessionSlots;
-
-    private long _totalConnected;
-    private long _totalDisconnected;
-    private long _totalRejected;
-    private long _closedBytesReceived;
-    private long _closedBytesSent;
 
     protected TlsService(IPEndPoint endPoint, Func<TlsSession> sessionFactory, TlsServiceOptions options)
     {
         EndPoint = endPoint ?? throw new ArgumentNullException(nameof(endPoint));
         _sessionFactory = sessionFactory ?? throw new ArgumentNullException(nameof(sessionFactory));
         Options = options ?? throw new ArgumentNullException(nameof(options));
+        _core = new ServiceCore(Options);
     }
 
     public IPEndPoint EndPoint { get; }
@@ -713,7 +758,7 @@ public abstract class TlsService : IDisposable, IAsyncDisposable
     /// <summary>현재 관리 중인 세션 수(핸드셰이크 중인 연결 포함).</summary>
     public int SessionCount => _sessions.Count;
 
-    public bool IsClosing => Volatile.Read(ref _closing) == 1;
+    public bool IsClosing => _core.IsClosing;
 
     /// <summary>sessionId 로 세션을 찾는다.</summary>
     public bool TryGetSession(long sessionId, out TlsSession? session) => _sessions.TryGetValue(sessionId, out session);
@@ -742,14 +787,7 @@ public abstract class TlsService : IDisposable, IAsyncDisposable
             pending += session.PendingSendBytes;
         }
 
-        return new NetStatsSnapshot(
-            connected,
-            Interlocked.Read(ref _totalConnected),
-            Interlocked.Read(ref _totalDisconnected),
-            Interlocked.Read(ref _totalRejected),
-            received + Interlocked.Read(ref _closedBytesReceived),
-            sent + Interlocked.Read(ref _closedBytesSent),
-            pending);
+        return _core.MakeStats(connected, received, sent, pending);
     }
 
     /// <summary>서비스를 닫고 모든 세션이 정리될 때까지 기다린다.</summary>
@@ -757,20 +795,14 @@ public abstract class TlsService : IDisposable, IAsyncDisposable
     public bool Close(int timeoutMs = NetConstants.DefaultCloseTimeoutMs)
     {
         BeginClose();
-        return _allClosed.Task.Wait(timeoutMs);
+        return _core.WaitAllClosed(timeoutMs);
     }
 
     public async Task<bool> CloseAsync(int timeoutMs = NetConstants.DefaultCloseTimeoutMs, CancellationToken cancellationToken = default)
     {
         BeginClose();
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        Task timeout = Task.Delay(timeoutMs, cts.Token);
-        Task finished = await Task.WhenAny(_allClosed.Task, timeout).ConfigureAwait(false);
-        cts.Cancel();
-
-        cancellationToken.ThrowIfCancellationRequested();
-        return finished == _allClosed.Task;
+        return await _core.WaitAllClosedAsync(timeoutMs, cancellationToken).ConfigureAwait(false);
     }
 
     public void Dispose() => Close();
@@ -782,50 +814,32 @@ public abstract class TlsService : IDisposable, IAsyncDisposable
 
     private void BeginClose()
     {
-        if (Interlocked.Exchange(ref _closing, 1) != 0)
+        if (!_core.BeginClose())
             return;
 
         StopAcceptingConnections();
-        StopIdleMonitor();
+        _core.StopIdleMonitor();
 
         foreach (var pair in _sessions)
             pair.Value.Disconnect(CloseReason.ServiceClosing);
 
         if (_sessions.IsEmpty)
-            _allClosed.TrySetResult(true);
+            _core.SignalAllClosed();
     }
 
     //****************************************************************
     // 파생 클래스/세션용
     //****************************************************************
 
-    internal bool TryReserveSlot()
-    {
-        int max = Options.MaxSessionCount;
+    internal bool TryReserveSlot() => _core.TryReserveSlot();
 
-        while (true)
-        {
-            int current = Volatile.Read(ref _sessionSlots);
-            if (current >= max)
-                return false;
+    internal void ReleaseSlot() => _core.ReleaseSlot();
 
-            if (Interlocked.CompareExchange(ref _sessionSlots, current + 1, current) == current)
-                return true;
-        }
-    }
+    internal long CountRejected() => _core.CountRejected();
 
-    internal void ReleaseSlot() => Interlocked.Decrement(ref _sessionSlots);
+    internal void OnSessionStarted() => _core.OnSessionStarted();
 
-    internal long CountRejected() => Interlocked.Increment(ref _totalRejected);
-
-    internal void OnSessionStarted() => Interlocked.Increment(ref _totalConnected);
-
-    internal void OnSessionClosed(long bytesReceived, long bytesSent)
-    {
-        Interlocked.Add(ref _closedBytesReceived, bytesReceived);
-        Interlocked.Add(ref _closedBytesSent, bytesSent);
-        Interlocked.Increment(ref _totalDisconnected);
-    }
+    internal void OnSessionClosed(long bytesReceived, long bytesSent) => _core.OnSessionClosed(bytesReceived, bytesSent);
 
     /// <summary>슬롯을 이미 예약한 연결로 세션을 만들어 목록에 넣는다. 실패하면 슬롯을 반환하고 null.</summary>
     internal TlsSession? CreateAndAddSession(Socket socket)
@@ -865,73 +879,21 @@ public abstract class TlsService : IDisposable, IAsyncDisposable
         ReleaseSlot();
 
         if (IsClosing && _sessions.IsEmpty)
-            _allClosed.TrySetResult(true);
+            _core.SignalAllClosed();
     }
 
-    internal void ConfigureSocket(Socket socket) => SocketUtils.SetNoDelay(socket, Options.NoDelay);
+    internal void ConfigureSocket(Socket socket) => _core.ConfigureSocket(socket);
 
     protected void StartIdleMonitor()
-    {
-        int timeout = Options.IdleTimeoutMs;
-        if (timeout <= 0)
-            return;
-
-        lock (_idleLock)
+        => _core.StartIdleMonitor(now =>
         {
-            if (_idleTimer != null)
-                return;
-
-            int period = Math.Max(100, timeout / 4);
-            _idleTimer = new Timer(_ => SweepIdle(), null, period, period);
-        }
-    }
-
-    private void StopIdleMonitor()
-    {
-        lock (_idleLock)
-        {
-            _idleTimer?.Dispose();
-            _idleTimer = null;
-        }
-    }
-
-    private void SweepIdle()
-    {
-        try
-        {
-            long now = Environment.TickCount64;
             foreach (var pair in _sessions)
                 pair.Value.CheckIdle(now, Options.IdleTimeoutMs);
-        }
-        catch (Exception e)
-        {
-            Log(NetLogLevel.Error, "TLS 유휴 검사 예외", e);
-        }
-    }
+        });
 
-    internal bool IsLogEnabled(NetLogLevel level)
-    {
-        INetLogger? logger = Options.Logger;
-        if (logger == null)
-            return false;
+    internal bool IsLogEnabled(NetLogLevel level) => _core.IsLogEnabled(level);
 
-        try { return logger.IsEnabled(level); }
-        catch (Exception) { return false; }
-    }
-
-    internal void Log(NetLogLevel level, string message, Exception? exception = null)
-    {
-        INetLogger? logger = Options.Logger;
-        if (logger == null)
-            return;
-
-        try
-        {
-            if (logger.IsEnabled(level))
-                logger.Log(level, message, exception);
-        }
-        catch (Exception) { }
-    }
+    internal void Log(NetLogLevel level, string message, Exception? exception = null) => _core.Log(level, message, exception);
 }
 
 /// <summary>TLS 서버. 접속을 받아 핸드셰이크 후 세션을 시작한다. ServerCertificate 옵션이 필요하다.</summary>

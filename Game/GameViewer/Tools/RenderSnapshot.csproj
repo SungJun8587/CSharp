@@ -4,8 +4,8 @@
        실행: RenderSnapshot.exe <GameData폴더> <출력폴더> 4 9 15   (초 단위로 여러 장) -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net48</TargetFramework>
-    <LangVersion>7.3</LangVersion>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>RenderSnapshot</AssemblyName>
     <Nullable>disable</Nullable>
   </PropertyGroup>
@@ -13,7 +13,6 @@
   <ItemGroup>
     <Compile Include="..\App\Render\*.cs" Link="Render\%(Filename)%(Extension)" />
     <Compile Include="..\App\Forest\*.cs" Link="Forest\%(Filename)%(Extension)" />
-    <Reference Include="System.Drawing" />
     <ProjectReference Include="..\Core\GameViewer.Core.csproj" />
   </ItemGroup>
 

@@ -11,6 +11,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Core.Net;
+using Core.Util;
 
 namespace Core.Demo;
 
@@ -336,13 +337,6 @@ internal static class Program
                 Interlocked.Decrement(ref s_roomInside);
             });
         }
-    }
-
-    private sealed class CountingQueue : JobQueue
-    {
-        public int Exceptions;
-        public CountingQueue(int maxJobsPerRun = 256) : base(maxJobsPerRun) { }
-        protected override void OnException(Exception exception) => Interlocked.Increment(ref Exceptions);
     }
 
     // ---- Session.Jobs / 통계 / 송신 포함 유휴 ----
@@ -802,102 +796,6 @@ internal static class Program
         disposedAsync.DisposeAsync().AsTask().GetAwaiter().GetResult();
         Check("DisposeAsync: 서비스 종료", disposedAsync.IsClosing);
 
-        // JobQueue: 8개 생산자 × 20000 잡 — 동시 실행 없음, 생산자별 순서 보존, 전부 실행
-        {
-            var queue = new JobQueue(maxJobsPerRun: 64);
-            const int producers = 8, perProducer = 20000;
-            int inside = 0, overlap = 0, outOfOrder = 0, executed = 0;
-            var last = new int[producers];
-            Array.Fill(last, -1);
-
-            var threads = new List<Thread>();
-            for (int p = 0; p < producers; p++)
-            {
-                int producer = p;
-                var th = new Thread(() =>
-                {
-                    for (int i = 0; i < perProducer; i++)
-                    {
-                        int seq = i;
-                        queue.Push(() =>
-                        {
-                            if (Interlocked.Increment(ref inside) != 1)
-                                Interlocked.Increment(ref overlap);
-                            if (last[producer] != seq - 1)
-                                Interlocked.Increment(ref outOfOrder);
-                            last[producer] = seq;
-                            executed++;                 // 비원자: 직렬 실행이 깨지면 유실된다
-                            Interlocked.Decrement(ref inside);
-                        });
-                    }
-                });
-                threads.Add(th);
-                th.Start();
-            }
-            foreach (var th in threads) th.Join();
-            WaitFor(() => queue.PendingCount == 0, 20000);
-            Check("JobQueue: 직렬 실행(동시 실행 0)", overlap == 0);
-            Check("JobQueue: 생산자별 순서 보존", outOfOrder == 0);
-            Check("JobQueue: 전부 실행 (양보 재스케줄 경로 포함)", executed == producers * perProducer);
-        }
-
-        // JobQueue: 예외가 나도 이후 잡은 계속 실행
-        {
-            var queue = new CountingQueue();
-            int ran = 0;
-            queue.Push(() => throw new InvalidOperationException("job boom"));
-            queue.Push(() => Interlocked.Increment(ref ran));
-            queue.Push(() => throw new InvalidOperationException("job boom 2"));
-            queue.Push(() => Interlocked.Increment(ref ran));
-            WaitFor(() => queue.PendingCount == 0, 3000);
-            Check("JobQueue: 예외 격리", queue.Exceptions == 2 && ran == 2);
-        }
-
-        // JobTimer: 지연 순서/시간, 취소, 큐 직렬성
-        {
-            var order = new System.Collections.Concurrent.ConcurrentQueue<string>();
-            var started = Stopwatch.StartNew();
-            var elapsed = new System.Collections.Concurrent.ConcurrentDictionary<string, long>();
-            var timerQueue = new JobQueue();
-
-            timerQueue.PushAfter(300, () => { order.Enqueue("300"); elapsed["300"] = started.ElapsedMilliseconds; });
-            timerQueue.PushAfter(100, () => { order.Enqueue("100"); elapsed["100"] = started.ElapsedMilliseconds; });
-            ScheduledJob cancelHandle = timerQueue.PushAfter(150, () => order.Enqueue("150-canceled"));
-            timerQueue.PushAfter(200, () => { order.Enqueue("200"); elapsed["200"] = started.ElapsedMilliseconds; });
-            cancelHandle.Cancel();
-
-            WaitFor(() => order.Count >= 3, 3000);
-            Thread.Sleep(200);
-            string seq = string.Join(",", order);
-            Check("JobTimer: 지연 순서와 취소", seq == "100,200,300" && cancelHandle.IsCanceled);
-            Check("JobTimer: 지연 시간 정확도", elapsed["100"] >= 90 && elapsed["100"] < 400
-                  && elapsed["200"] >= 190 && elapsed["300"] >= 290 && elapsed["300"] < 600);
-
-            // 같은 큐의 긴 잡이 끝나기 전에는 만료된 지연 잡도 시작하지 않는다
-            long longEnd = 0, delayedStart = 0;
-            var serial = new JobQueue();
-            serial.Push(() => { Thread.Sleep(400); longEnd = Stopwatch.GetTimestamp(); });
-            serial.PushAfter(50, () => delayedStart = Stopwatch.GetTimestamp());
-            WaitFor(() => Volatile.Read(ref delayedStart) != 0, 3000);
-            Check("JobTimer: 큐 직렬성 유지(긴 잡 뒤에 실행)", delayedStart != 0 && delayedStart >= longEnd);
-
-            // 큐 없이 예약하면 ThreadPool 에서 실행
-            int direct = 0;
-            JobTimer.Shared.Reserve(50, () => Interlocked.Increment(ref direct));
-            Check("JobTimer: 큐 없이 예약", WaitFor(() => Volatile.Read(ref direct) == 1, 2000));
-
-            // Dispose 후에는 예약 불가, 대기 중이던 예약은 실행되지 않는다
-            var own = new JobTimer();
-            int neverRan = 0;
-            own.Reserve(200, () => Interlocked.Increment(ref neverRan));
-            own.Dispose();
-            bool disposedThrows = false;
-            try { own.Reserve(10, () => { }); }
-            catch (ObjectDisposedException) { disposedThrows = true; }
-            Thread.Sleep(400);
-            Check("JobTimer: Dispose 후 예약 거부/버림", disposedThrows && neverRan == 0);
-        }
-
         // 세션 → JobQueue 통합: 8개 연결이 보낸 8000개 패킷이 한 큐에서 직렬 처리
         {
             var roomServer = new ServerService(new IPEndPoint(IPAddress.Loopback, 0), () => new RoomSession(),
@@ -925,59 +823,6 @@ internal static class Program
             Check("세션 → JobQueue: 8000개 모두 직렬 처리", s_roomCount == 8000 && s_roomOverlap == 0);
             foreach (var tc in clients) tc.Dispose();
             roomServer.Close(3000);
-        }
-
-        // JobTimer: 취소가 쌓이면 힙을 정리한다
-        {
-            using var own = new JobTimer();
-            var handles = new List<ScheduledJob>();
-            int ranKept = 0;
-            for (int i = 0; i < 1000; i++)
-                handles.Add(own.Reserve(60000, () => { }));
-            for (int i = 0; i < 950; i++)
-                handles[i].Cancel();
-            for (int i = 0; i < 5; i++)
-                own.Reserve(100, () => Interlocked.Increment(ref ranKept));
-
-            Check("JobTimer: 취소 누적 시 힙 정리", own.ScheduledCount <= 200);
-            Check("JobTimer: 정리 후에도 정상 예약은 실행", WaitFor(() => Volatile.Read(ref ranKept) == 5, 2000));
-        }
-
-        // JobTimer: 고해상도 모드 정확도
-        {
-            using var precise = new JobTimer(highResolution: true);
-            var preciseWatch = Stopwatch.StartNew();
-            var errors = new System.Collections.Concurrent.ConcurrentBag<long>();
-            for (int i = 0; i < 20; i++)
-            {
-                long due = 30 + i * 7;
-                precise.Reserve((int)due, () => errors.Add(preciseWatch.ElapsedMilliseconds - due));
-            }
-            WaitFor(() => errors.Count == 20, 3000);
-            long max = errors.Count == 0 ? long.MaxValue : errors.Max();
-            long min = errors.Count == 0 ? long.MinValue : errors.Min();
-            Check("JobTimer(highResolution): 20개 모두 실행, 오차 -2~+20ms", errors.Count == 20 && min >= -2 && max <= 20);
-        }
-
-        // JobQueue.Close: 새 잡 거부, 대기 잡은 실행 / discard 이면 버림
-        {
-            var q = new JobQueue();
-            int ran = 0;
-            q.Push(() => Thread.Sleep(150));
-            for (int i = 0; i < 5; i++) q.Push(() => Interlocked.Increment(ref ran));
-            q.Close();
-            bool rejected = !q.Push(() => Interlocked.Increment(ref ran));
-            Check("JobQueue.Close: 새 Push 거부", rejected && q.IsClosed);
-            Check("JobQueue.Close: 이미 들어간 잡은 끝까지 실행", WaitFor(() => Volatile.Read(ref ran) == 5, 3000));
-            Check("JobQueue.Close: 닫힌 큐의 PushAfter 는 취소된 핸들", q.PushAfter(10, () => { }).IsCanceled);
-
-            var q2 = new JobQueue();
-            int ran2 = 0;
-            q2.Push(() => Thread.Sleep(200));
-            for (int i = 0; i < 5; i++) q2.Push(() => Interlocked.Increment(ref ran2));
-            q2.Close(discardPending: true);
-            WaitFor(() => q2.PendingCount == 0, 3000);
-            Check("JobQueue.Close(discardPending): 시작 전 잡은 버림", ran2 == 0);
         }
 
         // Session.Jobs + 통계
@@ -1162,6 +1007,34 @@ internal static class Program
             var tlsClient = new TlsClientService(tlsServer.LocalEndPoint!, () => new TlsCollectSession(), ClientOpts());
             var cs = (TlsCollectSession)tlsClient.ConnectAsync().GetAwaiter().GetResult();
 
+            // TCP 서비스와 같은 소켓 옵션(KeepAlive 포함)이 TLS 연결의 양쪽 소켓에 적용된다. FIN 없이 사라진 상대를 감지하는 수단이다.
+            {
+                System.Reflection.FieldInfo socketField = typeof(TlsSession).GetField("_socket", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+                Socket clientSock = (Socket)socketField.GetValue(cs)!;
+                bool gotServerSession = tlsServer.TryGetSession(1, out TlsSession? serverSession);
+                Socket serverSock = (Socket)socketField.GetValue(serverSession)!;
+                Check("TLS: 서버 소켓에 KeepAlive/NoDelay 적용", gotServerSession && serverSock.NoDelay
+                      && (int)serverSock.GetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive)! != 0);
+                Check("TLS: 클라이언트 소켓에 KeepAlive/NoDelay 적용", clientSock.NoDelay
+                      && (int)clientSock.GetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive)! != 0);
+
+                var noKeepAlive = new TlsServerService(tlsLoop, () => new TlsEchoSession(),
+                    new TlsServiceOptions { ServerCertificate = cert, KeepAlive = false, ZeroByteRecv = s_zeroByte });
+                noKeepAlive.Start();
+                var nkClient = new TlsClientService(noKeepAlive.LocalEndPoint!, () => new TlsCollectSession(), ClientOpts());
+                var nkSession = (TlsCollectSession)nkClient.ConnectAsync().GetAwaiter().GetResult();
+                bool got = noKeepAlive.TryGetSession(1, out TlsSession? nkServerSession);
+                Check("TLS: KeepAlive=false 옵션이 반영된다",
+                    got && (int)((Socket)socketField.GetValue(nkServerSession)!).GetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive)! == 0);
+                nkClient.Close(2000);
+                noKeepAlive.Close(2000);
+                // 이 보조 서비스의 종료 사유가 아래 검증이 보는 공용 큐에 섞이지 않게 비운다.
+                while (s_tlsServerReasons.TryDequeue(out _)) { }
+                while (s_tlsClientReasons.TryDequeue(out _)) { }
+            }
+
+            Check("TLS: 빈 데이터/null 버퍼 Send 는 Session 처럼 false", !cs.Send(ReadOnlySpan<byte>.Empty) && !cs.Send((SendBuffer)null!));
+
             const int tlsTotal = 300;
             var sent = new Dictionary<int, byte[]>();
             var rng = new Random(11);
@@ -1294,18 +1167,6 @@ internal static class Program
             Check("TLS: AttachJobQueue", ReferenceEquals(tlsJobSession.Jobs, q));
         }
 
-        // JobQueue.Close 는 이 큐의 지연 예약을 취소한다
-        {
-            var q = new JobQueue();
-            int ranDelayed = 0;
-            var handles = new List<ScheduledJob>();
-            for (int i = 0; i < 100; i++)
-                handles.Add(q.PushAfter(200, () => Interlocked.Increment(ref ranDelayed)));
-            q.Close();
-            Thread.Sleep(500);
-            Check("JobQueue.Close: 지연 예약 100개 취소, 실행 0", handles.All(h => h.IsCanceled) && ranDelayed == 0);
-        }
-
         // 팩토리: UDP(델리게이트)·TLS 생성, UDP 통계 스냅샷
         {
             int hits = 0;
@@ -1375,6 +1236,58 @@ internal static class Program
         Check("클라이언트가 서버 종료를 감지", WaitFor(() => client2.Sessions.Count == 0, 5000));
         Check("클라이언트2 Close", client2.Close(1000));
         Check("OnDisconnected 정확히 1회씩", s_clientDisconnected - before == 5);
+
+        // LocalAddress: 환경(어댑터 수)에 따라 결과가 비어 있을 수 있으므로 성질만 확인한다.
+        {
+            System.Collections.Generic.List<string> addrs = LocalAddress.GetIPv4();
+            bool shape = true;
+            foreach (string t in addrs)
+                shape &= IPAddress.TryParse(t, out IPAddress? ip) && ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
+                         && !t.StartsWith("127.") && !t.StartsWith("169.254.");
+            Check("LocalAddress: 모두 IPv4이고 루프백/링크로컬이 없다(" + addrs.Count + "개)", shape);
+            System.Collections.Generic.List<string> withVirtual = LocalAddress.GetIPv4(new string[0]);
+            Check("LocalAddress: 제외 목록을 비우면 기본 결과를 포함한다", addrs.TrueForAll(withVirtual.Contains));
+            Check("LocalAddress: 모든 이름에 걸리는 제외 문자열이면 빈 목록", LocalAddress.GetIPv4(new[] { "" }).Count == 0);
+            Check("LocalAddress: TryGetFirstIPv4가 목록과 일치", LocalAddress.TryGetFirstIPv4(out string first) == (addrs.Count != 0) && (addrs.Count == 0 ? first.Length == 0 : first == addrs[0]));
+        }
+
+        PendingRequestsTests.Run(Check);
+
+        // SocketUtils.ConfigureTcp: TCP/TLS 서비스가 함께 쓰는 소켓 옵션 적용
+        {
+            using var sock = SocketUtils.CreateTcpSocket();
+            SocketUtils.ConfigureTcp(sock, noDelay: true, keepAlive: true, keepAliveTimeSec: 77, keepAliveIntervalSec: 5, sendBufferSize: 65536, recvBufferSize: 65536);
+            bool ka = (int)sock.GetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive)! != 0;
+            bool kaTime = true;
+            try { kaTime = (int)sock.GetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime)! == 77; } catch (SocketException) { }
+            Check("ConfigureTcp: NoDelay/KeepAlive/간격/버퍼 크기 적용", sock.NoDelay && ka && kaTime && sock.SendBufferSize >= 65536 && sock.ReceiveBufferSize >= 65536);
+
+            using var off = SocketUtils.CreateTcpSocket();
+            SocketUtils.ConfigureTcp(off, noDelay: false, keepAlive: false, keepAliveTimeSec: 60, keepAliveIntervalSec: 10);
+            Check("ConfigureTcp: 끄면 적용되지 않는다", !off.NoDelay && (int)off.GetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive)! == 0);
+        }
+
+        // NetAddress.TryCreate: 예외 없이 false, 빈 호스트는 실패
+        {
+            Check("NetAddress: IP 문자열", NetAddress.TryCreate("127.0.0.1", 80, out NetAddress ok) && ok.EndPoint.Port == 80);
+            Check("NetAddress: 빈/공백/null 호스트는 false", !NetAddress.TryCreate("", 80, out _) && !NetAddress.TryCreate("  ", 80, out _) && !NetAddress.TryCreate(null!, 80, out _));
+            bool longThrew = false, longHost = true;
+            try { longHost = NetAddress.TryCreate(new string('a', 300), 80, out _); } catch (Exception) { longThrew = true; }
+            Check("NetAddress: 255자를 넘는 호스트명은 예외 없이 false", !longThrew && !longHost);
+            Check("NetAddress: 포트 범위 밖은 false", !NetAddress.TryCreate("127.0.0.1", 70000, out _) && !NetAddress.TryCreate("127.0.0.1", -1, out _));
+            Check("NetAddress: 해석할 수 없는 이름은 false", !NetAddress.TryCreate("bad host name", 80, out _));
+
+            // HostResolver: IP 는 DNS 없이, 비었거나 형식이 틀리면 null, 이름은 IPv4 우선
+            Check("HostResolver: IP 문자열은 즉시 해석", HostResolver.ResolveAsync("10.1.2.3", 1000).GetAwaiter().GetResult() is { Length: 1 } one && one[0].ToString() == "10.1.2.3");
+            Check("HostResolver: 빈 호스트/형식 오류는 null", HostResolver.ResolveAsync("", 1000).GetAwaiter().GetResult() == null
+                  && HostResolver.ResolveAsync(new string('a', 300), 1000).GetAwaiter().GetResult() == null);
+            IPAddress[]? local = HostResolver.ResolveAsync("localhost", 3000).GetAwaiter().GetResult();
+            Check("HostResolver: localhost 해석, IPv4 가 앞", local is { Length: > 0 } && local[0].AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+            Check("HostResolver: 진행 중인 해석 수가 0 으로 돌아온다", SpinWait.SpinUntil(() => HostResolver.ActiveResolvers == 0, 3000));
+            var (okAsync, addrAsync) = NetAddress.TryCreateAsync("127.0.0.1", 9000).GetAwaiter().GetResult();
+            Check("NetAddress.TryCreateAsync: 성공/실패", okAsync && addrAsync.EndPoint.Port == 9000
+                  && !NetAddress.TryCreateAsync("", 80).GetAwaiter().GetResult().Ok && !NetAddress.TryCreateAsync("127.0.0.1", 70000).GetAwaiter().GetResult().Ok);
+        }
 
         Console.WriteLine(failures == 0 ? "ALL PASSED" : $"{failures} FAILED");
         return failures == 0 ? 0 : 1;

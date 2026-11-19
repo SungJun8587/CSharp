@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using Core.Util;
 using Game.Generated;
+using Game.ZoneCommon;
 using Game.ZoneCore;
 using ProtoCancel = Game.Generated.SkillCancelReason;
 using CoreCancel = Game.ZoneCore.SkillCancelReason;
@@ -15,7 +16,7 @@ namespace Game.ZoneServer;
 /// 존 스레드 하나가 이 객체의 모든 상태를 다룬다. 외부 스레드는 Post()로 HandleXxx를 넘긴다.
 /// 클라이언트에게 가는 모든 패킷은 존 스레드에서 만들어져 <see cref="IZoneLink"/>로 나간다.
 /// </summary>
-public sealed class BattleZone : FieldZone<ZoneEntity>
+public sealed partial class BattleZone : FieldZone<ZoneEntity>
 {
     private readonly IZoneLink _link;
     private readonly Vec2 _spawnPos;
@@ -30,6 +31,22 @@ public sealed class BattleZone : FieldZone<ZoneEntity>
     private ZoneEntity? _combatOther;
     private bool _combatOtherVisited;
     private int _playerCount;
+
+    // 존 이동/재접속 상태 유지: Gateway가 보관했다가 입장 직전에 돌려주는 상태를 입장 때 적용한다.
+    private const long RestoreTtlMs = 15000;                // 복원 상태가 입장을 기다리는 최대 시간
+    private const long RestoreSweepIntervalMs = 1000;       // 만료된 복원 상태를 청소하는 최소 간격
+    private long _nextRestoreSweepMs;
+    private const float GateReach = 6.0f;                   // 관문 안쪽 가장자리로 인정하는 깊이(뷰어는 3에서 반응한다. 지연을 감안해 넉넉히)
+    private readonly Dictionary<ulong, PendingRestore> _pendingRestores = new Dictionary<ulong, PendingRestore>();
+    private List<ZoneGateLink> _gates = new List<ZoneGateLink>();
+    private float _minX, _minY, _maxX = 1000.0f, _maxY = 1000.0f;
+
+    private readonly struct PendingRestore
+    {
+        public readonly PlayerState State;
+        public readonly long ExpireMs;
+        public PendingRestore(PlayerState state, long expireMs) { State = state; ExpireMs = expireMs; }
+    }
 
     public BattleZone(FieldZoneConfig config, IZoneLink link, Vec2 spawnPos, HeroData? heroData, MonsterData? monsterData,
         MonsterSystemConfig monsterConfig, BossData? bossData = null, DropData? dropData = null)
@@ -49,6 +66,54 @@ public sealed class BattleZone : FieldZone<ZoneEntity>
         _drops = new DropSystem(this, dropData);
         _addRecipientFn = AddRecipient;
         _combatVisitFn = CombatVisit;
+    }
+
+    /// <summary>이 존에서 나가는 관문과 존 영역을 정한다. 구동 전에 부른다. 관문이 없으면 존 이동 상태 유지는 체력/가방만 한다.</summary>
+    public void SetGateLinks(List<ZoneGateLink> gates, float minX, float minY, float maxX, float maxY)
+    {
+        _gates = gates;
+        _minX = minX; _minY = minY; _maxX = maxX; _maxY = maxY;
+    }
+
+    /// <summary>
+    /// Gateway가 보낸 보관 상태를 받아 둔다(존 스레드). 같은 캐릭터의 다음 입장 한 번에만 쓰이고, RestoreTtlMs 안에 입장하지 않으면 버린다.
+    /// 입장 요청(ZoneEnterReq)보다 먼저 도착한다(같은 연결, 같은 입력 큐 순서).
+    /// </summary>
+    public void HandleRestore(PlayerState state)
+    {
+        long now = Environment.TickCount64;
+        if (_pendingRestores.Count != 0 && now >= _nextRestoreSweepMs)       // 만료 청소는 1초에 한 번만(입장이 몰릴 때 매번 전체를 훑지 않는다)
+        {
+            _nextRestoreSweepMs = now + RestoreSweepIntervalMs;
+            List<ulong>? expired = null;
+            foreach (KeyValuePair<ulong, PendingRestore> kv in _pendingRestores)
+                if (kv.Value.ExpireMs <= now)
+                    (expired ??= new List<ulong>()).Add(kv.Key);
+            if (expired != null)
+                foreach (ulong id in expired)
+                    _pendingRestores.Remove(id);
+        }
+        _pendingRestores[state.CharId] = new PendingRestore(state, now + RestoreTtlMs);
+    }
+
+    /// <summary>입장하는 캐릭터의 복원 상태를 꺼낸다(없거나 만료됐으면 null).</summary>
+    private PlayerState? TakeRestore(ulong charId)
+    {
+        if (!_pendingRestores.Remove(charId, out PendingRestore r))
+            return null;
+        return r.ExpireMs > Environment.TickCount64 ? r.State : null;
+    }
+
+    /// <summary>관문으로 들어온 도착 지점이 유효한지(이 존, 영역 안, 장애물 위가 아님)를 보고 시작 위치를 정한다.</summary>
+    private Vec2 ResolveStartPos(PlayerState? restore)
+    {
+        if (restore == null || restore.ArrivalZone != ZoneId)
+            return _spawnPos;
+        float x = Math.Clamp(restore.ArrivalX, _minX + 1.0f, _maxX - 1.0f);
+        float y = Math.Clamp(restore.ArrivalY, _minY + 1.0f, _maxY - 1.0f);
+        Vec2 p = new Vec2(x, y);
+        BlockMap? bm = BlockMap;
+        return bm != null && bm.IsBlocked(p) ? _spawnPos : p;
     }
 
     /// <summary>입장 정원. 0이면 제한 없음. 정원은 Gateway가 먼저 막지만, 존도 자기 정원을 넘는 입장은 거부한다. 구동 전에 정한다.</summary>
@@ -183,17 +248,31 @@ public sealed class BattleZone : FieldZone<ZoneEntity>
 
         if (Capacity != 0 && (uint)_sessionToPlayer.Count >= Capacity)
         {
-            LogManager.Warning("[BattleZone] enter rejected: zone is full. zoneId={0}, capacity={1}, charId={2}", ZoneId, Capacity, charId);
+            LogThrottle.Warning("battlezone.zone-full", 1000, "[BattleZone] enter rejected: zone is full. zoneId={0}, capacity={1}, charId={2}", ZoneId, Capacity, charId);
             SendEnterRes(res, ZoneEnterResult.ZoneFull);
             return;
         }
 
+        // 존 이동/재접속: Gateway가 보관했던 상태가 있으면 입장 위치/체력/MP/가방에 반영한다.
+        PlayerState? restore = TakeRestore(charId);
+        Vec2 startPos = ResolveStartPos(restore);
+        res.SpawnX = startPos.X;
+        res.SpawnY = startPos.Y;
+
         SendEnterRes(res, ZoneEnterResult.Ok);
 
         ZonePlayer player = new ZonePlayer(charId, clientSessionId, this, hero.Id);
-        player.SetSpawnPos(_spawnPos);
+        player.SetSpawnPos(_spawnPos);              // 죽으면 존의 기본 리스폰 위치에서 부활한다
+        player.SetStartPos(startPos);
         player.SetSpeed(hero.Speed);
         player.SetCombatStats(hero.Stats);
+        if (restore != null)
+        {
+            if (restore.HasVitals && restore.HeroId == hero.Id)
+                player.RestoreVitals(restore.Hp, restore.Mp);       // 다른 영웅으로 바꿔 들어오면 체력 비율이 의미가 없으니 가득 채운 채 시작한다
+            foreach (KeyValuePair<uint, uint> it in restore.Items)
+                player.Inventory.TryAdd(it.Key, it.Value, out _);
+        }
 
         if (AddEntity(player) == null)
         {
@@ -206,6 +285,7 @@ public sealed class BattleZone : FieldZone<ZoneEntity>
         _sessionToPlayer.Add(clientSessionId, player);
         Interlocked.Increment(ref _playerCount);
         SendStat(player);
+        SendDuel(player, DuelState.ZoneRules, 0, 0, RuleFlags);     // 이 존의 PvP/결투 규칙을 알린다(화면 표시용)
     }
 
     private void SendEnterRes(ZoneEnterRes res, ZoneEnterResult result)
@@ -221,11 +301,41 @@ public sealed class BattleZone : FieldZone<ZoneEntity>
         if (!_sessionToPlayer.TryGetValue(clientSessionId, out ZonePlayer? player) || player.Id != charId)
             return;
 
+        DuelOnLeft(player);
+
+        // 떠나는 순간의 상태를 Gateway에 맡긴다. 다음 입장(다른 존으로 넘어가는 경우 포함)에서 돌려받는다.
+        PlayerState state = SnapshotOf(player);
+
         // 제거 중 AOI 이탈 통지로 이 플레이어 본인에게 이웃 수만큼 디스폰이 나가지 않도록 먼저 표시한다.
         player.MarkLeaving();
         _sessionToPlayer.Remove(clientSessionId);
         if (RemoveEntity(charId))
             Interlocked.Decrement(ref _playerCount);
+
+        SendPacketToGateway(new ZoneStateSave { State = state });
+    }
+
+    /// <summary>플레이어의 체력/MP/가방과, 관문 안쪽에서 떠나는 경우의 도착 지점을 담는다. 죽어 있으면 체력은 가져가지 않는다(부활/입장 때 가득 채움).</summary>
+    private PlayerState SnapshotOf(ZonePlayer player)
+    {
+        PlayerState st = new PlayerState { CharId = player.Id, HeroId = player.HeroId, HasVitals = player.IsAlive, Hp = player.Hp, Mp = player.Mp };
+        foreach (KeyValuePair<uint, uint> it in player.Inventory.ToList())
+        {
+            if (st.Items.Count >= PlayerState.MaxItems)
+                break;
+            st.Items.Add(it);
+        }
+        if (player.IsAlive)
+        {
+            ZoneGateLink? g = ZoneLinkTable.Find(_gates, player.Pos, _minX, _minY, _maxX, _maxY, GateReach);
+            if (g != null)
+            {
+                st.ArrivalZone = g.TargetZone;
+                st.ArrivalX = g.TargetX;
+                st.ArrivalY = g.TargetY;
+            }
+        }
+        return st;
     }
 
     /// <summary>
@@ -318,6 +428,9 @@ public sealed class BattleZone : FieldZone<ZoneEntity>
                 case ZonePacketType.ZcChatReq:
                     HandleChat(player, packet);
                     break;
+                case (ZonePacketType)DuelPacketType.Req:
+                    HandleDuel(player, packet);
+                    break;
                 case ZonePacketType.ZcPingReq:
                 {
                     // 왕복 시간 측정. 존 입력 큐를 거쳐 오므로 존 스레드가 밀려 있으면 그만큼 길게 측정된다(의도).
@@ -350,6 +463,7 @@ public sealed class BattleZone : FieldZone<ZoneEntity>
         ZonePacketType.ZcPickupReq => RequestKind.Pickup,
         ZonePacketType.ZcPingReq => RequestKind.Ping,
         ZonePacketType.ZcChatReq => RequestKind.Chat,
+        (ZonePacketType)DuelPacketType.Req => RequestKind.Duel,
         _ => RequestKind.Other,
     };
 
@@ -653,6 +767,7 @@ public sealed class BattleZone : FieldZone<ZoneEntity>
     {
         ZcDeathNotify n = new ZcDeathNotify { EntityId = victim.Id, KillerId = killer?.Id ?? 0 };
         BroadcastCombatPacket(victim, killer, n);
+        DuelOnDied(victim);
         if (victim is Monster dead && _monsters.IsAiMonster(victim))
             _drops.OnMonsterDied(dead, killer);
         _monsters.OnDied(victim);
@@ -802,6 +917,7 @@ public sealed class BattleZone : FieldZone<ZoneEntity>
     {
         base.OnUpdate(dtMs);
         _monsters.Update();
+        DuelUpdate();
     }
 
     protected override uint GetRespawnDelayMs(ZoneEntity victim)

@@ -322,7 +322,7 @@ public sealed class MonsterSystem
 
         if (_zone.AddEntityBase(monster) == null)
         {
-            LogManager.Error("[MonsterSystem] summon failed. zoneId={0}, monsterId={1}, ownerId={2}", _zone.ZoneId, monsterId, ownerId);
+            LogThrottle.Error("monster.summon-failed", 1000, "[MonsterSystem] summon failed. zoneId={0}, monsterId={1}, ownerId={2}", _zone.ZoneId, monsterId, ownerId);
             return null;
         }
 

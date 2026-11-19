@@ -1,4 +1,4 @@
-//***************************************************************************
+﻿//***************************************************************************
 // MainForm.cs : 뷰어 창. 타이머로 GameCanvas.Tick() 을 돌린다.
 //***************************************************************************
 using System;
@@ -20,9 +20,9 @@ namespace GameViewer.App
             _cfg = cfg; _demo = demo;
             Text = BuildTitle();
             {
-                // 작은 화면에서는 작업 영역(작업 표시줄 제외) 안에 들어오게 줄인다.
+                // 설정한 크기가 작업 영역(작업 표시줄 제외)의 90% 를 넘으면 그 안으로 줄인다.
                 Rectangle wa0 = Screen.PrimaryScreen.WorkingArea;
-                ClientSize = new Size(Math.Min(cfg.WindowWidth, Math.Max(640, wa0.Width - 24)), Math.Min(cfg.WindowHeight, Math.Max(480, wa0.Height - 60)));
+                ClientSize = new Size(Math.Min(cfg.WindowWidth, Math.Max(640, wa0.Width * 9 / 10)), Math.Min(cfg.WindowHeight, Math.Max(480, wa0.Height * 9 / 10)));
             }
             if (cfg.Slot == 0) StartPosition = FormStartPosition.CenterScreen;
             else

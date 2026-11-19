@@ -37,6 +37,9 @@ namespace GameViewer.App
         public string DataDir { get { return _dataDir; } }
         public List<string> AssetWarnings { get { lock (_lock) return new List<string>(_assetWarnings); } }
 
+        /// <summary>시작 전에 이미 생긴 에셋 경고(뒷배경 읽기 등)를 목록에 더한다.</summary>
+        public void AddAssetWarnings(IEnumerable<string> warnings) { lock (_lock) _assetWarnings.AddRange(warnings); }
+
         public void Start()
         {
             Thread t = new Thread(Run);
@@ -63,9 +66,11 @@ namespace GameViewer.App
                 Set(DataShare, "이미지");
 
                 List<string> warn = new List<string>();
+                if (!Directory.Exists(Path.Combine(_baseDir, "Assets"))) warn.Add("Assets 폴더가 없습니다: " + Path.Combine(_baseDir, "Assets") + " (3D 배경/영웅 이미지를 쓰려면 빌드 출력 폴더에 복사되어야 합니다)");
                 SkillIcons.Dir = Path.Combine(_baseDir, "Assets");
                 FxSprites.Dir = Path.Combine(Path.Combine(_baseDir, "Assets"), "fx");
                 Decor.Dir = Path.Combine(Path.Combine(_baseDir, "Assets"), "props");
+                AssetSprites.SizeFactor = (float)_cfg.EntityScale;
                 AssetSprites.Load(Path.Combine(_baseDir, "Assets"), warn,
                     delegate (float r, string label) { Set(DataShare + r * (1f - DataShare), label); });
                 lock (_lock) _assetWarnings.AddRange(warn);

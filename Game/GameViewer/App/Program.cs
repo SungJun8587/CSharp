@@ -68,11 +68,11 @@ namespace GameViewer.App
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             System.Collections.Generic.List<string> backWarn = new System.Collections.Generic.List<string>();
             Backdrop.Load(Path.Combine(baseDir, "Assets"), backWarn);
-            foreach (string w in backWarn) Console.Error.WriteLine("assets: " + w);
             StartupLoader loader = new StartupLoader(cfg, baseDir);
+            loader.AddAssetWarnings(backWarn);
             loader.Start();
-            GameViewer.App.Forest.ForestBackdrop.Prepare();         // 3D 숲 재료는 로딩바가 도는 동안 백그라운드에서 만든다(GL 을 못 쓰면 예전 2D 배경)
 
+            GameViewer.App.Forest.ForestBackdrop.Prepare();         // 3D 숲 재료는 로딩바가 도는 동안 백그라운드에서 만든다(GL 을 못 쓰면 예전 2D 배경)
             try { Application.Run(new MainForm(cfg, loader, demo)); }
             finally { GameViewer.App.Forest.ForestBackdrop.Shutdown(); }          // GL 자원과 숨은 창 정리
             return 0;
