@@ -22,7 +22,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 using GameViewer.Core.Data;
 using GameViewer.Core.Logic;
-using System.Runtime.InteropServices;
 
 namespace GameViewer.App.Render
 {

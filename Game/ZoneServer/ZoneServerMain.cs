@@ -88,6 +88,8 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
         // 존별 규칙: 규칙 파일(ZoneRule.json)에 이 존의 행이 있으면 그것을, 없으면 옵션의 기본값을 쓴다. 형식이 틀리면 구동하지 않는다.
         bool allowPvp = options.AllowPvp;
         bool allowDuel = options.AllowDuel;
+        ZoneRuleEntry? zoneRule = null;
+        uint blockZone = options.ZoneId;        // 장애물을 읽을 존 번호(규칙의 Terrain 이 있으면 그 존의 지형)
         if (options.GameDataDir.Length != 0)
         {
             if (!ZoneRuleTable.TryLoad(options.GameDataDir, options.ZoneId, out ZoneRuleEntry? rule))
@@ -95,10 +97,12 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
                 LogManager.Error("[ZoneServerMain] zone rule load failed. dir={0}", options.GameDataDir);
                 return false;
             }
+            zoneRule = rule;
             if (rule != null)
             {
                 allowPvp = rule.AllowPvp;
                 allowDuel = rule.AllowDuel;
+                if (rule.Terrain != 0) blockZone = rule.Terrain;
             }
         }
         zoneConfig.AllowPvp = allowPvp;
@@ -112,22 +116,30 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
         MonsterData? monsterData = null;
         BossData? bossData = null;
         DropData? dropData = null;
+        LevelData? levelData = null;
+        CurrencyData? currencyData = null;
         if (options.GameDataDir.Length != 0)
         {
             heroData = GameDataLoader.LoadHeroes(options.GameDataDir);
             monsterData = GameDataLoader.LoadMonsters(options.GameDataDir);
             if (heroData != null && monsterData != null)
                 bossData = GameDataLoader.LoadBosses(options.GameDataDir, monsterData, heroData);
+            if (monsterData != null && bossData != null && zoneRule != null && (zoneRule.AllMonsterCount != 0 || zoneRule.AllBossCount != 0))
+                LogManager.Info("[ZoneServerMain] all-monster spawn rows added. zoneId={0}, rows={1}", options.ZoneId, AllSpawnLayout.Add(monsterData, bossData, options.ZoneId, zoneRule.AllMonsterCount, zoneRule.AllBossCount));
             if (monsterData != null)
                 dropData = GameDataLoader.LoadDrops(options.GameDataDir, monsterData);
-            if (heroData == null || monsterData == null || bossData == null || dropData == null)
+            if (monsterData != null)
+                levelData = GameDataLoader.LoadLevels(options.GameDataDir, monsterData);
+            if (monsterData != null)
+                currencyData = GameDataLoader.LoadCurrencies(options.GameDataDir, monsterData);
+            if (heroData == null || monsterData == null || bossData == null || dropData == null || levelData == null || currencyData == null)
             {
                 LogManager.Error("[ZoneServerMain] game data load failed. dir={0}", options.GameDataDir);
                 return false;
             }
 
             // 장애물(Block.json). 파일이 없으면 장애물 없이 구동하고, 있는데 형식이 틀리면 구동하지 않는다.
-            if (!GameDataLoader.LoadBlockMap(options.GameDataDir, options.ZoneId, zoneConfig.MinX, zoneConfig.MinY, zoneConfig.MaxX, zoneConfig.MaxY, out BlockMap? blockMap))
+            if (!GameDataLoader.LoadBlockMap(options.GameDataDir, blockZone, zoneConfig.MinX, zoneConfig.MinY, zoneConfig.MaxX, zoneConfig.MaxY, out BlockMap? blockMap))
             {
                 LogManager.Error("[ZoneServerMain] block map load failed. dir={0}", options.GameDataDir);
                 return false;
@@ -140,10 +152,25 @@ public sealed class ZoneServerMain : IZoneLink, Game.ZoneCommon.IServerHost
         BattleZone zone;
         try
         {
-            zone = new BattleZone(zoneConfig, this, spawnPos, heroData, monsterData, monsterConfig, bossData, dropData);
+            zone = new BattleZone(zoneConfig, this, spawnPos, heroData, monsterData, monsterConfig, bossData, dropData, levelData, currencyData);
             zone.Capacity = options.Capacity;
             zone.GuardEnabled = options.RequestGuardEnabled;
             zone.SetRules(allowPvp, allowDuel);
+            // 시험장(존 0)만 지형 치트를 켠다: 클라이언트가 고른 존 번호의 장애물(Block.json)로 바꾼다.
+            if (options.ZoneId == 0 && options.GameDataDir.Length != 0)
+            {
+                string dataDir = options.GameDataDir;
+                float minX = zoneConfig.MinX, minY = zoneConfig.MinY, maxX = zoneConfig.MaxX, maxY = zoneConfig.MaxY;
+                zone.TerrainLoader = terrain =>
+                {
+                    if (!GameDataLoader.LoadBlockMap(dataDir, terrain, minX, minY, maxX, maxY, out BlockMap? m))
+                        return null;
+                    if (m != null)
+                        return m;
+                    BlockMap empty = new BlockMap();        // 그 지형에 장애물이 없으면(행 없음) 빈 맵으로 바꾼다
+                    return empty.Init(minX, minY, maxX, maxY, GameDataLoader.BlockCellSize) ? empty : null;
+                };
+            }
         }
         catch (ArgumentException e)
         {

@@ -39,8 +39,8 @@ public sealed class RedisSubscriber : IDisposable
     private RedisClient? _client;                                       // 구독 전용 연결(Init()에서 생성)
     private bool _initialized;
     private ulong _epoch;                                               // 연결(재연결)마다 증가 — 이전 연결의 지연된 확인 응답을 무시하기 위함
-    private readonly Dictionary<string, RedisMessageCallback> _channelMap = new Dictionary<string, RedisMessageCallback>();    // 구독 중인 채널 → 콜백
-    private readonly Dictionary<string, RedisMessageCallback> _patternMap = new Dictionary<string, RedisMessageCallback>();    // 구독 중인 패턴 → 콜백
+    private readonly Dictionary<string, SubscriptionHandler> _channelMap = new Dictionary<string, SubscriptionHandler>();    // 구독 중인 채널 → 콜백
+    private readonly Dictionary<string, SubscriptionHandler> _patternMap = new Dictionary<string, SubscriptionHandler>();    // 구독 중인 패턴 → 콜백
     private readonly Queue<string[]> _cmdQueue = new Queue<string[]>(); // 전송 대기 중인 구독 명령
     private bool _cmdInFlight;                                          // 확인 응답을 기다리는 명령이 있는지
 
@@ -178,7 +178,12 @@ public sealed class RedisSubscriber : IDisposable
     /// true를 반환하며, 구독 목록에 기록되어 재연결 후 서버에 반영된다 — true는 "등록됨"이지 "서버가 확인함"이 아니다.
     /// </summary>
     /// <returns>false: 초기화 전, 빈 채널, null 콜백</returns>
-    public bool Subscribe(string channel, RedisMessageCallback callback) => AddSubscription(_channelMap, "SUBSCRIBE", channel, callback);
+    public bool Subscribe(string channel, RedisMessageCallback callback)
+        => callback != null && AddSubscription(_channelMap, "SUBSCRIBE", channel, new SubscriptionHandler(callback));
+
+    /// <summary><see cref="Subscribe"/>와 같지만 페이로드를 바이트 그대로 받는다(바이너리 메시지용).</summary>
+    public bool SubscribeBinary(string channel, RedisBinaryMessageCallback callback)
+        => callback != null && AddSubscription(_channelMap, "SUBSCRIBE", channel, new SubscriptionHandler(callback));
 
     /// <summary>채널 구독을 해제한다.</summary>
     /// <returns>해제할 구독이 있었는지 여부(false: 등록되지 않은 채널)</returns>
@@ -188,7 +193,12 @@ public sealed class RedisSubscriber : IDisposable
     /// 글롭 패턴(예: "Chat:*")으로 채널을 구독하고 메시지 콜백을 등록한다. 콜백의 channel에는 패턴이 아니라
     /// 메시지가 발행된 실제 채널 이름이 온다. 그 외 규칙은 <see cref="Subscribe"/>와 같다.
     /// </summary>
-    public bool PSubscribe(string pattern, RedisMessageCallback callback) => AddSubscription(_patternMap, "PSUBSCRIBE", pattern, callback);
+    public bool PSubscribe(string pattern, RedisMessageCallback callback)
+        => callback != null && AddSubscription(_patternMap, "PSUBSCRIBE", pattern, new SubscriptionHandler(callback));
+
+    /// <summary><see cref="PSubscribe"/>와 같지만 페이로드를 바이트 그대로 받는다.</summary>
+    public bool PSubscribeBinary(string pattern, RedisBinaryMessageCallback callback)
+        => callback != null && AddSubscription(_patternMap, "PSUBSCRIBE", pattern, new SubscriptionHandler(callback));
 
     /// <summary>패턴 구독을 해제한다.</summary>
     public bool PUnsubscribe(string pattern) => RemoveSubscription(_patternMap, "PUNSUBSCRIBE", pattern);
@@ -203,7 +213,25 @@ public sealed class RedisSubscriber : IDisposable
         }
     }
 
-    private bool AddSubscription(Dictionary<string, RedisMessageCallback> map, string command, string name, RedisMessageCallback callback)
+    // 구독 하나의 콜백(문자열 또는 바이너리 페이로드 중 하나).
+    private sealed class SubscriptionHandler
+    {
+        private readonly RedisMessageCallback? _text;
+        private readonly RedisBinaryMessageCallback? _binary;
+
+        public SubscriptionHandler(RedisMessageCallback text) => _text = text;
+        public SubscriptionHandler(RedisBinaryMessageCallback binary) => _binary = binary;
+
+        public void Invoke(string channel, RedisValue payload)
+        {
+            if (_text != null)
+                _text(channel, payload.StrVal);
+            else
+                _binary!(channel, payload.BytesVal);
+        }
+    }
+
+    private bool AddSubscription(Dictionary<string, SubscriptionHandler> map, string command, string name, SubscriptionHandler callback)
     {
         if (string.IsNullOrEmpty(name) || callback == null)
             return false;
@@ -221,7 +249,7 @@ public sealed class RedisSubscriber : IDisposable
         return true;
     }
 
-    private bool RemoveSubscription(Dictionary<string, RedisMessageCallback> map, string command, string name)
+    private bool RemoveSubscription(Dictionary<string, SubscriptionHandler> map, string command, string name)
     {
         lock (_lock)
         {
@@ -247,13 +275,13 @@ public sealed class RedisSubscriber : IDisposable
 
         string kind = value.ArrayVal[0].StrVal;
         string channel;
-        string payload;
-        RedisMessageCallback? callback;
+        RedisValue payload;
+        SubscriptionHandler? callback;
 
         if (kind == "message" && value.ArrayVal.Length >= 3)
         {
             channel = value.ArrayVal[1].StrVal;
-            payload = value.ArrayVal[2].StrVal;
+            payload = value.ArrayVal[2];
 
             lock (_lock)
                 _channelMap.TryGetValue(channel, out callback);
@@ -262,7 +290,7 @@ public sealed class RedisSubscriber : IDisposable
         {
             string pattern = value.ArrayVal[1].StrVal;
             channel = value.ArrayVal[2].StrVal;
-            payload = value.ArrayVal[3].StrVal;
+            payload = value.ArrayVal[3];
 
             lock (_lock)
                 _patternMap.TryGetValue(pattern, out callback);
@@ -275,7 +303,7 @@ public sealed class RedisSubscriber : IDisposable
         if (callback == null)
             return;
 
-        _jobQueue.Push(() => callback(channel, payload));
+        _jobQueue.Push(() => callback.Invoke(channel, payload));
     }
 
     // 구독 명령의 확인 응답(또는 에러/연결 끊김)을 처리하고 다음 명령을 보낸다.

@@ -16,7 +16,7 @@ public enum CompressionKind : byte
 /// 큰 패킷/파일을 줄이는 도우미. 작은 데이터는 압축해도 오히려 커지므로 <see cref="TryCompress"/>가 이득이 있을 때만 압축 결과를 준다.
 /// 압축 해제는 상한(maxOutput)을 받아 압축 폭탄(작은 입력이 수 GB로 풀리는 공격)을 막는다.
 /// </summary>
-public static class CompressionUtil
+public static unsafe class CompressionUtil
 {
     /// <summary>이보다 작은 데이터는 압축하지 않는다.</summary>
     public const int MinCompressSize = 128;
@@ -54,14 +54,26 @@ public static class CompressionUtil
     {
         written = 0;
         CompressionLevel level = quality <= 1 ? CompressionLevel.Fastest : quality >= 9 ? CompressionLevel.SmallestSize : CompressionLevel.Optimal;
-        using var ms = new System.IO.MemoryStream(dst.Length);
-        using (var ds = new DeflateStream(ms, level, leaveOpen: true))
-            ds.Write(src);
-        if (ms.Length > dst.Length)
+        if (dst.IsEmpty)
             return false;
-        ms.GetBuffer().AsSpan(0, (int)ms.Length).CopyTo(dst);
-        written = (int)ms.Length;
-        return true;
+
+        // dst 위에 직접 쓰는 스트림을 만들어 중간 MemoryStream 할당과 복사를 없앤다. 용량을 넘으면 NotSupportedException 이므로 "안 들어감"으로 처리한다.
+        fixed (byte* p = dst)
+        {
+            try
+            {
+                using var output = new System.IO.UnmanagedMemoryStream(p, 0, dst.Length, System.IO.FileAccess.Write);
+                using (var ds = new DeflateStream(output, level, leaveOpen: true))
+                    ds.Write(src);
+                written = (int)output.Position;
+                return true;
+            }
+            catch (NotSupportedException)
+            {
+                written = 0;
+                return false;
+            }
+        }
     }
 
     /// <summary>압축된 바이트 배열을 만든다(이득이 없으면 null).</summary>
@@ -99,25 +111,32 @@ public static class CompressionUtil
                     return BrotliDecoder.TryDecompress(src, dst, out written);
                 case CompressionKind.Deflate:
                     {
-                        using var input = new System.IO.MemoryStream(src.ToArray(), writable: false);
-                        using var ds = new DeflateStream(input, CompressionMode.Decompress);
-                        int total = 0;
-                        while (true)
+                        if (src.IsEmpty)
+                            return false;
+
+                        // src 를 복사하지 않고 그 메모리 위에서 바로 읽는다.
+                        fixed (byte* sp = src)
                         {
-                            if (total == dst.Length)
+                            using var input = new System.IO.UnmanagedMemoryStream(sp, src.Length);
+                            using var ds = new DeflateStream(input, CompressionMode.Decompress);
+                            int total = 0;
+                            while (true)
                             {
-                                // 더 읽을 게 있는지 한 바이트만 확인: 있으면 출력이 모자란 것
-                                Span<byte> probe = stackalloc byte[1];
-                                if (ds.Read(probe) != 0)
-                                    return false;
-                                break;
+                                if (total == dst.Length)
+                                {
+                                    // 더 읽을 게 있는지 한 바이트만 확인: 있으면 출력이 모자란 것
+                                    Span<byte> probe = stackalloc byte[1];
+                                    if (ds.Read(probe) != 0)
+                                        return false;
+                                    break;
+                                }
+                                int r = ds.Read(dst.Slice(total));
+                                if (r == 0) break;
+                                total += r;
                             }
-                            int r = ds.Read(dst.Slice(total));
-                            if (r == 0) break;
-                            total += r;
+                            written = total;
+                            return true;
                         }
-                        written = total;
-                        return true;
                     }
                 default:
                     return false;

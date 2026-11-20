@@ -167,10 +167,10 @@ internal sealed class Listener
 
         // 일시적 오류(소켓 고갈 등): 워커를 붙잡지 않고 지연 후 재시도. 재시도가 예약된 동안에도 outstanding 은 유지된다.
         slot.FailCount++;
-        int backoff = Math.Min(slot.FailCount, NetConstants.MaxAcceptRetryBackoff);
-        int delayMs = NetConstants.AcceptRetryDelayMs * backoff;
+        int delayMs = (int)Core.Util.BackoffState.ComputeDelayMs(slot.FailCount, NetConstants.AcceptRetryDelayMs,
+            (long)NetConstants.AcceptRetryDelayMs * NetConstants.MaxAcceptRetryBackoff, 3);      // 100, 200, 400, 500, 500...ms
         _service.Log(NetLogLevel.Warning, $"Accept 실패: {SocketUtils.GetErrorText(args.SocketError)}, {delayMs}ms 후 재시도 (연속 {slot.FailCount}회)");
-        Task.Delay(delayMs).ContinueWith(_ => RegisterAccept(slot), TaskScheduler.Default);
+        Core.Util.JobTimer.Shared.Reserve(delayMs, () => RegisterAccept(slot));
         return false;
     }
 

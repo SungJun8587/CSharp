@@ -55,11 +55,16 @@ namespace GameViewer.Tests
             T.Run("builders", PacketTests.Builders);
             T.Run("minijson", DataTests.MiniJsonBasics);
             T.Run("gamedata", DataTests.GameDataLoads);
+            T.Run("skill unlocks", DataTests.SkillUnlocks);
             T.Run("gamedata without files", DataTests.GameDataLoadsWithoutFiles);
             T.Run("hero ids", DataTests.HeroIdsSorted);
             T.Run("core has no ui dependency", DataTests.CoreHasNoUiDependency);
             T.Run("zone theme", ZoneThemeTests.Basics);
             T.Run("zone gates", ZoneThemeTests.Gates);
+            T.Run("zone terrain pick", ZoneThemeTests.TestTerrainPick);
+            T.Run("zone terrain data", ZoneThemeTests.TestTerrainData);
+            T.Run("terrain cheat packets", WorldTests.TerrainCheat);
+            T.Run("zone all spawns", ZoneThemeTests.TestAllSpawns);
             T.Run("gate travel steps", ZoneThemeTests.GateTravelSteps);
             T.Run("demo gate arrival", DemoTests.GateArrival);
             T.Run("boss stage fx", BossFxTests.Stage);
@@ -79,6 +84,10 @@ namespace GameViewer.Tests
             T.Run("ping session", PingTests.Session);
             T.Run("config", DataTests.Config);
             T.Run("world: move/spawn", WorldTests.MoveAndSpawn);
+            T.Run("exp and level", WorldTests.ExpAndLevel);
+            T.Run("level up effect", WorldTests.LevelUpEffect);
+            T.Run("sprites match monster table", DataTests.SpritesMatchMonsters);
+            T.Run("wallet", WorldTests.Wallet);
             T.Run("world: damage/death/respawn", WorldTests.DamageDeathRespawn);
             T.Run("world: skills", WorldTests.Skills);
             T.Run("skill shapes: data", SkillAimTests.DataShapes);
@@ -109,6 +118,7 @@ namespace GameViewer.Tests
             T.Run("demo: boss", BossViewTests.DemoBoss);
             T.Run("session e2e (fake gateway)", SessionTests.EndToEnd);
             T.Run("session: failures", SessionTests.Failures);
+            T.Run("session: skill book", SessionTests.SkillBook);
             T.Run("autopilot", SessionTests.AutoPilotChasesAndAttacks);
             T.Run("live: settings", LiveTests.Settings);
             T.Run("forest: path", ForestTests.Path);

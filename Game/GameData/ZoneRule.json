@@ -1,54 +1,92 @@
 {
   "ZoneRule": [
     {
+      "ZoneId": 0,
+      "AllowPvp": false,
+      "AllowDuel": true,
+      "Terrain": 1,
+      "AllMonsterCount": 3,
+      "AllBossCount": 1
+    },
+    {
       "ZoneId": 1,
       "AllowPvp": false,
-      "AllowDuel": false
+      "AllowDuel": false,
+      "Terrain": 0,
+      "AllMonsterCount": 0,
+      "AllBossCount": 0
     },
     {
       "ZoneId": 2,
       "AllowPvp": false,
-      "AllowDuel": true
+      "AllowDuel": true,
+      "Terrain": 0,
+      "AllMonsterCount": 0,
+      "AllBossCount": 0
     },
     {
       "ZoneId": 3,
       "AllowPvp": false,
-      "AllowDuel": true
+      "AllowDuel": true,
+      "Terrain": 0,
+      "AllMonsterCount": 0,
+      "AllBossCount": 0
     },
     {
       "ZoneId": 4,
       "AllowPvp": false,
-      "AllowDuel": true
+      "AllowDuel": true,
+      "Terrain": 0,
+      "AllMonsterCount": 0,
+      "AllBossCount": 0
     },
     {
       "ZoneId": 5,
       "AllowPvp": false,
-      "AllowDuel": true
+      "AllowDuel": true,
+      "Terrain": 0,
+      "AllMonsterCount": 0,
+      "AllBossCount": 0
     },
     {
       "ZoneId": 6,
       "AllowPvp": false,
-      "AllowDuel": true
+      "AllowDuel": true,
+      "Terrain": 0,
+      "AllMonsterCount": 0,
+      "AllBossCount": 0
     },
     {
       "ZoneId": 7,
       "AllowPvp": false,
-      "AllowDuel": true
+      "AllowDuel": true,
+      "Terrain": 0,
+      "AllMonsterCount": 0,
+      "AllBossCount": 0
     },
     {
       "ZoneId": 8,
       "AllowPvp": false,
-      "AllowDuel": true
+      "AllowDuel": true,
+      "Terrain": 0,
+      "AllMonsterCount": 0,
+      "AllBossCount": 0
     },
     {
       "ZoneId": 9,
       "AllowPvp": false,
-      "AllowDuel": true
+      "AllowDuel": true,
+      "Terrain": 0,
+      "AllMonsterCount": 0,
+      "AllBossCount": 0
     },
     {
       "ZoneId": 10,
       "AllowPvp": true,
-      "AllowDuel": false
+      "AllowDuel": false,
+      "Terrain": 0,
+      "AllMonsterCount": 0,
+      "AllBossCount": 0
     }
   ]
 }

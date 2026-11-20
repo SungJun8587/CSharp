@@ -19,6 +19,8 @@ namespace GameViewer.Core.Logic
                 case 6: case 8: case 10: case 11: case 12: return HitMat.Shell;   // 소라게, 독거미, 전갈, 사마귀, 게
                 case 13: return HitMat.Bone;                                 // 해골 병사
                 case 22: return HitMat.Stone;                                // 골렘
+                case 23: return HitMat.Wood;                                 // 나무 정령
+                case 24: return HitMat.Fire;                                 // 불의 정령
                 case 15: return HitMat.Spirit;                               // 유령
                 default: return HitMat.Flesh;                                // 두꺼비, 박쥐, 도마뱀, 고블린 계열, 독침 벌레, 설인
             }

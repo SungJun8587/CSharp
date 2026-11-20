@@ -15,7 +15,7 @@ namespace Core.Util;
 /// <para>워커는 백그라운드 스레드라서, Stop 없이 프로세스가 끝나면 큐에 남은 작업은 실행되지 않는다.</para>
 /// <para><b>주의</b>: maxQueueSize를 두었을 때 워커 안에서 같은 풀에 Post하면, 큐가 가득 찬 순간 모든 워커가 Post에서 자리를 기다려
 /// 서로를 깨우지 못하는 교착이 될 수 있다. 워커가 같은 풀에 되먹이는 구조는 무제한 큐로 쓴다.</para>
-/// <para><b>종료</b>: <see cref="Stop"/>(drain: true)는 이미 넣은 작업을 모두 끝낸 뒤 스레드를 합류시킨다. drain: false는 남은 작업을 버리고
+/// <para><b>종료</b>: <see cref="Stop(bool)"/>(drain: true)는 이미 넣은 작업을 모두 끝낸 뒤 스레드를 합류시킨다. drain: false는 남은 작업을 버리고
 /// 실행 중인 작업만 끝나길 기다린다. 두 경우 모두 Stop 이후의 Post는 false를 돌려준다.
 /// drain 정지가 진행 중일 때 다른 스레드가 Stop(false)를 부르면 남은 작업을 버리는 쪽으로 바뀐다. 워커 안에서 Stop을 불러도 자기 자신은 합류하지 않는다.</para>
 /// </summary>
@@ -61,7 +61,10 @@ public sealed class WorkerPool : IDisposable
 
     /// <summary>워커를 멈추고 합류시킨다. 여러 번 불러도 안전하다.</summary>
     /// <param name="drain">true면 큐에 남은 작업을 모두 실행한 뒤 종료, false면 남은 작업을 버린다.</param>
-    public void Stop(bool drain = true)
+    public void Stop(bool drain = true) => Stop(drain, Timeout.Infinite);
+
+    /// <summary>Stop 과 같지만 스레드가 끝나길 최대 timeoutMs 만 기다린다. 모두 끝났으면 true(작업 하나가 멈추면 종료도 멈추는 것을 막는다).</summary>
+    public bool Stop(bool drain, int timeoutMs)
     {
         bool first = Interlocked.Exchange(ref _stopRequested, 1) == 0;
         if (!drain)
@@ -69,11 +72,22 @@ public sealed class WorkerPool : IDisposable
         else if (first)
             _queue.SetProducerDone();
 
+        long deadline = timeoutMs < 0 ? long.MaxValue : TimeUtil.MonotonicNowMillis() + timeoutMs;
+        bool all = true;
         foreach (Thread t in _threads)
         {
-            if (t != Thread.CurrentThread)
+            if (t == Thread.CurrentThread)
+                continue;
+            if (timeoutMs < 0)
+            {
                 t.Join();
+                continue;
+            }
+            long left = deadline - TimeUtil.MonotonicNowMillis();
+            if (left <= 0 || !t.Join((int)Math.Min(left, int.MaxValue)))
+                all = false;
         }
+        return all;
     }
 
     public void Dispose() => Stop(true);

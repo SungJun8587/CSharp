@@ -17,7 +17,8 @@ namespace GameViewer.Core.Audio
         Reconnect,      // 재접속 성공
         ZoneForest, ZoneDesert, ZoneSnow, ZoneVolcano, ZoneSwamp, ZoneRuins, ZoneCoast, ZoneCrystal, ZoneSky, ZoneDark,     // 존 입장 효과음 (MapKind 순서)
         // 영웅별 공격음(전사 베기, 궁수 활, 마법사 영창, 창병 찌르기)과 몬스터 피격/사망음. Zone* 뒤에 붙여 존 순서 계산을 건드리지 않는다.
-        SlashWarrior, ShotArcher, SpellMage, ThrustLancer, HitMonster, DeathMonster, DeathBoss
+        SlashWarrior, ShotArcher, SpellMage, ThrustLancer, HitMonster, DeathMonster, DeathBoss,
+        LevelUp         // 레벨 업 팡파르
     }
 
     public static class SfxSynth
@@ -62,6 +63,7 @@ namespace GameViewer.Core.Audio
                 case SfxKind.ThrustLancer: return Sweep(rate, 0.11f, 700f, 2100f, 0.1f, 0.5f, false);
                 case SfxKind.HitMonster:   return Thump(rate, 0.12f, 160f, 55f, 0.55f, 0.65f);
                 case SfxKind.DeathMonster: return Sweep(rate, 0.3f, 300f, 70f, 0.45f, 0.5f, false);
+                case SfxKind.LevelUp:      return Chime(rate, new float[] { 392f, 523f, 659f, 784f, 1047f, 1319f, 1568f, 2093f }, 0.085f, 0.5f);
                 case SfxKind.DeathBoss:    return Sweep(rate, 0.9f, 220f, 40f, 0.3f, 0.7f, false);
             }
             return new float[0];
@@ -250,6 +252,7 @@ namespace GameViewer.Core.Audio
                 case EffectKind.RespawnRing: kind = SfxKind.Respawn; break;
                 case EffectKind.Banner: kind = fx.Variant == 1 ? SfxKind.Alarm : SfxKind.Banner; gain = 1f; return true;      // 화면 전체 알림은 거리와 무관
                 case EffectKind.Streak: kind = SfxKind.Streak; gain = 1f; return true;
+                case EffectKind.LevelUp: kind = SfxKind.LevelUp; gain = 1f; return true;
                 default: return false;
             }
             float dx = fx.X - selfX, dy = fx.Y - selfY;

@@ -375,7 +375,6 @@ public static class RenderSnapshot
                 foreach (Entity e in heroes)
                 {
                     e.Dead = false; e.DeadAtMs = 0; e.HitFlashMs = -100000; e.AttackAnimMs = -100000; e.AttackKind = 0; e.CastSkillId = 0; e.Hp = 100;
-                    e.Id = e.Id;
                 }
                 long tt = t;
                 if (ri == 0) { tt = (t / (260 * 8)) * (260 * 8); }

@@ -154,9 +154,9 @@ public static class GameDataLoader
             {
                 foreach (HeroSkillRow r in links!.HeroSkill)
                 {
-                    if (!data.AssignSkill(r.HeroId, r.SkillId))
+                    if ((r.Price > 0 && r.PriceCurrencyId == 0) || !data.AssignSkill(r.HeroId, r.SkillId, r.UnlockLevel, r.PriceCurrencyId, r.Price, r.Slot))
                     {
-                        LogManager.Error("[GameData] hero-skill link rejected (unknown hero/skill, duplicate, or more than {0} skills). heroId={1}, skillId={2}",
+                        LogManager.Error("[GameData] hero-skill link rejected (unknown hero/skill, duplicate, more than {0} skills, a price without a currency, a shop skill with a fixed slot, or a bad/duplicate fixed slot). heroId={1}, skillId={2}",
                             GameConsts.MaxHeroSkills, r.HeroId, r.SkillId);
                         return null;
                     }
@@ -252,6 +252,103 @@ public static class GameDataLoader
         }
 
         LogManager.Info("[GameData] loaded. drops={0}", data.EntryCount);
+        return data;
+    }
+
+    /// <summary>
+    /// Level.json(레벨 표)과 MonsterExp.json(몬스터 경험치)을 읽는다. 둘 다 선택이며, 없으면 레벨 없는 데이터(MaxLevel 0)를 돌려준다.
+    /// 몬스터 경험치의 몬스터 ID가 Monster 표에 없으면 실패한다. 형식이 틀리면 null.
+    /// </summary>
+    public static LevelData? LoadLevels(string dir, MonsterData monsters)
+    {
+        LevelData data = new LevelData();
+        ReadResult lv = ReadOptional(dir, LevelRow.FileName, out LevelTable? levels, (t, e) => { });
+        if (lv == ReadResult.Failed)
+            return null;
+        if (lv == ReadResult.Ok)
+        {
+            foreach (LevelRow r in levels!.Level)
+            {
+                if (!data.AddLevel(new LevelData.Row { Level = r.Level, ExpToNext = r.ExpToNext, StatPercent = r.StatPercent }))
+                {
+                    LogManager.Error("[GameData] level rows must be consecutive from 1. level={0}", r.Level);
+                    return null;
+                }
+            }
+            if (!data.Validate(out string error))
+            {
+                LogManager.Error("[GameData] level validation failed. {0}", error);
+                return null;
+            }
+        }
+
+        ReadResult ex = ReadOptional(dir, MonsterExpRow.FileName, out MonsterExpTable? exps, (t, e) => t.Validate(e));
+        if (ex == ReadResult.Failed)
+            return null;
+        if (ex == ReadResult.Ok)
+        {
+            foreach (MonsterExpRow r in exps!.MonsterExp)
+            {
+                if (monsters.FindMonster(r.MonsterId) == null)
+                {
+                    LogManager.Error("[GameData] MonsterExp: unknown monster id. id={0}", r.MonsterId);
+                    return null;
+                }
+                if (!data.AddMonsterExp(r.MonsterId, r.Exp))
+                {
+                    LogManager.Error("[GameData] MonsterExp: duplicate monster id. id={0}", r.MonsterId);
+                    return null;
+                }
+            }
+        }
+
+        LogManager.Info("[GameData] loaded. levels={0}, monsterExp={1}", data.MaxLevel, data.MonsterExpCount);
+        return data;
+    }
+
+    /// <summary>
+    /// Currency.json(재화 정의)과 MonsterCurrency.json(몬스터 처치 보상)을 읽는다. 둘 다 선택이며, 없으면 재화 없는 데이터를 돌려준다.
+    /// 보상의 몬스터 ID는 Monster 표에 있어야 한다. 형식이 틀리거나 검증에 실패하면 null.
+    /// </summary>
+    public static CurrencyData? LoadCurrencies(string dir, MonsterData monsters)
+    {
+        CurrencyData data = new CurrencyData();
+        ReadResult cr = ReadOptional(dir, CurrencyRow.FileName, out CurrencyTable? currencies, (t, e) => { });
+        if (cr == ReadResult.Failed)
+            return null;
+        if (cr == ReadResult.Ok)
+        {
+            foreach (CurrencyRow r in currencies!.Currency)
+                if (!data.AddCurrency(new CurrencyData.Currency { Id = r.Id, Name = r.Name, MaxAmount = r.MaxAmount }))
+                {
+                    LogManager.Error("[GameData] Currency: id is zero or duplicated. id={0}", r.Id);
+                    return null;
+                }
+        }
+
+        ReadResult mr = ReadOptional(dir, MonsterCurrencyRow.FileName, out MonsterCurrencyTable? rewards, (t, e) => { });
+        if (mr == ReadResult.Failed)
+            return null;
+        if (mr == ReadResult.Ok)
+        {
+            foreach (MonsterCurrencyRow r in rewards!.MonsterCurrency)
+            {
+                if (monsters.FindMonster(r.MonsterId) == null)
+                {
+                    LogManager.Error("[GameData] MonsterCurrency: unknown monster id. id={0}", r.MonsterId);
+                    return null;
+                }
+                data.AddReward(new CurrencyData.Reward { MonsterId = r.MonsterId, CurrencyId = r.CurrencyId, MinAmount = r.MinAmount, MaxAmount = r.MaxAmount, ChancePermille = r.ChancePermille });
+            }
+        }
+
+        if (!data.Validate(out string error))
+        {
+            LogManager.Error("[GameData] currency validation failed. {0}", error);
+            return null;
+        }
+
+        LogManager.Info("[GameData] loaded. currencies={0}, monsterRewards={1}", data.CurrencyCount, data.RewardCount);
         return data;
     }
 

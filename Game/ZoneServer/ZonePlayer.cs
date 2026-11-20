@@ -29,6 +29,18 @@ public sealed class ZonePlayer : ZoneEntity
     /// <summary>선택한 영웅 ID</summary>
     public uint HeroId { get; }
 
+    /// <summary>레벨(1~). 존 스레드에서만 바꾼다. 영웅 능력치에 레벨 배율이 곱해진다.</summary>
+    public uint Level { get; internal set; } = 1;
+
+    /// <summary>현재 레벨에서 쌓은 경험치. 최대 레벨이면 0.</summary>
+    public uint Exp { get; internal set; }
+
+    /// <summary>재화 보유량(재화 ID -> 양). 존 스레드에서만 바꾼다.</summary>
+    public Dictionary<uint, uint> Wallet { get; } = new Dictionary<uint, uint>();
+
+    /// <summary>보유 스킬(스킬 ID -> 장착 칸 1~6, 0이면 장착 안 함). 존 스레드에서만 바꾼다. 다른 영웅의 스킬도 저장을 위해 그대로 들고 있다.</summary>
+    public Dictionary<uint, byte> Skills { get; } = new Dictionary<uint, byte>();
+
     /// <summary>메모리 인벤토리. 접속 중에만 유지된다.</summary>
     public Inventory Inventory { get; } = new Inventory();
 

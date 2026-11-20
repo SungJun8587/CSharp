@@ -324,7 +324,9 @@ namespace GameViewer.App
             if (_phase != Phase.Playing) { TickStart(); return; }
             long now = Now;
             _session.Update(now);
+            if (_view.SkillBookOpen && _session.State != SessionState.InZone) _view.SkillBookOpen = false;       // 연결이 끊기면 창을 닫는다
             if (_demo != null) _demo.Update(now);
+            ApplyServerTerrain(now);
             _pilot.Update(now);
             UpdateSeekBoss(now);
             PlayEffectSounds(now);
@@ -442,8 +444,18 @@ namespace GameViewer.App
                 if (e.Button == MouseButtons.Left && !ClickHeroSelect(e.X, e.Y)) _view.HeroSelectOpen = false;
                 return;
             }
+            if (_view.ZoneSelectOpen)
+            {
+                if (e.Button == MouseButtons.Left && !ClickZoneSelect(e.X, e.Y)) _view.ZoneSelectOpen = false;
+                return;
+            }
+            if (_view.SkillBookOpen)
+            {
+                if (e.Button == MouseButtons.Left && !ClickSkillBook(e.X, e.Y)) _view.SkillBookOpen = false;
+                return;
+            }
             if (e.Button == MouseButtons.Left && ClickMiniMap(e.X, e.Y, now)) return;
-            if (e.Button == MouseButtons.Left) { int ss = SkillSlotAt(e.X, e.Y); if (ss > 0) { _view.DragSlot = ss; return; } }
+            if (e.Button == MouseButtons.Left) { int ss = SkillSlotAt(e.X, e.Y); if (ss > 0) { if (CanDragSlot(ss)) _view.DragSlot = ss; else if (_session.World.SkillBookKnown && _session.MySkills[ss - 1] == 0 && ss > ViewerSession.FixedSlots && _session.SlotLockLevel(ss) == 0) OpenSkillBook(); return; } }
             if (e.Button == MouseButtons.Left || e.Button == MouseButtons.Right)
             {
                 Entity hit = PickEntity(e.X, e.Y, now);
@@ -497,6 +509,14 @@ namespace GameViewer.App
             int count = _session.MySkills.Count, n = Math.Min(9, count);
             for (int i = 1; i <= n; ++i) if (HudRenderer.SkillSlotRect(_view, count, i).Contains(sx, sy)) return i;
             return 0;
+        }
+
+        /// <summary>끌기를 시작할 수 있는 칸인가: 스킬이 있는 칸이고, 서버 현황이 있으면 상점 칸(7·8)만 옮길 수 있다.</summary>
+        private bool CanDragSlot(int slot)
+        {
+            List<uint> sk = _session.MySkills;
+            if (slot < 1 || slot > sk.Count || sk[slot - 1] == 0) return false;
+            return !_session.World.SkillBookKnown || slot > ViewerSession.FixedSlots;
         }
 
         protected override void OnMouseUp(MouseEventArgs e)
@@ -591,6 +611,8 @@ namespace GameViewer.App
             if (_view.SettingsOpen) { SettingsKey(k); e.Handled = true; return; }
             if (_view.MapOpen) { MapKey(k); e.Handled = true; return; }
             if (_view.HeroSelectOpen) { HeroSelectKey(k); e.Handled = true; return; }
+            if (_view.ZoneSelectOpen) { ZoneSelectKey(k); e.Handled = true; return; }
+            if (_view.SkillBookOpen) { SkillBookKey(k); e.Handled = true; return; }
             if (k == Keys.M && e.Control)
             {
                 _view.Settings.SfxOn = !_view.Settings.SfxOn; ApplySettings(true);
@@ -603,6 +625,7 @@ namespace GameViewer.App
             switch (k)
             {
                 case Keys.G: if (_demoMode) WalkToNearestGate(now); break;
+                case Keys.F6: CycleTestTerrain(e.Shift, now); break;       // 시험장(존 0) 지형 치트(고정 키, 키 설정에는 없다)
                 case Keys.Escape: _pilot.SetAuto(false); _view.SelectedId = 0; _session.StopMoving(now); break;
                 case Keys.Oemplus: case Keys.Add: ZoomBy(1.15); break;
                 case Keys.OemMinus: case Keys.Subtract: ZoomBy(1 / 1.15); break;
@@ -614,9 +637,65 @@ namespace GameViewer.App
             base.OnKeyDown(e);
         }
 
+        // ------------------------------------------------------------------ 시험장 지형 치트 (F6)
+
+        /// <summary>
+        /// 시험장(존 0)의 지형을 다음(Shift 면 이전) 지형으로 바꾼다. 서버에 붙었으면 서버에 요청해 장애물/충돌까지 바뀌고
+        /// (결과는 ZcTerrainNotify 로 와서 ApplyServerTerrain 이 화면에 반영한다), 데모는 지형을 다시 골라 시험장을 다시 시작한다.
+        /// </summary>
+        private void CycleTestTerrain(bool back, long now)
+        {
+            if (_cfg.ZoneId != ZoneTheme.TestZone)
+            {
+                _session.World.AddLog(now, 1, "지형 치트는 시험장(존 0)에서만 쓸 수 있습니다");
+                return;
+            }
+            _pilot.SetAuto(true);                                      // 지형을 바꾸면 곧바로 자동 전투로 시험한다(지형이 바뀌어도 자동 전투는 유지된다)
+            uint[] ts = ZoneTheme.TerrainZones;
+            int i = Array.IndexOf(ts, ZoneTheme.TestTerrain);
+            if (i < 0) i = 0;
+            uint next = ts[(i + (back ? ts.Length - 1 : 1)) % ts.Length];
+            if (_demoMode) { ApplyZone(ZoneTheme.TestZone, next); return; }
+            if (_session.SendTerrainCheat(next))
+            {
+                _terrainReqMs = now;
+                _session.World.AddLog(now, 0, "지형 변경 요청: " + ZoneTheme.TerrainName(next));
+            }
+            else _session.World.AddLog(now, 1, "지형 변경 요청을 보내지 못했습니다(존에 입장한 상태에서만 가능)");
+        }
+
+        private long _terrainReqMs;     // 지형 변경을 요청한 시각(응답을 기다리는 동안만 0 이 아니다)
+
+        /// <summary>지형 변경 요청에 서버가 2.5초 안에 답하지 않으면 원인을 짚어 알려 준다(치트가 꺼진 서버/오래된 빌드는 요청을 조용히 무시한다).</summary>
+        private void CheckTerrainReply(long now)
+        {
+            if (_terrainReqMs == 0 || now - _terrainReqMs < 2500) return;
+            _terrainReqMs = 0;
+            _session.World.AddLog(now, 1, "서버가 지형 변경에 답하지 않습니다. 존 0 서버가 최신 빌드로 떠 있는지, 서버 콘솔에 'terrain cheat' 로그가 있는지 확인하세요");
+        }
+
+        /// <summary>서버가 알려 준 시험장 지형(치트로 바뀐 값, 입장 때 받은 값 포함)을 GameData 와 화면에 반영한다. 세션은 다시 시작하지 않는다.</summary>
+        private void ApplyServerTerrain(long now)
+        {
+            CheckTerrainReply(now);
+            uint terrain = _session.World.ServerTerrain;
+            if (terrain == 0) return;
+            _session.World.ServerTerrain = 0;
+            _terrainReqMs = 0;
+            if (_cfg.ZoneId != ZoneTheme.TestZone || terrain == ZoneTheme.TestTerrain) return;
+            GameData d = GameData.Load(_loader.DataDir, ZoneTheme.TestZone, terrain);
+            if (d.Heroes.Count == 0 && _data.Heroes.Count > 0) return;      // 읽기 실패: 그대로 둔다
+            _data = d;
+            ZoneTheme.Current = ZoneTheme.For(ZoneTheme.TestZone);
+            ApplyBgm();
+            _session.World.AddLog(now, 0, "시험장 지형: " + ZoneTheme.TerrainName(terrain));
+        }
+
         /// <summary>키 설정에 묶인 동작을 실행한다.</summary>
         private void DoAction(BindAction a, KeyEventArgs e, long now)
         {
+            if (a == BindAction.SkillBook) { OpenSkillBook(); return; }
+            if (a == BindAction.InfoPanel) { _view.ShowInfo = !_view.ShowInfo; return; }
             if ((int)a >= KeyBindings.FirstSkill) { UseSkillSlot((int)a - KeyBindings.FirstSkill, now); return; }
             switch (a)
             {
@@ -632,6 +711,7 @@ namespace GameViewer.App
                 case BindAction.Settings: OpenSettings(); break;
                 case BindAction.WorldMap: _view.MapOpen = true; _mapDrag = false; break;
                 case BindAction.HeroSelect: OpenHeroSelect(); break;
+                case BindAction.ZoneSelect: OpenZoneSelect(); break;
                 case BindAction.Screenshot: SaveScreenshot(); break;
                 case BindAction.Reconnect:
                     if (!_demoMode && (_session.State == SessionState.Failed || _session.State == SessionState.Disconnected)) _session.ReconnectNow(now);
@@ -928,6 +1008,116 @@ namespace GameViewer.App
             else if (_sfx.Enabled) _sfx.Play(SfxSynth.ZoneSfx(ZoneTheme.For(_session.ZoneId)), 1f);
         }
 
+        // ------------------------------------------------------------------ 존 변경
+
+        private void OpenZoneSelect()
+        {
+            int cur = Array.IndexOf(ZoneTheme.Zones, _cfg.ZoneId);
+            _view.ZoneSelectIndex = cur < 0 ? 0 : cur;
+            _view.ZoneTerrainPick = false;
+            _view.ZoneSelectOpen = true;
+        }
+
+        private void ZoneSelectKey(Keys k)
+        {
+            uint[] zs = _view.ZoneTerrainPick ? ZoneTheme.TerrainZones : ZoneTheme.Zones;
+            int n = zs.Length;
+            if (k == Keys.Escape || (int)k == _view.Settings.Keys.Get(BindAction.ZoneSelect)) { if (_view.ZoneTerrainPick) { _view.ZoneTerrainPick = false; _view.ZoneSelectIndex = ZoneTheme.Zones.Length - 1; } else _view.ZoneSelectOpen = false; return; }
+            if (k == Keys.Up) _view.ZoneSelectIndex = (_view.ZoneSelectIndex + n - 1) % n;
+            else if (k == Keys.Down) _view.ZoneSelectIndex = (_view.ZoneSelectIndex + 1) % n;
+            else if (k >= Keys.D1 && k <= Keys.D9 && k - Keys.D1 < n) _view.ZoneSelectIndex = k - Keys.D1;
+            else if (k >= Keys.NumPad1 && k <= Keys.NumPad9 && k - Keys.NumPad1 < n) _view.ZoneSelectIndex = k - Keys.NumPad1;
+            else if (k == Keys.Enter || k == Keys.Return) PickZone(zs[Math.Max(0, Math.Min(n - 1, _view.ZoneSelectIndex))]);
+        }
+
+        /// <summary>목록에서 고른 값을 처리한다. 데모에서 시험장(0)을 고르면 지형 고르기로 넘어가고, 지형 단계면 그 지형으로 시험장을 다시 시작한다.
+        /// 서버에 붙을 때는 지형을 고르지 않는다(서버가 ZoneRule.Terrain 으로 정한 지형을 같은 GameData 에서 읽는다).</summary>
+        private void PickZone(uint id)
+        {
+            if (_view.ZoneTerrainPick)
+            {
+                _view.ZoneTerrainPick = false;
+                ApplyZone(ZoneTheme.TestZone, id);
+                return;
+            }
+            if (id == ZoneTheme.TestZone && _demoMode)       // 서버에 붙을 때 지형은 서버(ZoneRule.Terrain)가 정한다. 데모만 고른다
+            {
+                _view.ZoneTerrainPick = true;
+                _view.ZoneSelectIndex = (int)ZoneTheme.TestTerrain - 1;
+                return;
+            }
+            ApplyZone(id);
+        }
+
+        /// <summary>고른 존으로 바꿔 다시 시작한다. 존마다 스폰/장애물이 달라 GameData 를 그 존 기준으로 다시 읽는다.
+        /// 서버 모드는 Gateway 에 그 존으로 다시 입장을 요청한다(같은 존이면 다시 접속하지 않는다).</summary>
+        private void ApplyZone(uint zoneId, uint terrain = 0)
+        {
+            _view.ZoneSelectOpen = false;
+            if (zoneId == _cfg.ZoneId && _session.State == SessionState.InZone && terrain == 0) return;
+            GameData d = GameData.Load(_loader.DataDir, zoneId, terrain);
+            if (d.Heroes.Count == 0 && _data.Heroes.Count > 0) { _session.World.AddLog(Now, 1, "존 " + zoneId + " 데이터를 읽지 못했습니다"); return; }
+            bool auto = _pilot != null && _pilot.Mode == PilotMode.Auto;
+            _cfg.ZoneId = zoneId;
+            _data = d;
+            ZoneTheme.Current = ZoneTheme.For(zoneId);
+            StartSession();
+            if (auto) _pilot.SetAuto(true);
+            ApplyBgm();
+        }
+
+        private bool ClickZoneSelect(int sx, int sy)
+        {
+            uint[] zs = _view.ZoneTerrainPick ? ZoneTheme.TerrainZones : ZoneTheme.Zones;
+            for (int i = 0; i < zs.Length; ++i)
+                if (HudRenderer.ZoneRowRect(_view, zs.Length, i).Contains(sx, sy)) { _view.ZoneSelectIndex = i; PickZone(zs[i]); return true; }
+            return false;
+        }
+
+        // ------------------------------------------------------------------ 스킬 창
+
+        private void OpenSkillBook()
+        {
+            if (_session.State != SessionState.InZone) return;
+            _view.SkillBookTarget = 0;
+            _view.SkillBookOpen = true;
+        }
+
+        private void SkillBookKey(Keys k)
+        {
+            if (k == Keys.Escape || (int)k == _view.Settings.Keys.Get(BindAction.SkillBook)) _view.SkillBookOpen = false;
+        }
+
+        /// <summary>스킬 창 클릭. 창 안이면 true(닫지 않는다), 밖이면 false.</summary>
+        private bool ClickSkillBook(int sx, int sy)
+        {
+            List<uint> all = _session.Data.SkillsOf(_session.HeroId);
+            int n = all.Count;
+            if (!SkillBookHud.Window(_view, n).Contains(sx, sy)) return false;
+            if (!_session.World.SkillBookKnown) return true;
+            for (int i = ViewerSession.FixedSlots; i < ViewerSession.MaxEquipped; ++i)
+                if (SkillBookHud.SlotRect(_view, n, i).Contains(sx, sy)) { _view.SkillBookTarget = _view.SkillBookTarget == i + 1 ? 0 : i + 1; return true; }
+            for (int i = 0; i < n; ++i)
+            {
+                if (!SkillBookHud.ButtonRect(_view, n, i).Contains(sx, sy)) continue;
+                uint id = all[i];
+                switch (SkillBookHud.ActionFor(_session, id))
+                {
+                    case SkillBookAction.Buy: _session.BuySkill(id); break;
+                    case SkillBookAction.Unequip: _session.EquipSkill(id, 0); break;
+                    case SkillBookAction.Equip:
+                    {
+                        byte slot = SkillBookHud.TargetSlot(_session, _view);
+                        if (slot == 0) _session.World.AddLog(Now, 1, "열려 있는 빈 상점 칸(7·8)이 없습니다. 칸을 눌러 고르거나 먼저 스킬을 해제해 주세요");
+                        else _session.EquipSkill(id, slot);
+                        break;
+                    }
+                }
+                return true;
+            }
+            return true;
+        }
+
         // ------------------------------------------------------------------ 영웅 선택
 
         private void OpenHeroSelect()
@@ -1058,7 +1248,7 @@ namespace GameViewer.App
             List<uint> skills = _session.MySkills;
             if (index < 0 || index >= skills.Count) return;
             SkillRow sk = _data.Skill(skills[index]);
-            if (sk == null) return;
+            if (sk == null) { if (_session.World.SkillBookKnown) _session.World.AddLog(now, 1, _session.SlotLockLevel(index + 1) > 0 ? "아직 열리지 않은 칸입니다 (Lv " + _session.SlotLockLevel(index + 1) + ")" : "비어 있는 칸입니다"); return; }
             SkillAimResult a = SkillAim.Resolve(sk, _session.World, _session.World.Find(_view.SelectedId), _view.HasMouse, _view.MouseWorldX, _view.MouseWorldY, now);
             if (!a.Ok)
             {

@@ -5,7 +5,7 @@ C# 공용 라이브러리. 어셈블리 셋으로 나뉘며 `Core.Net`, `Core.Re
 | 프로젝트 | 네임스페이스 | 내용 |
 |---|---|---|
 | `Util/Core.Util.csproj` | `Core.Util` | 의존성 없는 공용 유틸: 로그(`Logging/`), 파일 쓰기(`FileUtil`, `FileReplace`), 문자열(`Text/`), 설정/JSON 로드(`Config/`), 풀·제한기·지표·보안·컬렉션 등(아래 "공용 유틸" 표). 스레드 유틸(`Util/Threading`): 락(`SpinMutex`, `RWSpinLock`, `PLock`, `PRWLock`), 큐(`LockFreeQueue`, `BlockingTaskQueue`, `DoubleBufferQueue`, `ChunkedSwapQueue`, `SpinLockQueue`), 샤딩 맵(`ClusterSpinMap`), 고정 스레드 실행기(`WorkerPool`), 락 순서 진단(`DeadLockProfiler`), 스레드 관리(`ThreadManager`), `SrwLock`, `CriticalSection`, `SyncValue`, 열거형 원자 연산(`AtomicEnum<T>`, `InterlockedEx`), 결과를 기다리지 않는 작업(`BackgroundJob`), 캐시라인 패딩(`CacheLine`, `PaddedInt32/64`). 앞으로의 Util 클래스는 여기에 추가한다 |
-| `Net/Core.Net.csproj`   | `Core.Net`  | 네트워크: 세션, 리스너, 송수신 버퍼, TCP/UDP/TLS 서비스(TCP·TLS 서비스는 슬롯·통계·유휴 검사·종료 대기를 공통부로 공유하고, TLS 송신은 작은 패킷을 TLS 레코드 크기까지 합쳐 쓴다), 패킷 디스패처(`PacketDispatcher<TContext>`: 직접 등록 또는 `[PacketHandler]` 자동 등록), 소켓 유틸(`SocketUtils.ConfigureTcp`로 TCP/TLS 서비스가 같은 소켓 옵션·KeepAlive 적용, `NetAddress.TryCreate`/`TryCreateAsync`는 잘못된 호스트/포트에 예외 없이 false, `HostResolver`는 IP 문자열은 DNS 없이·이름은 제한 시간과 동시 해석 수 상한(4)을 두고 해석하며 Redis 클라이언트도 이를 쓴다), 사용할 만한 로컬 IPv4 주소 고르기(`LocalAddress`), 요청 id 로 응답을 짝짓는 타임아웃 대기 테이블(`PendingRequests<TResponse>`), `INetLogger`와 `LogManagerNetLogger`(LogManager에 연결) |
+| `Net/Core.Net.csproj`   | `Core.Net`  | 네트워크: 세션, 리스너, 송수신 버퍼, TCP/UDP/TLS 서비스(TCP·TLS 서비스는 슬롯·통계·유휴 검사·종료 대기를 공통부로 공유하고, TLS 송신은 작은 패킷을 TLS 레코드 크기까지 합쳐 쓴다), 패킷 디스패처(`PacketDispatcher<TContext>`: 직접 등록 또는 `[PacketHandler]` 자동 등록), 소켓 유틸(`SocketUtils.ConfigureTcp`로 TCP/TLS 서비스가 같은 소켓 옵션·KeepAlive 적용, `NetAddress.TryCreate`/`TryCreateAsync`는 잘못된 호스트/포트에 예외 없이 false, `HostResolver`는 IP 문자열은 DNS 없이·이름은 제한 시간과 동시 해석 수 상한(4)을 두고 해석하며 Redis 클라이언트도 이를 쓴다), 사용할 만한 로컬 IPv4 주소 고르기(`LocalAddress`), 요청 id 로 응답을 짝짓는 타임아웃 대기 테이블(`PendingRequests<TResponse>`), `INetLogger`와 `LogManagerNetLogger`(LogManager에 연결). TCP 세션(`Session`)과 TLS 세션(`TlsSession`)은 송신 큐(`SendQueue`: 소유권·종료 예약·상한)와 세션 레지스트리/방송/통계(`SessionTable<T>`)를 공유한다 |
 | `Redis/Core.Redis.csproj` | `Core.Redis` | Redis 클라이언트: 연결(`RedisClient`), 커넥션 풀(`RedisConnectionPool`), Pub/Sub(`RedisSubscriber`), 다중 노드 진입점(`RedisService`), Lua 스크립트(`RedisScript`), 연결 오류 재시도(`RedisRetry`), 서버 하트비트(`RedisServerHeartbeat`) |
 
 네트워크가 필요 없는 도구는 `Core.Util`만 참조한다.
@@ -53,7 +53,7 @@ C# 공용 라이브러리. 어셈블리 셋으로 나뉘며 `Core.Net`, `Core.Re
     RedisRetry.SendCommandWithRetry(redis, jobs, null, args, maxRetry: 3, retryDelayMs: 200, onResult);  // 연결 오류만 재시도
     redis.Subscribe("chan", (channel, payload) => { ... });                   // 재연결 시 자동 재구독
 
-문자열은 UTF-8로 인코딩/디코딩한다(바이너리 안전하지 않음). 풀은 연결당 동시에 명령 하나만 보내고, 연결이 모두 사용 중이면 대기 큐(최대 2000건, 5초)에 둔다. 접수가 거부되면(`SendCommand`가 false) 콜백은 호출되지 않는다.
+문자열 인자/응답은 UTF-8로 인코딩/디코딩하고(`RedisValue.StrVal`), 바이너리는 `RedisBinaryArgs`로 보내고(`IReadOnlyList<string>`이라 기존 SendCommand에 그대로 넘긴다) `RedisValue.BytesVal`로 손상 없이 읽는다. 구독 메시지는 `SubscribeBinary`/`PSubscribeBinary`가 페이로드를 바이트 그대로 준다. 풀은 연결당 동시에 명령 하나만 보내고, 연결이 모두 사용 중이면 대기 큐(최대 2000건, 5초)에 둔다. 접수가 거부되면(`SendCommand`가 false) 콜백은 호출되지 않는다.
 
 RESP 파서는 증분 방식이다. 응답이 여러 번에 나뉘어 도착해도 이미 훑은 부분을 다시 훑지 않으므로 원소가 많은 배열(`LRANGE`, `HGETALL` 등)도 수신 크기에 비례해 처리한다. 배열 원소 수 상한은 `RedisConst.MaxArrayElements`(4,194,304), 중첩 깊이 상한은 `MaxParseDepth`(64)이고 넘으면 `ProtocolError`로 연결을 끊는다. 파서는 수신 루프만 소유하며, 연결을 닫을 때의 초기화도 수신 루프가 끝나는 시점에 수행한다.
 
@@ -107,7 +107,7 @@ RESP 파서는 증분 방식이다. 응답이 여러 번에 나뉘어 도착해�
 
 | 위치 | 파일 | 용도 |
 |---|---|---|
-| Logging/ | `Log`, `LogManager`(Log.cs), `LogThrottle` | 로그 기록, 같은 로그를 간격당 한 줄로 제한(막힌 횟수 표시) |
+| Logging/ | `Log`, `LogManager`(Log.cs), `LogThrottle` | 로그 기록(기본 비동기: 호출 스레드는 큐에 넣기만 하고 쓰기 스레드가 씀 — 파일/디버그용과 콘솔용 스레드가 따로라 콘솔이 막혀도 파일 로그는 밀리지 않음, 큐 상한 10만 줄 초과분은 버리고 셈, `Flush`/`Shutdown`이 비움, `Async=false`로 동기 전환; `MinLevel` 미만은 서식 처리 전에 버림; 파일 열기 실패 시 5초간 파일 쓰기를 쉼), 같은 로그를 간격당 한 줄로 제한(막힌 횟수 표시) |
 | Text/ | `AsciiChar`, `TextUtil` | 로캘과 무관한 ASCII 처리, 문자열 다루기 |
 | Config/ | `JsonTableLoader`, `ConfigLoader`, `HotConfig<T>` | 엄격한 JSON 로드(기획 테이블/설정), 파일 변경 시 원자적 교체 |
 | Pooling/ | `ObjectPool<T>`, `ListPool<T>`, `StringBuilderPool` | 락 없는 객체 재사용, 임시 List/StringBuilder 할당 제거 |
@@ -120,7 +120,7 @@ RESP 파서는 증분 방식이다. 응답이 여러 번에 나뉘어 도착해�
 | Binary/ | `BitUtil`, `BitWriter`, `BitReader`, `CompressionUtil`, `CompressionFrame` | 비트 연산/직렬화, Brotli·Deflate와 압축 프레임 |
 | Events/ | `EventBus`, `Signal<T>` | 타입 기반 이벤트, 발행 중 구독 변경 안전 |
 | Threading/ | 락, 큐, 워커 풀, `JobQueue`/`JobTimer` 등 | (아래 "스레드 유틸" 참고) |
-| (루트) | `FileUtil`, `TimeUtil`, `ITimeProvider`, `SnowflakeIdGenerator`, `CommandLine`, `StateMachine<T>`, `TimerWheel`, `NamedTimers<TKey>`, `WriteBehindQueue<K,V>`, `ShutdownCoordinator`, `GameCalendar`, `DirectoryHash` | 파일 쓰기, 시간, 시계 추상화(시스템/수동), 노드별 64비트 ID, 명령줄 파서, 상태 기계, 타이머 휠, 같은 키를 합쳐 모아 내보내는 쓰기 지연 큐, 순서·시간 제한이 있는 종료 절차 |
+| (루트) | `FileUtil`, `TimeUtil`, `ITimeProvider`, `SnowflakeIdGenerator`, `CommandLine`, `StateMachine<T>`, `TimerWheel`, `NamedTimers<TKey>`, `WriteBehindQueue<K,V>`, `WriteBehindWorker<K,V>`, `ShutdownCoordinator`, `GameCalendar`, `DirectoryHash` | 파일 쓰기, 시간, 시계 추상화(시스템/수동), 노드별 64비트 ID, 명령줄 파서, 상태 기계, 타이머 휠, 같은 키를 합쳐 모아 내보내는 쓰기 지연 큐, 순서·시간 제한이 있는 종료 절차 |
 
 스레드 안전성은 클래스 주석을 따른다. 락이 없는 단일 스레드용(`TimerWheel`, `NamedTimers`, `TokenBucket`, `LruCache`, `SpatialHash`, `EventBus`, `StateMachine`)과
 여러 스레드용(`ObjectPool`, `Metrics`, `SnowflakeIdGenerator`, `KeyedRateLimiter`, `LogThrottle`, `NonceCache`, `HashRing` 읽기)이 구분된다.
@@ -145,6 +145,7 @@ RESP 파서는 증분 방식이다. 응답이 여러 번에 나뉘어 도착해�
 - `GridPathfinder`는 칸당 약 17바이트의 탐색 배열을 맵 크기만큼 미리 잡는다(1024×1024 ≈ 17MB). 맵이 크거나 존이 많으면 노드 상한이 있는 희소 A*가 낫다.
 - `GridPathfinder` 비용은 직선 10/대각 14이고 대각 이동은 인접한 두 칸이 모두 비어 있어야 한다. 결과는 이 비용 기준 최단 경로이며, `Smooth`는 직선으로 갈 수 있는 중간 점을 건너뛴다(최단성은 보장하지 않는다).
 - `WriteBehindQueue`는 키가 처음 들어온 시각부터 `minAge`가 지나야 나온다(자주 바뀌는 값이 매번 저장되지 않는다). 저장 실패는 `Requeue`로 되돌리고, 종료 때는 `DrainAll`로 비운다.
+- `WriteBehindWorker<K,V>`는 이 큐를 전용 스레드로 비워 저장 함수(`saveBatch`/`saveOne`)에 넘긴다. 묶음이 실패하면 한 건씩 나눠 재시도하고, 한 건이 `maxAttempts`번 실패하면 버리며, 실패 뒤에는 `BackoffState`로 쉰다. 저장 중이거나 대기 중인 최신 값은 `TryGetPending`으로 읽고, `Flush`/`Dispose`는 남은 것을 비운다. DB 어댑터는 저장 함수만 넘기면 된다.
 - `ShutdownCoordinator`: `Register`(order 오름차순) → `AttachProcessSignals()` → `await WhenRequested` → `await RunAsync()`. 훅마다 시간 제한이 있고 전체 제한을 넘으면 남은 훅은 건너뛴다.
 - `ITimeProvider`: 시간을 받는 유틸에 `AsMonotonicClock()`을 넘기면 시험에서 `ManualTimeProvider`로 시간을 움직일 수 있다.
 - `GameCalendar`: 시간대(`TimeZoneInfo`)를 넘기고 시각은 unix ms로 주고받는다. `NextDailyMs`/`PrevDailyMs`/`NextWeeklyMs`는 초기화 시각 계산, `GameDayIndex`/`IsSameGameDay`는 자정이 아닌 시각(예: 5시)에 바뀌는 "게임 날짜", `IsInDailyWindow`는 자정을 넘는 구간까지 지원하는 하루 중 구간 판정이다. 날짜는 모두 그 시간대의 벽시계 기준이며, 서머타임에서 건너뛰는 시각은 구간이 끝난 직후로, 두 번 나타나는 시각은 첫 번째로 해석한다. 현재 시각을 읽지 않으므로 `ITimeProvider`의 값을 넘겨 시험한다.

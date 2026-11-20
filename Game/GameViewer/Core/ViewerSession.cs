@@ -68,9 +68,57 @@ namespace GameViewer.Core
         }
 
         /// <summary>스킬바 순서가 적용된 내 스킬 목록(칸 번호 = 목록 위치).</summary>
-        public List<uint> MySkills { get { return BarOrder.Apply(HeroId, Data.SkillsOf(HeroId)); } }
+        public List<uint> MySkills { get { return World.SkillBookKnown ? EquippedSkills() : BarOrder.Apply(HeroId, Data.SkillsOf(HeroId)); } }
+
+        /// <summary>칸 번호 순(칸 1~8)의 스킬 ID. 비어 있거나 닫힌 칸은 0. 스킬바와 스킬 키가 이 순서를 쓴다.</summary>
+        public List<uint> EquippedSkills()
+        {
+            List<uint> mine = Data.SkillsOf(HeroId), res = new List<uint>();
+            for (byte slot = 1; slot <= MaxEquipped; ++slot)
+            {
+                uint found = 0;
+                foreach (uint id in mine) { byte s; if (World.SkillSlots.TryGetValue(id, out s) && s == slot) found = id; }
+                res.Add(found);
+            }
+            return res;
+        }
+        public const int MaxEquipped = 8;       // 칸 1~6: 레벨로 지급되는 고정 칸, 칸 7~8: 상점 스킬 칸
+        public const int FixedSlots = 6;
+
+        /// <summary>그 칸(1~8)이 열리는 레벨. 이미 열렸으면 0. 서버 현황을 받기 전이면 0.</summary>
+        public uint SlotLockLevel(int slot)
+        {
+            uint need = 0;
+            if (slot >= 1 && slot <= FixedSlots) { uint d = DesignatedSkill(slot); if (d != 0) need = Data.UnlockOf(HeroId, d).UnlockLevel; }
+            else if (slot == FixedSlots + 1) need = World.ShopSlot7Level;
+            else if (slot == FixedSlots + 2) need = World.ShopSlot8Level;
+            return World.MyLevel >= need ? 0u : need;
+        }
+
+        /// <summary>고정 칸(1~6)에 들어가는 무료 스킬. 없으면 0.</summary>
+        public uint DesignatedSkill(int slot)
+        {
+            foreach (uint id in Data.SkillsOf(HeroId)) { SkillUnlockRow u = Data.UnlockOf(HeroId, id); if (u.IsFree && u.Slot == slot) return id; }
+            return 0;
+        }
+
+        /// <summary>이 스킬의 장착 칸(1~6). 보유하지 않았거나 장착 안 했으면 0.</summary>
+        public byte SlotOf(uint skillId) { byte s; return World.SkillSlots.TryGetValue(skillId, out s) ? s : (byte)0; }
+        public bool Owns(uint skillId) { return World.SkillSlots.ContainsKey(skillId); }
+
+        /// <summary>스킬 구매를 요청한다. 검증과 결제는 서버가 하고 결과는 ZcSkillOpResNotify 로 온다.</summary>
+        public bool BuySkill(uint skillId) { return State == SessionState.InZone && Send(ZcSkillBuyReq.ToBytes(skillId)); }
+
+        /// <summary>스킬 장착을 요청한다(slot 0 = 해제). 그 칸에 다른 스킬이 있으면 서버가 자리를 바꾼다.</summary>
+        public bool EquipSkill(uint skillId, byte slot) { return State == SessionState.InZone && Send(ZcSkillEquipReq.ToBytes(skillId, slot)); }
         public readonly GameViewer.Core.Logic.SkillBarOrder BarOrder = new GameViewer.Core.Logic.SkillBarOrder();
-        public bool SwapSkillSlots(int i, int j) { return BarOrder.Swap(HeroId, Data.SkillsOf(HeroId), i, j); }
+        public bool SwapSkillSlots(int i, int j)
+        {
+            if (!World.SkillBookKnown) return BarOrder.Swap(HeroId, Data.SkillsOf(HeroId), i, j);
+            List<uint> eq = EquippedSkills();
+            if (i == j || i < FixedSlots || j < FixedSlots || i >= eq.Count || j >= eq.Count || eq[i] == 0 || SlotLockLevel(j + 1) != 0) return false;     // 상점 칸(7·8)끼리만 옮긴다
+            return EquipSkill(eq[i], (byte)(j + 1));        // 서버가 두 스킬의 칸을 맞바꾼다
+        }
 
         // ------------------------------------------------------------------ 접속
 
@@ -331,6 +379,9 @@ namespace GameViewer.Core
         }
 
         private bool Send(byte[] packet) { return SendOverride != null ? SendOverride(packet) : Net.Send(packet); }
+
+        /// <summary>시험장(존 0) 지형 변경을 서버에 요청한다(치트). 존 안에 있을 때만 보낸다.</summary>
+        public bool SendTerrainCheat(uint terrain) { return State == SessionState.InZone && Send(ZcTerrainReq.ToBytes(terrain)); }
 
         // ------------------------------------------------------------------ 오프라인(데모)
 

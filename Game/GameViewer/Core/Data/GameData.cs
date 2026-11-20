@@ -10,11 +10,14 @@ using System.Text;
 
 namespace GameViewer.Core.Data
 {
-    public sealed class HeroRow { public uint Id; public string Name; public int MaxHp; public int Attack, Defense; public double AttackRange; public uint AttackIntervalMs; public double Speed; }
+    public sealed class HeroRow { public uint Id; public string Name; public int MaxHp; public int Attack, Defense; public double AttackRange; public uint AttackIntervalMs; public double Speed; public int MaxMp; }
+    /// <summary>스킬 개방 조건(HeroSkill 표의 한 행). Price 0이면 UnlockLevel 에 이르면 고정 칸 Slot(1~6)으로 자동 지급, 아니면 PriceCurrencyId 재화로 사서 상점 칸(7·8)에 장착한다.</summary>
+    public sealed class SkillUnlockRow { public uint UnlockLevel = 1, PriceCurrencyId, Price, Slot; public bool IsFree { get { return Price == 0; } } }
     public sealed class MonsterRow { public uint Id; public string Name; public int MaxHp, Attack, Defense; public double AttackRange, Speed, AggroRange; public uint AttackIntervalMs; }
     public sealed class SkillRow
     {
         public uint Id; public string Name;
+        public uint MpCost;                     // 시전에 드는 MP (0 이면 MP를 쓰지 않는다)
         public string Shape = "Single";         // Single / Area / Self / Cone / Line (서버 ESkillShape)
         public bool IsAlly;                     // Target == Ally: 아군(시전자 포함)에게 효과를 낸다
         public bool IsArea;                     // Shape == Area: 지정한 지점 중심 (기존 코드가 쓰는 값)
@@ -57,7 +60,9 @@ namespace GameViewer.Core.Data
         public readonly Dictionary<uint, SkillRow> Skills = new Dictionary<uint, SkillRow>();
         public readonly Dictionary<uint, StatusRow> Statuses = new Dictionary<uint, StatusRow>();
         public readonly Dictionary<uint, List<uint>> HeroSkills = new Dictionary<uint, List<uint>>();
-        public readonly List<BlockRow> Blocks = new List<BlockRow>();      // 선택한 존의 것만
+        public readonly Dictionary<ulong, SkillUnlockRow> SkillUnlocks = new Dictionary<ulong, SkillUnlockRow>();     // (영웅 ID << 32 | 스킬 ID) -> 개방 조건
+        public uint Terrain;                                                // 지형(장애물/배경)을 가져오는 존 번호. 보통 자기 번호, 시험장(0)은 ZoneRule 의 Terrain 이나 고른 값
+        public readonly List<BlockRow> Blocks = new List<BlockRow>();      // 선택한 존(의 지형)의 것만
         public readonly List<SpawnRow> Spawns = new List<SpawnRow>();      // 선택한 존의 것만
         public readonly List<GameViewer.Core.Logic.ZoneGate> Gates = new List<GameViewer.Core.Logic.ZoneGate>();   // 선택한 존의 관문(ZoneLink 표, 선택 사항)
         public readonly Dictionary<uint, BossRow> Bosses = new Dictionary<uint, BossRow>();       // 몬스터 ID -> 보스 (Boss/BossPhase 시트. 없으면 비어 있음)
@@ -67,7 +72,10 @@ namespace GameViewer.Core.Data
         public float WorldMinX = 0, WorldMinY = 0, WorldMaxX = 1000, WorldMaxY = 1000;
 
         /// <summary>폴더의 &lt;표&gt;.json 파일들을 읽는다.</summary>
-        public static GameData Load(string dir, uint zoneId)
+        public static GameData Load(string dir, uint zoneId) { return Load(dir, zoneId, 0); }
+
+        /// <summary>terrainOverride 가 0 이 아니면 시험장(0 번 존)은 ZoneRule 대신 그 존의 지형을 쓴다(서버 없이 시험장을 고를 때).</summary>
+        public static GameData Load(string dir, uint zoneId, uint terrainOverride)
         {
             if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
             {
@@ -79,23 +87,37 @@ namespace GameViewer.Core.Data
             {
                 string path = Path.Combine(dir, table + ".json");
                 return File.Exists(path) ? File.ReadAllText(path, Encoding.UTF8) : null;
-            }, zoneId);
+            }, zoneId, terrainOverride);
         }
 
         /// <summary>
         /// 파일 시스템 없이 읽는다. readTable 은 표 이름("Hero", "Monster" ...)을 받아 그 JSON 텍스트를 돌려주고, 없으면 null 이다.
         /// Unity 에서는 Resources.Load&lt;TextAsset&gt;(name)?.text 나 어드레서블/StreamingAssets 읽기를 넘기면 된다.
         /// </summary>
-        public static GameData Load(Func<string, string> readTable, uint zoneId)
+        public static GameData Load(Func<string, string> readTable, uint zoneId, uint terrainOverride = 0)
         {
             GameData d = new GameData();
+            d.Terrain = zoneId;
+            uint allMonsters = 0, allBosses = 0;          // ZoneRule: 모든 일반 몬스터/보스를 이 마릿수씩 세운다(서버 AllSpawnLayout 과 같은 칸)
+            foreach (Dictionary<string, object> o in Rows(d, readTable, "ZoneRule", true))
+                if (U(o, "ZoneId") == zoneId)
+                {
+                    if (U(o, "Terrain") != 0) d.Terrain = U(o, "Terrain");
+                    allMonsters = U(o, "AllMonsterCount"); allBosses = U(o, "AllBossCount");
+                }
+            if (zoneId == GameViewer.Core.Logic.ZoneTheme.TestZone)
+            {
+                if (terrainOverride != 0) d.Terrain = terrainOverride;
+                else if (d.Terrain == zoneId) d.Terrain = 1;
+                GameViewer.Core.Logic.ZoneTheme.TestTerrain = d.Terrain;     // 시험장을 그리는 쪽(ZoneTheme.For)이 같은 지형을 보게 한다
+            }
 
             foreach (Dictionary<string, object> o in Rows(d, readTable, "Hero"))
             {
                 HeroRow r = new HeroRow();
                 r.Id = U(o, "Id"); r.Name = MiniJson.Str(o, "Name", "#" + r.Id);
                 r.MaxHp = (int)MiniJson.Num(o, "MaxHp", 0); r.Attack = (int)MiniJson.Num(o, "Attack", 0); r.Defense = (int)MiniJson.Num(o, "Defense", 0);
-                r.AttackRange = MiniJson.Num(o, "AttackRange", 2); r.AttackIntervalMs = U(o, "AttackIntervalMs"); r.Speed = MiniJson.Num(o, "Speed", 5);
+                r.AttackRange = MiniJson.Num(o, "AttackRange", 2); r.AttackIntervalMs = U(o, "AttackIntervalMs"); r.Speed = MiniJson.Num(o, "Speed", 5); r.MaxMp = (int)MiniJson.Num(o, "MaxMp", 0);
                 d.Heroes[r.Id] = r;
             }
             foreach (Dictionary<string, object> o in Rows(d, readTable, "Monster"))
@@ -110,6 +132,7 @@ namespace GameViewer.Core.Data
             {
                 SkillRow r = new SkillRow();
                 r.Id = U(o, "Id"); r.Name = MiniJson.Str(o, "Name", "#" + r.Id);
+                r.MpCost = U(o, "MpCost");
                 r.Shape = MiniJson.Str(o, "Shape", "Single"); r.IsArea = r.Shape == "Area";
                 r.IsAlly = MiniJson.Str(o, "Target", "Enemy") == "Ally";
                 r.Angle = MiniJson.Num(o, "Angle", 0); r.HealPercent = U(o, "HealPercent"); r.FlatHeal = (int)MiniJson.Num(o, "FlatHeal", 0);
@@ -132,10 +155,12 @@ namespace GameViewer.Core.Data
                 List<uint> list;
                 if (!d.HeroSkills.TryGetValue(hero, out list)) { list = new List<uint>(); d.HeroSkills[hero] = list; }
                 list.Add(U(o, "SkillId"));
+                SkillUnlockRow ur = new SkillUnlockRow { UnlockLevel = Math.Max(1u, U(o, "UnlockLevel")), PriceCurrencyId = U(o, "PriceCurrencyId"), Price = U(o, "Price"), Slot = U(o, "Slot") };
+                d.SkillUnlocks[((ulong)hero << 32) | list[list.Count - 1]] = ur;
             }
             foreach (Dictionary<string, object> o in Rows(d, readTable, "Block"))
             {
-                if (U(o, "ZoneId") != zoneId) continue;
+                if (U(o, "ZoneId") != d.Terrain) continue;
                 BlockRow r = new BlockRow();
                 r.IsCircle = MiniJson.Str(o, "Type", "Rect") == "Circle";
                 r.X = (float)MiniJson.Num(o, "X", 0); r.Y = (float)MiniJson.Num(o, "Y", 0);
@@ -180,6 +205,7 @@ namespace GameViewer.Core.Data
                 b.Phases.Add(p);
             }
             foreach (BossRow b in byId.Values) b.Phases.Sort(delegate (BossPhaseRow x, BossPhaseRow y) { return x.Phase.CompareTo(y.Phase); });
+            if (allMonsters != 0 || allBosses != 0) AddAllSpawns(d, allMonsters, allBosses);
             return d;
         }
 
@@ -190,6 +216,22 @@ namespace GameViewer.Core.Data
         }
 
         // 표 하나의 {"<table>":[ {...}, ... ]} 행을 돌려준다. 없거나 깨지면 경고만 남기고 빈 목록.
+        // 서버 ZoneServer/AllSpawnLayout.cs 와 같은 규칙: 보스는 첫 줄부터, 일반 몬스터는 그 다음 줄부터 ID 순으로 한 칸에 한 종류.
+        private static void AddAllSpawns(GameData d, uint monsterCount, uint bossCount)
+        {
+            const float ox = 46f, oy = 40f, step = 24f, radius = 6f; const int cols = 7;
+            List<uint> boss = new List<uint>(), regular = new List<uint>();
+            foreach (uint id in d.Monsters.Keys) (d.Bosses.ContainsKey(id) ? boss : regular).Add(id);
+            boss.Sort(); regular.Sort();
+            int bossRows = (boss.Count + cols - 1) / cols;
+            if (bossCount != 0)
+                for (int i = 0; i < boss.Count; ++i)
+                    d.Spawns.Add(new SpawnRow { MonsterId = boss[i], Count = bossCount, X = ox + step * (i % cols), Y = oy + step * (i / cols), Radius = radius });
+            if (monsterCount != 0)
+                for (int i = 0; i < regular.Count; ++i)
+                    d.Spawns.Add(new SpawnRow { MonsterId = regular[i], Count = monsterCount, X = ox + step * (i % cols), Y = oy + step * (i / cols + bossRows), Radius = radius });
+        }
+
         private static List<Dictionary<string, object>> Rows(GameData d, Func<string, string> readTable, string table, bool optional = false)
         {
             List<Dictionary<string, object>> rows = new List<Dictionary<string, object>>();
@@ -216,7 +258,7 @@ namespace GameViewer.Core.Data
 
         public string HeroName(uint id) { HeroRow r; return Heroes.TryGetValue(id, out r) ? r.Name : "#" + id; }
         public string MonsterName(uint id) { MonsterRow r; return Monsters.TryGetValue(id, out r) ? r.Name : "#" + id; }
-        public string SkillName(uint id) { SkillRow r; return Skills.TryGetValue(id, out r) ? r.Name : "#" + id; }
+        public string SkillName(uint id) { SkillRow r; return Skills.TryGetValue(id, out r) ? r.Name : (id >= GameViewer.Core.World.WorldModel.BasicAttackSkillIdBase ? "기본 공격" : "#" + id); }
         public string StatusName(uint id) { StatusRow r; return Statuses.TryGetValue(id, out r) ? r.Name : "#" + id; }
         public SkillRow Skill(uint id) { SkillRow r; return Skills.TryGetValue(id, out r) ? r : null; }
         public HeroRow Hero(uint id) { HeroRow r; return Heroes.TryGetValue(id, out r) ? r : null; }
@@ -231,6 +273,9 @@ namespace GameViewer.Core.Data
             ids.Sort();
             return ids;
         }
+
+        /// <summary>스킬의 개방 조건. 표에 없으면 처음부터 쓰는 무료 스킬로 본다.</summary>
+        public SkillUnlockRow UnlockOf(uint heroId, uint skillId) { SkillUnlockRow r; return SkillUnlocks.TryGetValue(((ulong)heroId << 32) | skillId, out r) ? r : new SkillUnlockRow(); }
 
         public List<uint> SkillsOf(uint heroId)
         {

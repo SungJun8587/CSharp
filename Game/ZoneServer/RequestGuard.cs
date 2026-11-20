@@ -14,6 +14,7 @@ public enum RequestKind : byte
     Ping,
     Chat,
     Duel,
+    SkillBook,  // 스킬 구매/장착
     Other,      // 위의 어느 것도 아닌 타입 (알 수 없는 패킷 포함)
 }
 
@@ -24,8 +25,8 @@ public enum RequestKind : byte
 /// </summary>
 public sealed class RequestLimits
 {
-    public readonly double[] Rate = { 20, 8, 8, 10, 2, 2, 2, 2 };          // RequestKind 순서: 초당 허용 요청 수
-    public readonly double[] Burst = { 40, 16, 16, 20, 6, 5, 4, 4 };       // RequestKind 순서: 한꺼번에 허용되는 최대 요청 수
+    public readonly double[] Rate = { 20, 8, 8, 10, 2, 2, 2, 4, 2 };          // RequestKind 순서: 초당 허용 요청 수
+    public readonly double[] Burst = { 40, 16, 16, 20, 6, 5, 4, 8, 4 };       // RequestKind 순서: 한꺼번에 허용되는 최대 요청 수
 
     public double ViolationLimit = 60;      // 이 점수에 이르면 추방 (0이면 추방하지 않고 버리기만 한다)
     public double DecayPerSec = 5;          // 초당 점수 감소량

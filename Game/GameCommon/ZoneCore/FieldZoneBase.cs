@@ -1,4 +1,4 @@
-﻿// FieldZoneBase.cs : implementation of the FieldZoneBase class. (스킬/상태 효과 구현은 FieldZoneSkill.cs)
+﻿﻿// FieldZoneBase.cs : implementation of the FieldZoneBase class. (스킬/상태 효과 구현은 FieldZoneSkill.cs)
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -189,6 +189,56 @@ public abstract partial class FieldZoneBase : Zone
 
     /// <summary>장애물 차단 맵. 없으면 null.</summary>
     public BlockMap? BlockMap => _fieldConfig.BlockMap;
+
+    /// <summary>
+    /// 장애물 차단 맵을 바꾼다(시험장 지형 치트용). 새 지형의 장애물 안에 놓인 엔티티는 가장 가까운 걸을 수 있는 자리로 옮기고
+    /// (플레이어는 순간이동 훅으로 위치 보정이 나간다), 몬스터의 복귀 지점도 같은 규칙으로 옮긴다. 존 스레드에서만 호출해야 한다.
+    /// 맵은 존 영역과 같은 범위로 만들어야 한다.
+    /// </summary>
+    /// <returns>옮긴 엔티티 수</returns>
+    public int ReplaceBlockMap(BlockMap? map)
+    {
+        Debug.Assert(CanTouchZoneState());
+
+        _fieldConfig.BlockMap = map;
+
+        int moved = 0;
+        foreach (ZoneEntity entity in _entities.Values)        // MoveTo 는 엔티티 테이블을 바꾸지 않으므로 순회 중에 호출해도 안전하다
+        {
+            if (entity is Monster monster && IsBlocked(monster._home) && TryFindWalkableNear(monster._home, out Vec2 home))
+                monster._home = home;
+
+            if (!IsBlocked(entity._pos))
+                continue;
+            if (TryFindWalkableNear(entity._pos, out Vec2 free) && MoveTo(entity, free, true))
+                ++moved;
+        }
+        return moved;
+    }
+
+    /// <summary>기준점에서 가까운 순서로 고리 모양을 넓혀 가며, 영역 안이고 장애물이 아닌 첫 좌표를 찾는다.</summary>
+    private bool TryFindWalkableNear(Vec2 origin, out Vec2 found)
+    {
+        float step = Math.Max(0.5f, _fieldConfig.BlockMap?.CellSize ?? 1.0f);
+        const int MaxRings = 64;
+        const int Samples = 16;
+        for (int ring = 1; ring <= MaxRings; ++ring)
+        {
+            float r = ring * step;
+            for (int i = 0; i < Samples; ++i)
+            {
+                double a = i * (2.0 * Math.PI / Samples);
+                Vec2 p = new Vec2 { X = origin.X + (float)(Math.Cos(a) * r), Y = origin.Y + (float)(Math.Sin(a) * r) };
+                if (IsWalkable(p))
+                {
+                    found = p;
+                    return true;
+                }
+            }
+        }
+        found = origin;
+        return false;
+    }
 
     /// <summary>좌표가 장애물(차단 셀) 안인지. 차단 맵이 없으면 항상 false. 영역 검사는 하지 않는다.</summary>
     public bool IsBlocked(Vec2 pos) => _fieldConfig.BlockMap != null && _fieldConfig.BlockMap.IsBlocked(pos);
@@ -1102,6 +1152,21 @@ public abstract partial class FieldZoneBase : Zone
             LogManager.Error("[FieldZoneBase] respawn timer failed; respawning immediately. zoneId={0}, entityId={1}", ZoneId, id);
             Respawn(id);
         }
+    }
+
+    /// <summary>엔티티의 전투 능력치를 존 안에서 바꾼다(레벨 업 등). fill이면 살아 있는 엔티티의 체력/MP를 가득 채운다. 바뀐 뒤 능력치 변경 훅을 부른다.
+    /// 존 스레드에서만 호출한다. 엔티티가 없으면 false.</summary>
+    public bool ChangeStats(ulong id, CombatStats stats, bool fill)
+    {
+        Debug.Assert(CanTouchZoneState());
+
+        ZoneEntity? entity = FindEntityBase(id);
+        if (entity == null)
+            return false;
+
+        entity.ReplaceStats(stats, fill);
+        HandleStatChanged(entity);
+        return true;
     }
 
     /// <summary>

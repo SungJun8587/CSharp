@@ -17,7 +17,7 @@ namespace GameViewer.App.Render
         private readonly Resources _res;
         private readonly Dictionary<string, Bitmap> _bmp = new Dictionary<string, Bitmap>();
         private List<DecorItem> _items = new List<DecorItem>();
-        private uint _zone = uint.MaxValue; private float _density = -1f;
+        private uint _zone = uint.MaxValue; private uint _terrain = uint.MaxValue; private float _density = -1f;
         private readonly PointF[] _dst = new PointF[3];
 
         public Decor(Resources res) { _res = res; }
@@ -28,8 +28,8 @@ namespace GameViewer.App.Render
         public void Prepare(GameData d, uint zone, MapKind kind, GfxQuality q)
         {
             float density = q == GfxQuality.High ? 0.30f : (q == GfxQuality.Medium ? 0.16f : 0f);
-            if (zone == _zone && density == _density) return;
-            _zone = zone; _density = density;
+            if (zone == _zone && d.Terrain == _terrain && density == _density) return;
+            _zone = zone; _terrain = d.Terrain; _density = density;
             _items = density > 0f && Directory.Exists(Dir) ? DecorRules.Generate(kind, zone, d.WorldMinX, d.WorldMinY, d.WorldMaxX, d.WorldMaxY, d.Blocks, density) : new List<DecorItem>();
         }
 

@@ -43,6 +43,27 @@ namespace GameViewer.App.Render
             }
         }
 
+        /// <summary>내 영웅 머리 위 체력바: 금빛 이중 테두리, 25% 눈금, 양끝 마름모, 체력이 낮으면 붉게 맥동하는 바깥 광채.</summary>
+        public static void HeroBar(Graphics g, Resources res, float x, float y, float w, float h, float ratio, float ghost, Color top, Color bot, long now)
+        {
+            if (ratio < 0.3f)
+            {
+                int a = 40 + (int)(80 * (0.5 + 0.5 * Math.Sin(now / 160.0)));
+                using (GraphicsPath gl = P.RoundPath(x - 4, y - 4, w + 8, h + 8, h / 2f + 4f)) g.DrawPath(res.Pen(a, 255, 60, 50, 4f), gl);
+            }
+            using (GraphicsPath fr = P.RoundPath(x - 2, y - 2, w + 4, h + 4, h / 2f + 2f))
+            {
+                using (LinearGradientBrush eb = new LinearGradientBrush(new RectangleF(x - 2, y - 2, w + 4, h + 5), Color.FromArgb(255, 248, 220, 140), Color.FromArgb(255, 120, 86, 34), LinearGradientMode.Vertical))
+                using (Pen ep = new Pen(eb, 2f))
+                    g.DrawPath(ep, fr);
+            }
+            HpBar(g, res, x, y, w, h, ratio, ghost, top, bot, true);
+            for (int k = 1; k < 4; ++k) g.DrawLine(res.Pen(80, 0, 0, 0, 1f), x + w * k / 4f, y + 1.5f, x + w * k / 4f, y + h - 1.5f);
+            float cy = y + h / 2f;
+            g.FillPolygon(res.Brush(235, 248, 220, 140), new PointF[] { new PointF(x - 9, cy), new PointF(x - 4, cy - 4), new PointF(x - 1, cy), new PointF(x - 4, cy + 4) });
+            g.FillPolygon(res.Brush(235, 248, 220, 140), new PointF[] { new PointF(x + w + 9, cy), new PointF(x + w + 4, cy - 4), new PointF(x + w + 1, cy), new PointF(x + w + 4, cy + 4) });
+        }
+
         public static void HpColors(float ratio, out Color top, out Color bot)
         {
             Color c = WorldRenderer.HpColor(ratio);

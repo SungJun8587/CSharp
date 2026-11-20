@@ -12,7 +12,8 @@ chcp 65001 >nul
 ::      --zone <id>           : 입장할 존 ID(기본 1)
 ::      --hero <id>           : 영웅 ID, 0=서버 기본 영웅(기본 1)
 ::      --data <dir>          : GameData JSON 폴더(서버의 GameDataDir 와 같은 폴더, 기본 GameData)
-::      --auto                : 접속하자마자 자동 전투
+::      --auto                : 접속하자마자 자동 전투(기본값)
+::      --no-auto             : 자동 전투 없이 시작
 ::      --skip-select         : 시작 화면의 영웅 선택을 건너뛰고 --hero 영웅으로 바로 시작
 ::      --scale <n>           : 화면 배율 px/unit(기본 24)
 ::      --width <n> --height <n> : 창 크기

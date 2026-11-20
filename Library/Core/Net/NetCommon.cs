@@ -154,3 +154,12 @@ public readonly record struct NetStatsSnapshot(
     long BytesReceived,
     long BytesSent,
     long PendingSendBytes);
+
+/// <summary>
+/// 네트워크 계층의 유휴/활동 판정용 시계. Environment.TickCount64 를 쓰므로 Windows 에서 해상도가 10~16ms 로 거칠지만,
+/// 수 초 단위 유휴 검사에는 충분하고 값싸다. 한 곳에 모아 두어 세션/서비스/대기 요청이 같은 시계를 쓰게 한다.
+/// </summary>
+internal static class NetClock
+{
+    public static long NowMs => Environment.TickCount64;
+}

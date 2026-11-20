@@ -21,7 +21,8 @@ public class JobQueue
     private volatile bool _discard;
 
     // 이 큐로 예약된(아직 만료/취소되지 않은) 지연 잡. Close 때 한꺼번에 취소해 타이머 힙이 큐를 붙잡지 않게 한다.
-    private readonly ConcurrentDictionary<ScheduledJob, byte> _scheduled = new ConcurrentDictionary<ScheduledJob, byte>();
+    // 대부분의 큐는 PushAfter 를 쓰지 않으므로(ConcurrentDictionary 는 만들 때 코어 수에 비례해 할당한다) 처음 예약할 때 만든다.
+    private ConcurrentDictionary<ScheduledJob, byte>? _scheduled;
 
     /// <param name="maxJobsPerRun">ThreadPool 작업 하나가 연속으로 실행할 최대 잡 수. 넘으면 다시 스케줄해 다른 큐에 양보한다.</param>
     public JobQueue(int maxJobsPerRun = 256)
@@ -82,20 +83,28 @@ public class JobQueue
 
         _closed = true;
 
-        foreach (var pair in _scheduled)
-            pair.Key.Cancel();
+        ConcurrentDictionary<ScheduledJob, byte>? scheduled = Volatile.Read(ref _scheduled);
+        if (scheduled != null)
+            foreach (var pair in scheduled)
+                pair.Key.Cancel();
     }
 
     internal void Track(ScheduledJob job)
     {
-        _scheduled.TryAdd(job, 0);
+        ConcurrentDictionary<ScheduledJob, byte>? scheduled = Volatile.Read(ref _scheduled);
+        if (scheduled == null)
+        {
+            var created = new ConcurrentDictionary<ScheduledJob, byte>();
+            scheduled = Interlocked.CompareExchange(ref _scheduled, created, null) ?? created;
+        }
+        scheduled.TryAdd(job, 0);
 
         // Close 와 경합해 Close 의 열거에서 빠졌을 수 있으므로 직접 취소한다.
         if (_closed)
             job.Cancel();
     }
 
-    internal void Untrack(ScheduledJob job) => _scheduled.TryRemove(job, out _);
+    internal void Untrack(ScheduledJob job) => Volatile.Read(ref _scheduled)?.TryRemove(job, out _);
 
     /// <summary>잡에서 예외가 발생했을 때 호출된다. 기본 구현은 Trace 로 기록하며, 이후 잡은 계속 실행된다.</summary>
     protected virtual void OnException(Exception exception)
@@ -157,7 +166,7 @@ public sealed class ScheduledJob
     private const int StateDispatched = 2;  // 만료되어 큐/ThreadPool 로 넘어감
     private const int StateCanceledLate = 3;// 넘어간 뒤 취소됨(실행 직전에 걸러짐)
 
-    private readonly Action _job;
+    private Action? _job;                  // 힙에서 취소되면 비운다(타이머 힙이 취소된 잡이 캡처한 객체를 만료 시각까지 붙잡지 않게)
     private readonly JobTimer? _timer;
     private int _state;
 
@@ -206,6 +215,7 @@ public sealed class ScheduledJob
             {
                 if (Interlocked.CompareExchange(ref _state, StateCanceled, StatePending) == StatePending)
                 {
+                    _job = null;            // 힙에 있던 잡은 실행되지 않으므로 안전하다(디스패치된 뒤의 늦은 취소는 비우지 않는다)
                     Queue?.Untrack(this);
                     _timer?.OnJobCanceled();
                     return;
@@ -238,7 +248,7 @@ public sealed class ScheduledJob
     private void Run()
     {
         if (!IsCanceled)
-            _job();
+            _job?.Invoke();
     }
 }
 

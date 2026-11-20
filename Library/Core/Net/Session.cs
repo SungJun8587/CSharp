@@ -15,7 +15,7 @@ namespace Core.Net;
 /// 0 이 되고 연결이 끊긴 상태일 때 정확히 한 번 OnDisconnected 가 호출된다.
 /// 콜백(OnConnected/OnRecv/OnSend/OnDisconnected)은 I/O 완료 스레드에서 직접 실행되므로 오래 블로킹하면 안 된다.
 /// </summary>
-public abstract class Session
+public abstract class Session : INetSession
 {
     private enum SendResult
     {
@@ -53,6 +53,7 @@ public abstract class Session
     // 정상 종료 대기(DisconnectAfterSend)
     private volatile bool _gracefulClosing;
     private int _gracefulTimeoutMs;
+    private ScheduledJob? _gracefulTimer;       // 정상 종료 대기 타이머. 세션이 먼저 끝나면 취소해 JobTimer 가 세션을 붙잡지 않게 한다
 
     // 수신 상태(수신은 한 번에 하나만 진행되므로 락 불필요)
     private bool _zeroByteRecv;
@@ -60,15 +61,10 @@ public abstract class Session
     private bool _zeroByteDone;
 
     // 송신 상태
-    private readonly object _sendLock = new object();
-    private readonly Queue<SendBuffer> _sendQueue = new Queue<SendBuffer>();
-    private bool _sendRegistered;
-    private bool _closeAfterSend;
+    private readonly SendQueue _send = new SendQueue();     // 대기 큐, 송신 소유권, 종료 예약, 대기 바이트(TLS 세션과 공유하는 구현)
     private CloseReason _afterSendReason;
-    private long _pendingSendBytes;
-    private long _maxSendQueueBytes;
 
-    // 현재 전송 중인 배치. 한 시점에 한 스레드만 접근한다(_sendRegistered 로 소유권 이전).
+    // 현재 전송 중인 배치. 한 시점에 한 스레드만 접근한다(송신 소유권으로 이전).
     private readonly List<SendBuffer> _sending = new List<SendBuffer>();
     private readonly List<ArraySegment<byte>> _segments = new List<ArraySegment<byte>>();
     private bool _sendUsesBufferList;
@@ -93,7 +89,7 @@ public abstract class Session
     public bool IsConnected => Volatile.Read(ref _connected) == 1;
 
     /// <summary>송신 대기(큐 + 전송 중) 중인 바이트 수.</summary>
-    public long PendingSendBytes => Interlocked.Read(ref _pendingSendBytes);
+    public long PendingSendBytes => _send.PendingBytes;
 
     internal Socket? Socket => _socket;
 
@@ -146,38 +142,49 @@ public abstract class Session
     /// <returns>연결이 끊겼거나, 비어 있는 버퍼이거나, 종료 예약(DisconnectAfterSend)된 세션이면 false.</returns>
     public bool Send(SendBuffer buffer)
     {
-        if (buffer == null || buffer.WriteSize == 0 || !IsConnected)
+        if (!EnqueueSend(buffer, out bool needRegister))
             return false;
-
-        int size = buffer.WriteSize;
-        long queued = Interlocked.Add(ref _pendingSendBytes, size);
-
-        if (_maxSendQueueBytes > 0 && queued > _maxSendQueueBytes)
-        {
-            Interlocked.Add(ref _pendingSendBytes, -size);
-            Disconnect(CloseReason.SendQueueOverflow);
-            return false;
-        }
-
-        bool needRegister;
-        lock (_sendLock)
-        {
-            if (_closeAfterSend)
-            {
-                Interlocked.Add(ref _pendingSendBytes, -size);
-                return false;
-            }
-
-            _sendQueue.Enqueue(buffer);
-            needRegister = !_sendRegistered;
-            if (needRegister)
-                _sendRegistered = true;
-        }
 
         if (needRegister)
             RegisterSend();
 
         return true;
+    }
+
+    /// <summary>
+    /// 송신 큐에 넣기만 한다(소켓 호출 없음). needRegister 가 true 이면 호출자가 이어서 <see cref="StartSend"/>를 불러야 한다
+    /// (송신 소유권을 이 호출이 가져왔다). 여러 세션에 보내는 쪽이 syscall 을 다른 스레드로 나누려고 쓴다.
+    /// </summary>
+    internal bool EnqueueSend(SendBuffer buffer, out bool needRegister)
+    {
+        needRegister = false;
+        if (buffer == null || buffer.WriteSize == 0 || !IsConnected)
+            return false;
+
+        switch (_send.Enqueue(buffer, out needRegister))
+        {
+            case SendQueue.EnqueueResult.Queued:
+                return true;
+            case SendQueue.EnqueueResult.Overflow:
+                Disconnect(CloseReason.SendQueueOverflow);
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>EnqueueSend 가 needRegister 를 돌려줬을 때 이어서 호출한다. 예외는 세션 오류로 처리해 연결을 끊는다(I/O 스레드가 아닌 곳에서 불리므로).</summary>
+    internal void StartSend()
+    {
+        try
+        {
+            RegisterSend();
+        }
+        catch (Exception e)
+        {
+            SafeOnException(e);
+            Disconnect(CloseReason.SendError);
+        }
     }
 
     /// <summary>data 를 복사해 송신 큐에 넣는다.</summary>
@@ -219,16 +226,9 @@ public abstract class Session
         if (!IsConnected)
             return;
 
-        bool closeNow;
-        lock (_sendLock)
-        {
-            if (_closeAfterSend)
-                return;
-
-            _closeAfterSend = true;
-            _afterSendReason = reason;
-            closeNow = !_sendRegistered && _sendQueue.Count == 0;
-        }
+        _afterSendReason = reason;
+        if (!_send.TryBeginCloseAfterSend(out bool closeNow))
+            return;
 
         if (closeNow)
             BeginGracefulClose(reason);
@@ -310,7 +310,7 @@ public abstract class Session
         _service = service;
         _socket = socket;
         SessionId = sessionId;
-        _maxSendQueueBytes = service.Options.MaxSendQueueBytes;
+        _send.Init(service.Options.MaxSendQueueBytes);
         _zeroByteRecv = service.Options.ZeroByteRecv;
         _gracefulTimeoutMs = service.Options.GracefulCloseTimeoutMs;
         _idleIncludesSend = service.Options.IdleIncludesSend;
@@ -323,7 +323,7 @@ public abstract class Session
         catch (SocketException) { }
         catch (ObjectDisposedException) { }
 
-        long now = Environment.TickCount64;
+        long now = NetClock.NowMs;
         Volatile.Write(ref _lastActivityTick, now);
         Volatile.Write(ref _lastProgressTick, now);
 
@@ -384,7 +384,9 @@ public abstract class Session
             return;
         }
 
-        Task.Delay(_gracefulTimeoutMs).ContinueWith(_ => Disconnect(reason), TaskScheduler.Default);
+        Volatile.Write(ref _gracefulTimer, JobTimer.Shared.Reserve(_gracefulTimeoutMs, () => Disconnect(reason)));
+        if (Volatile.Read(ref _finalized) != 0)
+            Volatile.Read(ref _gracefulTimer)?.Cancel();        // 예약하는 사이 세션이 끝났다
     }
 
     //****************************************************************
@@ -459,7 +461,7 @@ public abstract class Session
         }
 
         // 데이터 도착(또는 FIN)이 확인된 시점을 유휴 기준으로 기록한다.
-        long now = Environment.TickCount64;
+        long now = NetClock.NowMs;
         Volatile.Write(ref _lastActivityTick, now);
 
         if (_recvIsZeroByte)
@@ -560,33 +562,13 @@ public abstract class Session
     /// </summary>
     private bool BuildBatch()
     {
-        bool closeNow = false;
+        _sending.Clear();
+        _sendIndex = 0;
+        _sendOffset = 0;
 
-        lock (_sendLock)
-        {
-            if (_sendQueue.Count == 0)
-            {
-                _sendRegistered = false;
-                closeNow = _closeAfterSend;
-            }
-            else
-            {
-                _sending.Clear();
-                _sendIndex = 0;
-                _sendOffset = 0;
-                _sendBatchBytes = 0;
-
-                int count = Math.Min(NetConstants.MaxSendBatch, _sendQueue.Count);
-                for (int i = 0; i < count; i++)
-                {
-                    SendBuffer buffer = _sendQueue.Dequeue();
-                    _sending.Add(buffer);
-                    _sendBatchBytes += buffer.WriteSize;
-                }
-
-                return true;
-            }
-        }
+        int count = _send.DequeueBatch(_sending, NetConstants.MaxSendBatch, int.MaxValue, out _sendBatchBytes, out bool closeNow);
+        if (count > 0)
+            return true;
 
         if (closeNow)
             BeginGracefulClose(_afterSendReason);
@@ -694,7 +676,7 @@ public abstract class Session
         Interlocked.Add(ref _bytesSent, numOfBytes);
 
         if (_idleIncludesSend)
-            Volatile.Write(ref _lastActivityTick, Environment.TickCount64);
+            Volatile.Write(ref _lastActivityTick, NetClock.NowMs);
 
         // 전송된 바이트만큼 배치 커서를 전진시킨다.
         int remain = numOfBytes;
@@ -722,7 +704,7 @@ public abstract class Session
 
         int total = _sendBatchBytes;
         _sending.Clear();
-        Interlocked.Add(ref _pendingSendBytes, -total);
+        _send.Complete(total);
 
         try { OnSend(total); }
         catch (Exception e) { SafeOnException(e); }
@@ -814,11 +796,10 @@ public abstract class Session
         if (Interlocked.Exchange(ref _finalized, 1) != 0)
             return;
 
-        lock (_sendLock)
-        {
-            _sendQueue.Clear();
-            _sending.Clear();
-        }
+        _send.Close();
+        _sending.Clear();
+
+        Volatile.Read(ref _gracefulTimer)?.Cancel();
 
         CloseReason closeReason = (CloseReason)Volatile.Read(ref _closeReason);
         LogClosed(closeReason);
@@ -837,4 +818,9 @@ public abstract class Session
         _service?.OnSessionClosed(Interlocked.Read(ref _bytesReceived), Interlocked.Read(ref _bytesSent));
         _service?.RemoveSession(this);
     }
+
+    // SessionTable 이 쓰는 내부 표면(공개 API 를 늘리지 않으려고 명시적으로 구현한다).
+    void INetSession.CheckIdle(long nowTick, int timeoutMs) => CheckIdle(nowTick, timeoutMs);
+    bool INetSession.EnqueueSend(SendBuffer buffer, out bool needStart) => EnqueueSend(buffer, out needStart);
+    void INetSession.StartSend() => StartSend();
 }

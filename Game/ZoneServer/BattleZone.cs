@@ -24,6 +24,9 @@ public sealed partial class BattleZone : FieldZone<ZoneEntity>
     private readonly MonsterSystem _monsters;
     private readonly BossSystem? _bosses;
     private readonly DropSystem _drops;
+    private readonly LevelData _levels;
+    private readonly CurrencyData _currencies;
+    private readonly Random _rewardRng;
     private readonly Dictionary<ulong, ZonePlayer> _sessionToPlayer = new Dictionary<ulong, ZonePlayer>();
     private readonly List<ulong> _recipients = new List<ulong>(256);     // 브로드캐스트 수신자 세션 ID 모음 (재사용으로 힙 할당 방지)
     private readonly Action<ZoneEntity> _addRecipientFn;
@@ -49,9 +52,12 @@ public sealed partial class BattleZone : FieldZone<ZoneEntity>
     }
 
     public BattleZone(FieldZoneConfig config, IZoneLink link, Vec2 spawnPos, HeroData? heroData, MonsterData? monsterData,
-        MonsterSystemConfig monsterConfig, BossData? bossData = null, DropData? dropData = null)
+        MonsterSystemConfig monsterConfig, BossData? bossData = null, DropData? dropData = null, LevelData? levelData = null, CurrencyData? currencyData = null)
         : base(config)
     {
+        _currencies = currencyData ?? new CurrencyData();
+        _rewardRng = new Random();
+        _levels = levelData ?? new LevelData();
         _link = link;
         _spawnPos = spawnPos;
         _heroes = heroData ?? HeroData.MakeDefault();
@@ -107,7 +113,7 @@ public sealed partial class BattleZone : FieldZone<ZoneEntity>
     /// <summary>관문으로 들어온 도착 지점이 유효한지(이 존, 영역 안, 장애물 위가 아님)를 보고 시작 위치를 정한다.</summary>
     private Vec2 ResolveStartPos(PlayerState? restore)
     {
-        if (restore == null || restore.ArrivalZone != ZoneId)
+        if (restore == null || restore.ArrivalZone != ZoneId + 1u)
             return _spawnPos;
         float x = Math.Clamp(restore.ArrivalX, _minX + 1.0f, _maxX - 1.0f);
         float y = Math.Clamp(restore.ArrivalY, _minY + 1.0f, _maxY - 1.0f);
@@ -265,14 +271,30 @@ public sealed partial class BattleZone : FieldZone<ZoneEntity>
         player.SetSpawnPos(_spawnPos);              // 죽으면 존의 기본 리스폰 위치에서 부활한다
         player.SetStartPos(startPos);
         player.SetSpeed(hero.Speed);
-        player.SetCombatStats(hero.Stats);
+        uint level = 1;
+        uint exp = 0;
+        if (restore != null && restore.Level != 0)
+        {
+            level = _levels.ClampLevel(restore.Level);
+            exp = level >= _levels.MaxLevel ? 0 : Math.Min(restore.Exp, _levels.ExpToNext(level) - 1);       // 표가 바뀌어 넘치는 값은 보정한다
+        }
+        player.Level = level;
+        player.Exp = exp;
+        player.SetCombatStats(_levels.Scale(hero.Stats, level));
         if (restore != null)
         {
             if (restore.HasVitals && restore.HeroId == hero.Id)
                 player.RestoreVitals(restore.Hp, restore.Mp);       // 다른 영웅으로 바꿔 들어오면 체력 비율이 의미가 없으니 가득 채운 채 시작한다
+            foreach (KeyValuePair<uint, uint> w in restore.Wallet)
+            {
+                uint max = _currencies.MaxOf(w.Key);       // 표에서 사라진 재화는 버리고, 상한이 줄었으면 상한으로 보정한다
+                if (max != 0)
+                    player.Wallet[w.Key] = Math.Min(w.Value, max);
+            }
             foreach (KeyValuePair<uint, uint> it in restore.Items)
                 player.Inventory.TryAdd(it.Key, it.Value, out _);
         }
+        RestoreSkills(player, hero, restore);
 
         if (AddEntity(player) == null)
         {
@@ -285,7 +307,12 @@ public sealed partial class BattleZone : FieldZone<ZoneEntity>
         _sessionToPlayer.Add(clientSessionId, player);
         Interlocked.Increment(ref _playerCount);
         SendStat(player);
+        SendExp(player, 0, false);
+        SendSkillBook(player);
+        foreach (uint cid in _currencies.CurrencyIds)
+            SendCurrency(player, cid, 0);
         SendDuel(player, DuelState.ZoneRules, 0, 0, RuleFlags);     // 이 존의 PvP/결투 규칙을 알린다(화면 표시용)
+        SendTerrainIfChanged(player);
     }
 
     private void SendEnterRes(ZoneEnterRes res, ZoneEnterResult result)
@@ -318,7 +345,19 @@ public sealed partial class BattleZone : FieldZone<ZoneEntity>
     /// <summary>플레이어의 체력/MP/가방과, 관문 안쪽에서 떠나는 경우의 도착 지점을 담는다. 죽어 있으면 체력은 가져가지 않는다(부활/입장 때 가득 채움).</summary>
     private PlayerState SnapshotOf(ZonePlayer player)
     {
-        PlayerState st = new PlayerState { CharId = player.Id, HeroId = player.HeroId, HasVitals = player.IsAlive, Hp = player.Hp, Mp = player.Mp };
+        PlayerState st = new PlayerState { CharId = player.Id, HeroId = player.HeroId, HasVitals = player.IsAlive, Hp = player.Hp, Mp = player.Mp, Level = player.Level, Exp = player.Exp };
+        foreach (KeyValuePair<uint, uint> w in player.Wallet)
+        {
+            if (st.Wallet.Count >= PlayerState.MaxCurrencies)
+                break;
+            st.Wallet.Add(w);
+        }
+        foreach (KeyValuePair<uint, byte> sk in player.Skills)
+        {
+            if (st.Skills.Count >= PlayerState.MaxSkills)
+                break;
+            st.Skills.Add(sk);
+        }
         foreach (KeyValuePair<uint, uint> it in player.Inventory.ToList())
         {
             if (st.Items.Count >= PlayerState.MaxItems)
@@ -330,7 +369,7 @@ public sealed partial class BattleZone : FieldZone<ZoneEntity>
             ZoneGateLink? g = ZoneLinkTable.Find(_gates, player.Pos, _minX, _minY, _maxX, _maxY, GateReach);
             if (g != null)
             {
-                st.ArrivalZone = g.TargetZone;
+                st.ArrivalZone = g.TargetZone + 1u;
                 st.ArrivalX = g.TargetX;
                 st.ArrivalY = g.TargetY;
             }
@@ -428,6 +467,15 @@ public sealed partial class BattleZone : FieldZone<ZoneEntity>
                 case ZonePacketType.ZcChatReq:
                     HandleChat(player, packet);
                     break;
+                case (ZonePacketType)SkillBookPacketType.BuyReq:
+                    HandleSkillBuy(player, packet);
+                    break;
+                case (ZonePacketType)SkillBookPacketType.EquipReq:
+                    HandleSkillEquip(player, packet);
+                    break;
+                case (ZonePacketType)TerrainPacketType.Req:
+                    HandleTerrainReq(player, packet);
+                    break;
                 case (ZonePacketType)DuelPacketType.Req:
                     HandleDuel(player, packet);
                     break;
@@ -464,6 +512,7 @@ public sealed partial class BattleZone : FieldZone<ZoneEntity>
         ZonePacketType.ZcPingReq => RequestKind.Ping,
         ZonePacketType.ZcChatReq => RequestKind.Chat,
         (ZonePacketType)DuelPacketType.Req => RequestKind.Duel,
+        (ZonePacketType)SkillBookPacketType.BuyReq or (ZonePacketType)SkillBookPacketType.EquipReq => RequestKind.SkillBook,
         _ => RequestKind.Other,
     };
 
@@ -589,7 +638,7 @@ public sealed partial class BattleZone : FieldZone<ZoneEntity>
 
         HeroTemplate? hero = _heroes.Resolve(player.HeroId);
         SkillTemplate? skill = hero != null ? _heroes.FindHeroSkill(hero, req.SkillId) : null;
-        if (skill == null)
+        if (skill == null || !IsEquipped(player, skill.Id))
         {
             SendSkillReject(player, req.SkillId, SkillRejectReason.UnknownSkill);
             return;
@@ -651,6 +700,86 @@ public sealed partial class BattleZone : FieldZone<ZoneEntity>
 
         ZcStatNotify n = new ZcStatNotify { Hp = player.Hp, MaxHp = player.CombatStats.MaxHp, Mp = player.Mp, MaxMp = player.MaxMp };
         SendPacket(player, n);
+    }
+
+    /// <summary>본인에게 재화 한 종류의 보유량을 보낸다.</summary>
+    private void SendCurrency(ZonePlayer player, uint currencyId, uint gained)
+    {
+        player.Wallet.TryGetValue(currencyId, out uint amount);
+        SendPacket(player, new ZcCurrencyNotify { CurrencyId = currencyId, Amount = amount, Gained = gained });
+    }
+
+    /// <summary>몬스터 처치 보상 재화를 준다. 줄마다 확률을 굴리고 수량은 범위에서 고른다. 보유 상한을 넘는 만큼은 버린다. 존 스레드에서만 부른다.</summary>
+    private void GrantCurrency(ZonePlayer player, uint monsterId)
+    {
+        foreach (CurrencyData.Reward r in _currencies.RewardsOf(monsterId))
+        {
+            if (r.ChancePermille < 1000 && _rewardRng.Next(1000) >= r.ChancePermille)
+                continue;
+
+            uint amount = (uint)_rewardRng.NextInt64(r.MinAmount, (long)r.MaxAmount + 1);
+            player.Wallet.TryGetValue(r.CurrencyId, out uint have);
+            uint after = (uint)Math.Min((ulong)have + amount, _currencies.MaxOf(r.CurrencyId));
+            if (after == have)
+                continue;
+            player.Wallet[r.CurrencyId] = after;
+            SendCurrency(player, r.CurrencyId, after - have);
+        }
+    }
+
+    /// <summary>본인에게 레벨/경험치 현황을 보낸다. 레벨 표가 없으면 보내지 않는다.</summary>
+    private void SendExp(ZonePlayer player, uint gained, bool levelUp)
+    {
+        if (_levels.MaxLevel == 0)
+            return;
+
+        bool max = player.Level >= _levels.MaxLevel;
+        ZcExpNotify n = new ZcExpNotify
+        {
+            Level = (ushort)player.Level,
+            Flags = (byte)((levelUp ? ZcExpNotify.FlagLevelUp : 0) | (max ? ZcExpNotify.FlagMaxLevel : 0)),
+            Exp = player.Exp,
+            ExpToNext = _levels.ExpToNext(player.Level),
+            Gained = gained,
+        };
+        SendPacket(player, n);
+    }
+
+    /// <summary>
+    /// 경험치를 준다. 필요량을 채우면 레벨이 오르고(여러 번 가능), 오를 때마다 능력치를 레벨 배율로 다시 계산해 체력/MP를 가득 채운다.
+    /// 최대 레벨이면 경험치는 쌓지 않는다. 존 스레드에서만 부른다.
+    /// </summary>
+    private void GrantExp(ZonePlayer player, uint amount)
+    {
+        if (_levels.MaxLevel == 0 || amount == 0 || player.Level >= _levels.MaxLevel)
+            return;
+
+        ulong exp = (ulong)player.Exp + amount;
+        uint level = player.Level;
+        while (level < _levels.MaxLevel && exp >= _levels.ExpToNext(level))
+        {
+            exp -= _levels.ExpToNext(level);
+            ++level;
+        }
+        bool up = level != player.Level;
+        player.Level = level;
+        player.Exp = level >= _levels.MaxLevel ? 0 : (uint)exp;
+
+        if (up)
+        {
+            HeroTemplate? hero = _heroes.Resolve(player.HeroId);
+            if (hero != null && ChangeStats(player.Id, _levels.Scale(hero.Stats, level), true))
+            {
+                ZcHealNotify h = new ZcHealNotify { EntityId = player.Id, Amount = 0, Hp = player.Hp, MaxHp = player.CombatStats.MaxHp };
+                BroadcastPacket(player, h);         // 주변 플레이어의 체력 막대가 새 최대 체력을 쓰도록 알린다
+            }
+            if (hero != null && GrantFreeSkills(player, hero))
+            {
+                SendSkillBook(player);              // 레벨이 되어 새로 개방된 무료 스킬
+                SaveNow(player);
+            }
+        }
+        SendExp(player, amount, up);
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -770,6 +899,11 @@ public sealed partial class BattleZone : FieldZone<ZoneEntity>
         DuelOnDied(victim);
         if (victim is Monster dead && _monsters.IsAiMonster(victim))
             _drops.OnMonsterDied(dead, killer);
+        if (victim is Monster slain && !slain.IsSummoned && killer is ZonePlayer killerPlayer)
+        {
+            GrantExp(killerPlayer, _levels.ExpOf(slain.Template.Id));
+            GrantCurrency(killerPlayer, slain.Template.Id);
+        }
         _monsters.OnDied(victim);
     }
 

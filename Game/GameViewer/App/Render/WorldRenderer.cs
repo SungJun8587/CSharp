@@ -220,9 +220,22 @@ namespace GameViewer.App.Render
 
             if (e.Dead)
             {
-                g.FillEllipse(_res.Brush(60, 0, 0, 0), sx - rx * 0.8f, sy - rx * 0.17f, rx * 1.6f, rx * 0.4f);
-                _creatures.Draw(g, e, v, now, sx, sy, false);
-                if (selected) DrawSelectionRing(g, sx, sy, rx, now);
+                // 몬스터 시체: 죽는 순간 한 번 튀고 맞은 방향으로 미끄러진 뒤, 잠시 누워 있다가 흐려지며 사라진다.
+                float fade = 1f, dx = 0f, dy = 0f;
+                if (e.IsMonster && e.DeadAtMs > 0)
+                {
+                    long age = now - e.DeadAtMs;
+                    fade = AttackPose.DeathAlpha(e, age);
+                    if (fade <= 0f) return;
+                    if (age >= 0 && age < 320) dy -= v.Px(0.34f * (float)Math.Sin(Math.PI * age / 320.0));
+                    float slide = AttackPose.DeathSlide(e, age);
+                    dx = v.Px(e.HitDirX * slide); dy += v.Px(e.HitDirY * slide) * 0.6f;
+                }
+                g.FillEllipse(_res.Brush((int)(60 * fade), 0, 0, 0), sx - rx * 0.8f + dx, sy - rx * 0.17f, rx * 1.6f, rx * 0.4f);
+                _creatures.Alpha = fade;
+                _creatures.Draw(g, e, v, now, sx + dx, sy + dy, false);
+                _creatures.Alpha = 1f;
+                if (selected && fade > 0.3f) DrawSelectionRing(g, sx, sy, rx, now);
                 return;
             }
 
@@ -245,15 +258,6 @@ namespace GameViewer.App.Render
             if (self) g.DrawEllipse(_res.Pen(220, 255, 230, 90, 2f), sx - pr * 1.25f, sy - pr * 0.48f, pr * 2.5f, pr * 1.0f);
 
             bool hurt = now - e.HitFlashMs < AttackPose.FlashMs(e);
-            // 몬스터가 죽는 순간 한 번 튀어 오르고(통통), 시체는 오래 두지 않고 서서히 사라진다.
-            if (e.Dead && e.IsMonster && e.DeadAtMs > 0)
-            {
-                long age = now - e.DeadAtMs;
-                if (age >= 0 && age < 320) by -= v.Px(0.34f * (float)Math.Sin(Math.PI * age / 320.0));
-                float slide = AttackPose.DeathSlide(e, age);                  // 맞은 방향으로 미끄러진다
-                bx += v.Px(e.HitDirX * slide); by += v.Px(e.HitDirY * slide) * 0.6f;
-                _creatures.Alpha = age > 1500 ? Math.Max(0.05f, 1f - (age - 1500) / 1000f) : 1f;
-            }
             float swipe = AttackPose.SwipeProgress(e, now);
             if (swipe >= 0f && !MonsterFx.Has(e)) DrawSwipe(g, e, v, look, sx, sy, swipe, true);
             _monFx.Draw(g, e, v, look, bx, by, now, false);
@@ -639,7 +643,7 @@ namespace GameViewer.App.Render
                 float sx = v.ToScreenX(x), sy = v.ToScreenY(y) - v.Px(look.H + 0.35f);
                 if (sx < -100 || sy < -60 || sx > v.Width + 100 || sy > v.Height + 200) continue;
                 bool self0 = e.Id == w.SelfId, selected0 = e.Id == v.SelectedId;
-                if (e.Dead && now - e.DeadAtMs > 2500 && !selected0) continue;
+                if (e.Dead && (e.IsMonster ? now - e.DeadAtMs > AttackPose.DeathGoneMs(e) : now - e.DeadAtMs > 2500) && !selected0) continue;
 
                 float bw = e.IsBoss ? Math.Max(80f, v.Px(5f)) : Math.Max(34f, v.Px(2.6f));
                 Plate pt = new Plate();
@@ -666,7 +670,7 @@ namespace GameViewer.App.Render
                 if (selected) nameColor = Color.White;
                 if (e.Dead) nameColor = Color.FromArgb(160, 170, 170, 170);
 
-                float barW = e.IsBoss ? Math.Max(80f, v.Px(5f)) : Math.Max(34f, v.Px(2.6f)), barH = e.IsBoss ? 8f : 7f;
+                float barW = e.IsBoss ? Math.Max(80f, v.Px(5f)) : (self ? Math.Max(64f, v.Px(3.6f)) : Math.Max(34f, v.Px(2.6f))), barH = e.IsBoss ? 8f : (self ? 12f : 7f);
                 _res.OutlinedText(g, name, e.IsBoss ? _res.Bold : _res.Small, nameColor, sx, sy - 12, _res.Center);
 
                 if (e.MaxHp > 0 && !e.Dead && !e.IsBoss && !e.IsItem)       // 보스는 화면 위쪽의 큰 체력바가 대신한다
@@ -678,14 +682,35 @@ namespace GameViewer.App.Render
                     if (selected)
                         using (GraphicsPath sel = P.RoundPath(sx - barW / 2 - 3, sy - 4, barW + 6, barH + 6, 6))
                             g.DrawPath(_res.Pen(210, 255, 232, 130, 2f), sel);
-                    Ui.HpBar(g, _res, sx - barW / 2, sy - 1, barW, barH, ratio, ghost, ptop, pbot, true);
-                    if (selected || self)
-                        _res.OutlinedText(g, e.Hp + "/" + e.MaxHp, _res.Small, Color.White, sx, sy + barH + 4, _res.Center);
+                    if (self)
+                    {
+                        Ui.HeroBar(g, _res, sx - barW / 2, sy - 1, barW, barH, ratio, ghost, ptop, pbot, now);
+                        _res.OutlinedText(g, e.Hp + " / " + e.MaxHp, _res.Small, Color.White, sx, sy - 1 + barH / 2f - 7f, _res.Center);     // 숫자는 막대 안 가운데
+                    }
+                    else
+                    {
+                        Ui.HpBar(g, _res, sx - barW / 2, sy - 1, barW, barH, ratio, ghost, ptop, pbot, true);
+                        if (selected) _res.OutlinedText(g, e.Hp + "/" + e.MaxHp, _res.Small, Color.White, sx, sy + barH + 4, _res.Center);
+                    }
                 }
 
-                float iconY = sy + (e.IsBoss ? 4 : (selected || self ? barH + 20 : barH + 2));
+                float iconY = sy + (e.IsBoss ? 4 : (selected ? barH + 20 : (self ? barH + 6 : barH + 2)));
 
-                if (e.Casting && e.CastTimeMs > 0 && !e.Dead)
+                if (e.Casting && e.CastTimeMs > 0 && !e.Dead && e.CastSkillId >= WorldModel.BasicAttackSkillIdBase)
+                {
+                    // 기본 공격 준비: 머리 위에 점점 커지고 붉어지는 느낌표. 보스는 더 크다. 이 사이 사거리 밖으로 피하면 빗나간다.
+                    float wp = Math.Max(0f, Math.Min(1f, (now - e.CastStartMs) / (float)e.CastTimeMs));
+                    float k = e.IsBoss ? 1.5f : 1f;
+                    int a = 140 + (int)(115 * wp);
+                    Color wc = Color.FromArgb(Math.Min(255, a), 255, (int)(210 - 150 * wp), (int)(80 - 40 * wp));
+                    GraphicsState ws = g.Save();
+                    g.TranslateTransform(sx, iconY + 4f);
+                    g.ScaleTransform(k * (0.8f + 0.5f * wp), k * (0.8f + 0.5f * wp));
+                    _res.OutlinedText(g, "!", _res.Big, wc, 0f, 0f, _res.Center);
+                    g.Restore(ws);
+                    iconY += 20f * k;
+                }
+                else if (e.Casting && e.CastTimeMs > 0 && !e.Dead)
                 {
                     float p = Math.Max(0f, Math.Min(1f, (now - e.CastStartMs) / (float)e.CastTimeMs));
                     g.FillRectangle(_res.Brush(200, 20, 20, 20), sx - barW / 2 - 1, iconY - 1, barW + 2, 8);

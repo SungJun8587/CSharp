@@ -5,10 +5,13 @@ namespace Core.Redis;
 
 /// <summary>
 /// Redis 응답 하나를 표현하는 재귀적 값. SimpleString, Error, Integer, BulkString, Array를 모두 수용한다.
-/// 문자열은 UTF-8로 해석한다(바이너리 안전하지 않음 — Redis에 저장하는 값이 UTF-8 텍스트라는 전제).
+/// <see cref="StrVal"/>은 UTF-8로 해석한 문자열이고, 바이너리(UTF-8이 아닌 바이트)가 들어 있을 수 있는 값은 <see cref="BytesVal"/>로 읽는다 —
+/// 원본 바이트가 손상 없이 보존된다.
 /// </summary>
 public sealed class RedisValue
 {
+    private byte[]? _rawBytes;      // UTF-8로 해석되지 않는 바이트가 있을 때만 원본을 따로 쥔다(텍스트는 StrVal 에서 다시 만들 수 있다)
+
     /// <summary>RESP 타입.</summary>
     public RedisType Type { get; set; } = RedisType.Unknown;
 
@@ -17,6 +20,23 @@ public sealed class RedisValue
 
     /// <summary>문자열 데이터(SimpleString, Error, BulkString).</summary>
     public string StrVal { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 문자열 데이터의 원본 바이트(SimpleString, Error, BulkString). UTF-8이 아닌 바이너리도 그대로 돌려준다.
+    /// 텍스트 값은 <see cref="StrVal"/>을 UTF-8로 다시 인코딩한 것과 같다. 호출마다 새 배열이다(바이너리 값은 보관된 원본의 복사본).
+    /// </summary>
+    public byte[] BytesVal
+    {
+        get
+        {
+            if (_rawBytes != null)
+                return (byte[])_rawBytes.Clone();
+            return StrVal.Length == 0 ? Array.Empty<byte>() : System.Text.Encoding.UTF8.GetBytes(StrVal);
+        }
+    }
+
+    /// <summary>파서가 UTF-8로 해석할 수 없는 바이트를 발견했을 때 원본을 보존한다.</summary>
+    internal void SetRawBytes(byte[] raw) => _rawBytes = raw;
 
     /// <summary>Array일 때의 하위 요소 목록. 배열이 아니면 빈 배열.</summary>
     public RedisValue[] ArrayVal { get; set; } = Array.Empty<RedisValue>();
@@ -43,6 +63,9 @@ public delegate void RedisPushCallback(RedisValue value);
 
 /// <summary>구독한 채널(또는 패턴)에 메시지가 도착했을 때 호출되는 콜백. channel은 메시지가 발행된 실제 채널(패턴 구독이어도 실제 채널).</summary>
 public delegate void RedisMessageCallback(string channel, string payload);
+
+/// <summary>바이너리 페이로드용 메시지 콜백. payload 는 발행된 바이트 그대로다(UTF-8 이 아니어도 손상 없음).</summary>
+public delegate void RedisBinaryMessageCallback(string channel, byte[] payload);
 
 /// <summary>
 /// Redis 명령을 보내는 쪽의 공통 인터페이스. 노드 하나(또는 여럿)를 가진 서비스가 구현하며,

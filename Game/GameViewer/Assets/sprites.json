@@ -1,10 +1,4 @@
 {
-  "atlases": [
-    "warrior/atlas.json",
-    "archer/atlas.json",
-    "mage/atlas.json",
-    "lancer/atlas.json"
-  ],
   "sprites": [
     {
       "kind": "monster",
@@ -364,7 +358,12 @@
       "angles": 18,
       "height": 3.33,
       "walkFrames": 8,
-      "walkPattern": "warrior/walk_{0:000}_{1:00}.png"
+      "walkPattern": "warrior/walk_{0:000}_{1:00}.png",
+      "idleFrames": 8,
+      "idlePattern": "warrior/idle_{0:000}_{1:00}.png",
+      "hitPattern": "warrior/hit_{0:000}.png",
+      "deathFrames": 3,
+      "deathPattern": "warrior/death_{0:000}_{1}.png"
     },
     {
       "kind": "hero",
@@ -382,7 +381,12 @@
       "angles": 18,
       "height": 3.14,
       "walkFrames": 8,
-      "walkPattern": "archer/walk_{0:000}_{1:00}.png"
+      "walkPattern": "archer/walk_{0:000}_{1:00}.png",
+      "idleFrames": 8,
+      "idlePattern": "archer/idle_{0:000}_{1:00}.png",
+      "hitPattern": "archer/hit_{0:000}.png",
+      "deathFrames": 3,
+      "deathPattern": "archer/death_{0:000}_{1}.png"
     },
     {
       "kind": "hero",
@@ -400,7 +404,12 @@
       "angles": 18,
       "height": 3.55,
       "walkFrames": 8,
-      "walkPattern": "mage/walk_{0:000}_{1:00}.png"
+      "walkPattern": "mage/walk_{0:000}_{1:00}.png",
+      "idleFrames": 8,
+      "idlePattern": "mage/idle_{0:000}_{1:00}.png",
+      "hitPattern": "mage/hit_{0:000}.png",
+      "deathFrames": 3,
+      "deathPattern": "mage/death_{0:000}_{1}.png"
     },
     {
       "kind": "hero",
@@ -418,7 +427,12 @@
       "angles": 18,
       "height": 2.82,
       "walkFrames": 8,
-      "walkPattern": "lancer/walk_{0:000}_{1:00}.png"
+      "walkPattern": "lancer/walk_{0:000}_{1:00}.png",
+      "idleFrames": 8,
+      "idlePattern": "lancer/idle_{0:000}_{1:00}.png",
+      "hitPattern": "lancer/hit_{0:000}.png",
+      "deathFrames": 3,
+      "deathPattern": "lancer/death_{0:000}_{1}.png"
     },
     {
       "kind": "tree",

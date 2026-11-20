@@ -1,5 +1,6 @@
 ﻿// RedisHelper.cs : Redis 모듈 안팎에서 반복되던 작은 공용 함수 모음.
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
 using Core.Util;
@@ -13,6 +14,18 @@ public static class RedisHelper
     /// 클라이언트/풀이 직접 만드는 에러 응답(RedisType.Error)을 생성한다. 서버가 돌려준 에러가 아니라
     /// 연결/전송 문제를 콜백에 알리는 값이며, <see cref="IsConnectionError"/>가 접두어로 이 값을 구분한다.
     /// </summary>
+    /// <summary>보낼 인자 목록의 사본(대기 큐/재시도가 쥔다). 바이너리 인자 목록은 바이너리를 보존한 채 복사한다.</summary>
+    public static IReadOnlyList<string> SnapshotArgs(IReadOnlyList<string> args)
+    {
+        if (args is RedisBinaryArgs binary)
+            return binary.Copy();
+
+        var copy = new string[args.Count];
+        for (int i = 0; i < copy.Length; ++i)
+            copy[i] = args[i];
+        return copy;
+    }
+
     public static RedisValue MakeError(string message) => new RedisValue { Type = RedisType.Error, StrVal = message };
 
     /// <summary>Redis 명령 인자 목록을 한 줄로 만든다. <c>RedisHelper.MakeArgs("SADD", key, member)</c></summary>

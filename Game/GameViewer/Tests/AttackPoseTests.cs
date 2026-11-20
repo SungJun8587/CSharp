@@ -154,6 +154,14 @@ namespace GameViewer.Tests
             T.Check(AttackPose.DeathSlide(dm, 380f) > AttackPose.DeathSlide(dw, 380f) && AttackPose.DeathSlide(dm, 0f) == 0f && AttackPose.DeathSlide(dm, 10000f) == AttackPose.DeathSlide(dm, 380f), "death slide scales with the killing blow and settles");
             Entity bs = Mon(101, 1); bs.Boss = new GameViewer.Core.Data.BossRow(); bs.Dead = true; bs.HitPower = 1f;
             T.Check(AttackPose.DeathSlide(bs, 380f) == 0f, "bosses do not slide");
+            float hold = AttackPose.DeathHoldMs(dm), gone = AttackPose.DeathGoneMs(dm);
+            T.Check(AttackPose.DeathAlpha(dm, 0f) == 1f && AttackPose.DeathAlpha(dm, hold) == 1f, "corpse stays opaque while lying");
+            T.Check(AttackPose.DeathAlpha(dm, hold + 1f) < 1f && AttackPose.DeathAlpha(dm, hold + (gone - hold) * 0.5f) > 0.4f && AttackPose.DeathAlpha(dm, hold + (gone - hold) * 0.5f) < 0.6f, "corpse fades gradually");
+            T.Check(AttackPose.DeathAlpha(dm, gone) == 0f && AttackPose.DeathAlpha(dm, gone + 5000f) == 0f, "corpse is gone after the fade");
+            float prev = 1f; bool mono = true;
+            for (float a = hold; a <= gone; a += 50f) { float al = AttackPose.DeathAlpha(dm, a); if (al > prev + 1e-5f) mono = false; prev = al; }
+            T.Check(mono, "fade never brightens");
+            T.Check(AttackPose.DeathHoldMs(bs) > hold && AttackPose.DeathGoneMs(bs) > gone, "bosses linger longer");
         }
 
         public static void SwipeAndWorld()

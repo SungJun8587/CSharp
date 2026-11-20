@@ -100,6 +100,7 @@ internal static class Program
             for (int i = 0; i < 2000; i++)
                 logC.LogWrite(LogType.Info, $"thread={th} seq={i} payload=abcdefghijklmnopqrstuvwxyz");
         });
+        LogManager.Instance.Flush();                // 비동기 쓰기: 큐가 빌 때까지
         string[] conc = ReadLines(Path.Combine(d5, $"C_{today}.log"));
         var rx = new Regex(@"^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] # thread=\d seq=\d+ payload=abcdefghijklmnopqrstuvwxyz$");
         Check("동시 기록 16000줄 무결성", conc.Length == 16000 && conc.All(l => rx.IsMatch(l)));
@@ -127,6 +128,7 @@ internal static class Program
         logO.Init(Path.Combine(root, "out"), "O_", LogFileFormat.Daily, LogOutput.Console | LogOutput.DebugOutput);
         logO.LogWrite(LogType.Warning, "to console");
         logO.LogWrite(LogType.Error, "plain", false);
+        LogManager.Instance.Flush();
         Console.SetOut(oldOut);
         Trace.Listeners.Remove(cap);
         string consoleText = sw.ToString();
@@ -162,6 +164,7 @@ internal static class Program
         var sw3 = new StringWriter();
         Console.SetOut(sw3);
         logU.LogWrite(LogType.Info, "uninitialized");
+        LogManager.Instance.Flush();
         Console.SetOut(oldOut);
         Check("미초기화 시 콘솔만", sw3.ToString().Contains("uninitialized") && Directory.GetFiles(cwdBefore, "*").Length == 0);
         Directory.SetCurrentDirectory(oldCwd);

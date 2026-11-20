@@ -185,6 +185,17 @@ public sealed class RedisService : IRedisCommandSender, IDisposable
     public bool Subscribe(short nodeId, string channel, RedisMessageCallback callback)
         => FindSubscriber(nodeId, true)?.Subscribe(channel, callback) ?? false;
 
+    /// <summary>채널을 구독한다(지정 노드). 페이로드를 바이트 그대로 받는다(바이너리 메시지용).</summary>
+    public bool SubscribeBinary(short nodeId, string channel, RedisBinaryMessageCallback callback)
+        => FindSubscriber(nodeId, true)?.SubscribeBinary(channel, callback) ?? false;
+
+    /// <summary>채널을 구독한다(기본 노드). 페이로드를 바이트 그대로 받는다.</summary>
+    public bool SubscribeBinary(string channel, RedisBinaryMessageCallback callback) => SubscribeBinary(DefaultNodeId, channel, callback);
+
+    /// <summary>글롭 패턴으로 구독한다(지정 노드). 페이로드를 바이트 그대로 받는다.</summary>
+    public bool PSubscribeBinary(short nodeId, string pattern, RedisBinaryMessageCallback callback)
+        => FindSubscriber(nodeId, true)?.PSubscribeBinary(pattern, callback) ?? false;
+
     /// <summary>채널 구독을 해제한다(기본 노드).</summary>
     /// <returns>해제할 구독이 있었는지 여부</returns>
     public bool Unsubscribe(string channel) => Unsubscribe(DefaultNodeId, channel);

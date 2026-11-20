@@ -66,7 +66,7 @@ public static class FileUtil
             using (var f = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
             {
                 f.Write(content, 0, content.Length);
-                f.Flush();
+                f.Flush(true);      // OS 캐시가 아니라 디스크까지 내려야 rename 뒤 정전에도 빈/잘린 파일이 최종 경로가 되지 않는다
             }
             FileReplace.Move(tmp, path);
         }

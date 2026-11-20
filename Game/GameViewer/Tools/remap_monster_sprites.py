@@ -17,6 +17,7 @@ WANT = {
     11: ('mantis', False), 12: ('crab', False), 13: ('skeleton', False), 14: ('bomb', False), 15: ('ghost', False),
     16: ('worm', False), 17: ('goblin_shaman', False), 18: ('goblin_warrior', False), 19: ('darkknight', False),
     20: ('ironknight', False), 21: ('yeti', False), 22: ('golem', False),
+    23: ('treant', False), 24: ('flame', False),
     # 보스 = 같은 모양의 큰 쪽 (Id = 100 + 원본 Id)
     101: ('slime', True), 108: ('spider', True), 121: ('yeti', True), 122: ('golem', True),
 }

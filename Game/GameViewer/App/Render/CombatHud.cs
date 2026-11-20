@@ -18,23 +18,31 @@ namespace GameViewer.App.Render
         private readonly LiveHud _live;
         public CombatHud(Resources res) { _res = res; _live = new LiveHud(res); }
 
-        /// <summary>화면에 크게 보여줄 보스. 선택한 보스가 우선, 없으면 내게 가장 가까운 살아 있는 보스(45 이내).</summary>
+        /// <summary>화면에 크게 보여줄 보스. 지금 화면 안에 보이는 보스만 대상이다: 선택한 보스가 보이면 그것, 아니면 내게 가장 가까운 살아 있는 보스. 시야 밖이면 null(체력바를 그리지 않는다).</summary>
         public static Entity ActiveBoss(ViewerSession s, ViewState v, long now)
         {
             WorldModel w = s.World;
             Entity sel = w.Find(v.SelectedId);
-            if (sel != null && sel.IsBoss && !sel.Dead) return sel;
+            if (sel != null && sel.IsBoss && !sel.Dead && OnScreen(sel, v, now)) return sel;
             float sx = 0, sy = 0; bool has = s.SelfPos(now, out sx, out sy);
-            Entity best = null; float bd = 45f * 45f;
+            Entity best = null; float bd = float.MaxValue;
             foreach (KeyValuePair<ulong, Entity> kv in w.Entities)
             {
                 Entity e = kv.Value;
-                if (!e.IsBoss || e.Dead) continue;
+                if (!e.IsBoss || e.Dead || !OnScreen(e, v, now)) continue;
                 float x, y; e.PosAt(now, out x, out y);
                 float d = has ? (x - sx) * (x - sx) + (y - sy) * (y - sy) : 0f;
                 if (d < bd) { bd = d; best = e; }
             }
             return best;
+        }
+
+        /// <summary>엔티티가 지금 화면 안(창 가장자리 포함)에 있는가.</summary>
+        private static bool OnScreen(Entity e, ViewState v, long now)
+        {
+            float x, y; e.PosAt(now, out x, out y);
+            float px = v.ToScreenX(x), py = v.ToScreenY(y);
+            return px >= 0f && px <= v.Width && py >= 0f && py <= v.Height;
         }
 
         public void Draw(Graphics g, ViewerSession s, ViewState v, long now)
@@ -45,7 +53,7 @@ namespace GameViewer.App.Render
             DrawTargetFrame(g, s, v, now);
             DrawPartyFrames(g, s, v, now);
             DrawOffscreenBoss(g, s, v, now);
-            DrawDanger(g, s, v, now, boss != null ? 96 : 20);
+            DrawDanger(g, s, v, now, boss != null ? 124 : 20);
             DrawBanners(g, s, v, now);
         }
 
@@ -53,8 +61,9 @@ namespace GameViewer.App.Render
 
         private void DrawBossBar(Graphics g, ViewerSession s, Entity boss, ViewState v, long now)
         {
-            float w = Math.Min(620f, v.Width - 420f), h = 20f;
-            float x = (v.Width - w) / 2, y = 34f;
+            float zl, zr; HudRenderer.BossArea(v, out zl, out zr);          // 화면 가로 중앙(경험치바와 재화 표시에 닿지 않는 폭 안)
+            float w = Math.Min(520f, zr - zl - 56f), h = 26f;
+            float x = zl + (zr - zl - w) / 2, y = 60f;
             float ratio = boss.MaxHp > 0 ? Math.Max(0f, Math.Min(1f, boss.Hp / (float)boss.MaxHp)) : 0f;
             float ghost = boss.MaxHp > 0 ? Math.Max(ratio, Math.Min(1f, boss.GhostHp / (float)boss.MaxHp)) : ratio;
             bool enraged = boss.IsEnraged;
@@ -62,17 +71,17 @@ namespace GameViewer.App.Render
 
             // 이름 줄
             string name = "★ " + s.World.NameOf(boss);
-            _res.OutlinedText(g, name, _res.Big, Color.FromArgb(255, 220, 110), x, y - 28, _left);
+            _res.OutlinedText(g, name, _res.Huge, Color.FromArgb(255, 226, 120), x, y - 52, _left);
             if (phases > 1)
             {
                 string ph = boss.BossPhase + " / " + phases + " 페이즈";
-                _res.OutlinedText(g, ph, _res.Bold, Color.FromArgb(255, 245, 220), x + w, y - 24, _right);
+                _res.OutlinedText(g, ph, _res.Bold, Color.FromArgb(255, 245, 220), x + w, y - 40, _right);
             }
             if (enraged)
             {
                 float pulse = 0.6f + 0.4f * (float)Math.Sin(now / 130.0);
-                using (GraphicsPath bp = P.RoundPath(x + w - 150, y - 26, 62, 20, 8)) g.FillPath(_res.Brush((int)(220 * pulse), 220, 30, 24), bp);
-                g.DrawString("격노", _res.Bold, _res.Brush(Color.White), new RectangleF(x + w - 150, y - 26, 62, 20), _res.Center);
+                using (GraphicsPath bp = P.RoundPath(x + w - 150, y - 42, 62, 20, 8)) g.FillPath(_res.Brush((int)(220 * pulse), 220, 30, 24), bp);
+                g.DrawString("격노", _res.Bold, _res.Brush(Color.White), new RectangleF(x + w - 150, y - 42, 62, 20), _res.Center);
             }
 
             // 바 본체: 금빛(격노 시 붉은) 프레임 + 알약형 체력바
@@ -82,18 +91,49 @@ namespace GameViewer.App.Render
                 int ga = 50 + (int)(60 * (0.5 + 0.5 * Math.Sin(now / 130.0)));
                 using (GraphicsPath gl = P.RoundPath(x - 9, y - 9, w + 18, h + 18, 14)) g.DrawPath(_res.Pen(ga, 255, 60, 40, 6f), gl);
             }
-            Ui.Frame(g, _res, x - 6, y - 6, w + 12, h + 12, 10, accent);
-            Color c1 = enraged ? Color.FromArgb(255, 96, 66) : Color.FromArgb(236, 92, 78);
-            Color c2 = enraged ? Color.FromArgb(132, 18, 18) : Color.FromArgb(118, 22, 32);
+            float cyb = y + h / 2f;
+            for (int sd = -1; sd <= 1; sd += 2)                                       // 좌우로 뻗는 금빛 날개 선
+            {
+                float ex = sd < 0 ? x - 12 : x + w + 12, tx = sd < 0 ? ex - 110 : ex + 110;
+                using (LinearGradientBrush wl = new LinearGradientBrush(new RectangleF(Math.Min(ex, tx), cyb - 2, 110, 4), sd < 0 ? Color.FromArgb(0, accent) : Color.FromArgb(230, accent), sd < 0 ? Color.FromArgb(230, accent) : Color.FromArgb(0, accent), 0f))
+                    g.FillRectangle(wl, Math.Min(ex, tx), cyb - 1.5f, 110, 3f);
+                g.FillPolygon(_res.Brush(Color.FromArgb(200, accent)), new PointF[] { new PointF(ex + sd * 2, cyb), new PointF(ex - sd * 12, cyb - 9), new PointF(ex - sd * 12, cyb + 9) });
+            }
+            Ui.Frame(g, _res, x - 7, y - 7, w + 14, h + 14, 11, accent);
+            using (GraphicsPath inner = P.RoundPath(x - 3, y - 3, w + 6, h + 6, 9)) g.DrawPath(_res.Pen(Color.FromArgb(150, Col.Light(accent, 0.2f)), 1.2f), inner);
+            Color c1 = enraged ? Color.FromArgb(255, 110, 70) : Color.FromArgb(244, 104, 88);
+            Color c2 = enraged ? Color.FromArgb(138, 14, 14) : Color.FromArgb(120, 18, 30);
             Ui.HpBar(g, _res, x, y, w, h, ratio, ghost, c1, c2, true);
+            GraphicsState bs = g.Save();                                              // 채워진 부분 위를 지나가는 빛 띠 + 10% 눈금
+            using (GraphicsPath tp = P.RoundPath(x, y, w, h, 9f)) g.SetClip(tp, CombineMode.Intersect);
+            float fw = w * ratio;
+            if (fw > 12f)
+            {
+                float bandX = x - 90f + (now % 2800) / 2800f * (fw + 90f);
+                using (LinearGradientBrush sb = new LinearGradientBrush(new RectangleF(bandX, y, 90f, h), Color.FromArgb(0, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), 0f))
+                {
+                    ColorBlend cbd = new ColorBlend(3);
+                    cbd.Colors = new Color[] { Color.FromArgb(0, 255, 255, 255), Color.FromArgb(70, 255, 255, 255), Color.FromArgb(0, 255, 255, 255) };
+                    cbd.Positions = new float[] { 0f, 0.5f, 1f };
+                    sb.InterpolationColors = cbd;
+                    g.SetClip(new RectangleF(x, y, fw, h), CombineMode.Intersect);
+                    g.FillRectangle(sb, bandX, y, 90f, h);
+                }
+            }
+            g.Restore(bs);
+            for (int k = 1; k < 10; ++k) g.DrawLine(_res.Pen(k == 5 ? 120 : 70, 0, 0, 0, 1f), x + w * k / 10f, y + 2, x + w * k / 10f, y + h - 2);
             WorldRenderer.DrawPhaseTicks(g, boss, x, y + 2, w, h - 4);
+            float mx = x + w / 2f, my = y - 9f;                                       // 위쪽 가운데 왕관 장식
+            g.FillPolygon(_res.Brush(Color.FromArgb(235, accent)), new PointF[] { new PointF(mx - 20, my + 2), new PointF(mx - 20, my - 6), new PointF(mx - 10, my - 1), new PointF(mx, my - 10), new PointF(mx + 10, my - 1), new PointF(mx + 20, my - 6), new PointF(mx + 20, my + 2) });
+            g.DrawPolygon(_res.Pen(200, 40, 26, 8, 1.2f), new PointF[] { new PointF(mx - 20, my + 2), new PointF(mx - 20, my - 6), new PointF(mx - 10, my - 1), new PointF(mx, my - 10), new PointF(mx + 10, my - 1), new PointF(mx + 20, my - 6), new PointF(mx + 20, my + 2) });
+            g.FillEllipse(_res.Brush(255, enraged ? 255 : 120, enraged ? 90 : 200, enraged ? 60 : 255), mx - 3, my - 4, 6, 6);
             DrawPhaseLabels(g, boss, x, y, w, h);
             // 좌우 장식 마름모
             PointF[] dl = { new PointF(x - 14, y + h / 2), new PointF(x - 6, y + h / 2 - 6), new PointF(x + 2, y + h / 2), new PointF(x - 6, y + h / 2 + 6) };
             PointF[] dr = { new PointF(x + w + 14, y + h / 2), new PointF(x + w + 6, y + h / 2 - 6), new PointF(x + w - 2, y + h / 2), new PointF(x + w + 6, y + h / 2 + 6) };
             g.FillPolygon(_res.Brush(accent), dl); g.FillPolygon(_res.Brush(accent), dr);
             string txt = boss.Hp.ToString("N0") + " / " + boss.MaxHp.ToString("N0") + "  (" + (ratio * 100f).ToString("0") + "%)";
-            _res.OutlinedText(g, txt, _res.Small, Color.White, x + w / 2, y + 3, _center2);
+            _res.OutlinedText(g, txt, _res.Normal, Color.White, x + w / 2, y + 4, _center2);
 
             // 시전 중이면 어떤 스킬인지, 몇 초 남았는지
             if (boss.Casting && boss.CastTimeMs > 0)
@@ -130,7 +170,7 @@ namespace GameViewer.App.Render
         {
             Entity t = s.World.Find(v.SelectedId);
             if (t == null) return;
-            float x = 10, y = 150, w = 250, h = 62;
+            float x = 10, y = v.ShowInfo ? 180 : 46, w = 250, h = 62;
             Ui.Frame(g, _res, x, y, w, h, 10, t.IsBoss ? Color.FromArgb(222, 188, 112) : (t.IsMonster ? Color.FromArgb(214, 110, 96) : Color.FromArgb(120, 170, 230)));
             string name = s.World.NameOf(t);
             Color nc = t.IsBoss ? Color.FromArgb(255, 214, 90) : (t.IsMonster ? Color.FromArgb(255, 200, 200) : Color.FromArgb(190, 225, 255));
@@ -159,7 +199,7 @@ namespace GameViewer.App.Render
                 if (kv.Value.IsPlayer && kv.Key != w.SelfId) list.Add(kv.Value);
             if (list.Count == 0) return;
             list.Sort(delegate (Entity a, Entity b) { return a.Id.CompareTo(b.Id); });
-            float x = 10, y = v.ShowLog ? 224 : 224;
+            float x = 10, y = v.ShowInfo ? 254 : 120;
             int n = Math.Min(5, list.Count);
             Ui.Frame(g, _res, x, y, 250, 10 + n * 24, 10, Color.FromArgb(120, 170, 230));
             for (int i = 0; i < n; ++i)

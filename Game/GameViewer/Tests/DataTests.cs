@@ -8,6 +8,32 @@ namespace GameViewer.Tests
 {
     public static class DataTests
     {
+        /// <summary>Assets/sprites.json 의 몬스터 template 은 GameData/Monster.json 의 Id 와 같아야 한다(이름과 그림이 어긋나지 않게). 파일을 못 찾으면 건너뛴다.</summary>
+        public static void SpritesMatchMonsters()
+        {
+            string dir = System.AppDomain.CurrentDomain.BaseDirectory, sprites = null, monsters = null;
+            for (int i = 0; i < 8 && dir != null; ++i, dir = System.IO.Path.GetDirectoryName(dir))
+            {
+                string a = System.IO.Path.Combine(dir, "Assets", "sprites.json"), m = System.IO.Path.Combine(dir, "..", "GameData", "Monster.json");
+                if (sprites == null && System.IO.File.Exists(a)) sprites = a;
+                if (monsters == null && System.IO.File.Exists(m)) monsters = m;
+            }
+            if (sprites == null || monsters == null) return;
+            HashSet<uint> ids = new HashSet<uint>();
+            foreach (object r in MiniJson.AsArray(MiniJson.AsObject(MiniJson.Parse(System.IO.File.ReadAllText(monsters)))["Monster"]))
+                ids.Add((uint)MiniJson.Num(MiniJson.AsObject(r), "Id", 0));
+            HashSet<uint> seen = new HashSet<uint>();
+            foreach (object r in MiniJson.AsArray(MiniJson.AsObject(MiniJson.Parse(System.IO.File.ReadAllText(sprites)))["sprites"]))
+            {
+                Dictionary<string, object> o = MiniJson.AsObject(r);
+                if (MiniJson.Str(o, "kind", "") != "monster") continue;
+                uint tpl = (uint)MiniJson.Num(o, "template", 0);
+                T.Check(ids.Contains(tpl), "sprite template " + tpl + " exists in Monster.json");
+                T.Check(seen.Add(tpl), "sprite template " + tpl + " is unique");
+            }
+            foreach (uint id in ids) T.Check(seen.Contains(id), "monster " + id + " has a sprite");
+        }
+
         public static void MiniJsonBasics()
         {
             Dictionary<string, object> o = MiniJson.AsObject(MiniJson.Parse("﻿{ \"a\": 1.5, \"b\": [1, 2, {\"c\": \"x\\ny\\u00e9\"}], \"t\": true, \"n\": null, \"neg\": -3e2 }"));
@@ -73,6 +99,27 @@ namespace GameViewer.Tests
                 T.Check(!name.StartsWith("System.Drawing") && !name.StartsWith("System.Windows.Forms") && !name.StartsWith("UnityEngine") && !name.StartsWith("WindowsBase"),
                     "Core must not reference " + name);
             }
+        }
+
+        /// <summary>HeroSkill 의 개방 조건(레벨/가격)을 읽는다. 열이 없는 표는 처음부터 쓰는 무료 스킬로 본다.</summary>
+        public static void SkillUnlocks()
+        {
+            GameData plain = GameData.Load(Program.Dir("GameData"), 1);
+            SkillUnlockRow def = plain.UnlockOf(1, plain.SkillsOf(1)[0]);
+            T.Check(def.UnlockLevel == 1 && def.IsFree, "a table without unlock columns means free from level 1");
+
+            string dir = Path.Combine(Path.GetTempPath(), "gv_unlock_" + Environment.ProcessId);
+            Directory.CreateDirectory(dir);
+            foreach (string f in Directory.GetFiles(Program.Dir("GameData"), "*.json")) File.Copy(f, Path.Combine(dir, Path.GetFileName(f)), true);
+            File.WriteAllText(Path.Combine(dir, "HeroSkill.json"), "{\"HeroSkill\": [{\"HeroId\": 1, \"SkillId\": 1, \"UnlockLevel\": 1, \"PriceCurrencyId\": 0, \"Price\": 0}, {\"HeroId\": 1, \"SkillId\": 2, \"UnlockLevel\": 15, \"PriceCurrencyId\": 1, \"Price\": 3000}]}");
+            try
+            {
+                GameData d = GameData.Load(dir, 1);
+                SkillUnlockRow paid = d.UnlockOf(1, 2);
+                T.Check(paid.UnlockLevel == 15 && paid.PriceCurrencyId == 1 && paid.Price == 3000 && !paid.IsFree, "a paid skill keeps its level and price");
+                T.Check(d.UnlockOf(1, 1).IsFree && d.UnlockOf(1, 1).UnlockLevel == 1, "a free skill is free");
+            }
+            finally { Directory.Delete(dir, true); }
         }
 
         public static void GameDataLoads()

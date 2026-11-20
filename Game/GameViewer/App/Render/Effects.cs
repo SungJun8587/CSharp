@@ -77,6 +77,7 @@ namespace GameViewer.App.Render
                         if (info != null) _skill.SlashGround(g, info, w, fx, v, now);
                         break;
                     }
+                    case EffectKind.LevelUp: DrawLevelUpGround(g, w, fx, v, now); break;
                     case EffectKind.RespawnRing:
                     {
                         float p = fx.Progress(now);
@@ -86,6 +87,109 @@ namespace GameViewer.App.Render
                         break;
                     }
                 }
+            }
+        }
+
+        // ------------------------------------------------------------------ 레벨 업
+
+        /// <summary>레벨 업을 한 영웅의 현재 화면 위치(영웅이 움직이면 연출도 따라간다). 영웅이 없으면 효과가 만들어진 자리.</summary>
+        private static void LevelUpAnchor(WorldModel w, ViewEffect fx, ViewState v, long now, out float sx, out float sy)
+        {
+            float x = fx.X, y = fx.Y;
+            Entity c = w.Find(fx.EntityId);
+            if (c != null) c.PosAt(now, out x, out y);
+            sx = v.ToScreenX(x); sy = v.ToScreenY(y);
+        }
+
+        /// <summary>반짝임 한 점: 십자 빛살과 중심 광점.</summary>
+        private void Spark(Graphics g, float x, float y, float r, int a, int cr, int cg, int cb)
+        {
+            if (a <= 0 || r < 0.5f) return;
+            g.DrawLine(_res.Pen(a, cr, cg, cb, Math.Max(1f, r * 0.22f)), x - r * 1.6f, y, x + r * 1.6f, y);
+            g.DrawLine(_res.Pen(a, cr, cg, cb, Math.Max(1f, r * 0.22f)), x, y - r * 2.2f, x, y + r * 2.2f);
+            g.FillEllipse(_res.Brush(a / 3, cr, cg, cb), x - r, y - r, r * 2, r * 2);
+            g.FillEllipse(_res.Brush(a, 255, 255, 240), x - r * 0.35f, y - r * 0.35f, r * 0.7f, r * 0.7f);
+        }
+
+        /// <summary>바닥: 충격파, 금빛 고리 셋, 돌아가는 룬 원이 퍼지고 발밑이 환하게 빛난다.</summary>
+        private void DrawLevelUpGround(Graphics g, WorldModel w, ViewEffect fx, ViewState v, long now)
+        {
+            float sx, sy; LevelUpAnchor(w, fx, v, now, out sx, out sy);
+            float p = fx.Progress(now);
+            float glow = p < 0.15f ? p / 0.15f : 1f - (p - 0.15f) / 0.85f;
+            Glow(g, Color.FromArgb(255, 226, 120), sx, sy, v.Px(2.6f), v.Px(1.7f), Math.Max(0f, glow) * 0.95f);
+            float sw = p / 0.22f;                                                  // 처음에 한 번 빠르게 퍼지는 흰 충격파
+            if (sw > 0f && sw < 1f)
+            {
+                float e0 = 1f - (1f - sw) * (1f - sw) * (1f - sw), r0 = v.Px(0.6f + 4.6f * e0);
+                g.DrawEllipse(_res.Pen((int)(230 * (1f - sw)), 255, 250, 225, 7f * (1f - sw) + 1.5f), sx - r0, sy - r0 * 0.45f, r0 * 2, r0 * 0.9f);
+            }
+            float rf = p < 0.7f ? 1f : 1f - (p - 0.7f) / 0.3f;                     // 돌아가는 룬 원: 이중 원, 눈금, 마름모
+            if (rf > 0f)
+            {
+                float R = v.Px(1.9f), spin = p * 5.5f;
+                g.DrawEllipse(_res.Pen((int)(210 * rf), 255, 214, 110, 2.2f), sx - R, sy - R * 0.45f, R * 2, R * 0.9f);
+                g.DrawEllipse(_res.Pen((int)(130 * rf), 255, 236, 170, 1.2f), sx - R * 0.72f, sy - R * 0.72f * 0.45f, R * 1.44f, R * 1.44f * 0.9f);
+                for (int k = 0; k < 12; ++k)
+                {
+                    float ang = spin + k * (float)Math.PI / 6f, ca = (float)Math.Cos(ang), sa = (float)Math.Sin(ang);
+                    g.DrawLine(_res.Pen((int)(190 * rf), 255, 226, 130, 1.6f), sx + ca * R * 0.86f, sy + sa * R * 0.86f * 0.45f, sx + ca * R * 1.12f, sy + sa * R * 1.12f * 0.45f);
+                    if (k % 3 == 0)
+                    {
+                        float dx = sx + ca * R * 1.28f, dy = sy + sa * R * 1.28f * 0.45f, d = v.Px(0.16f);
+                        g.FillPolygon(_res.Brush((int)(230 * rf), 255, 244, 190), new PointF[] { new PointF(dx, dy - d), new PointF(dx + d, dy), new PointF(dx, dy + d), new PointF(dx - d, dy) });
+                    }
+                }
+            }
+            for (int k = 0; k < 3; ++k)
+            {
+                float q = (p - k * 0.12f) / 0.6f;
+                if (q <= 0f || q >= 1f) continue;
+                float e = 1f - (1f - q) * (1f - q);
+                float rr = v.Px(0.8f + 2.6f * e);
+                g.DrawEllipse(_res.Pen((int)(235 * (1f - q)), 255, 232 - k * 18, 130 - k * 10, 4f * (1f - q) + 1.2f), sx - rr, sy - rr * 0.45f, rr * 2, rr * 0.9f);
+            }
+        }
+
+        /// <summary>공중: 하늘로 솟는 빛기둥과 위로 떠오르는 반짝임.</summary>
+        private void DrawLevelUpAir(Graphics g, WorldModel w, ViewEffect fx, ViewState v, long now, float p)
+        {
+            float sx, sy; LevelUpAnchor(w, fx, v, now, out sx, out sy);
+            float rise = p < 0.12f ? p / 0.12f : 1f;                  // 기둥이 솟는 구간
+            float fade = p < 0.35f ? 1f : 1f - (p - 0.35f) / 0.65f;   // 이후 서서히 사라짐
+            float ph = v.Px(7f) * rise, pw = v.Px(0.9f) * (1.15f - 0.3f * p);
+            if (fade > 0f)
+            {
+                for (int k = 0; k < 9; ++k)                           // 발밑에서 부채꼴로 뻗는 빛살
+                {
+                    float ang = (k - 4f) * 0.34f + (float)Math.Sin(p * 3f + k) * 0.05f;
+                    float len = v.Px(3.2f + 2.2f * Rnd(fx, k + 70)) * rise;
+                    g.DrawLine(_res.Pen((int)(110 * fade), 255, 226, 140, v.Px(0.1f) + 1f), sx, sy - v.Px(0.2f), sx + (float)Math.Sin(ang) * len, sy - (float)Math.Cos(ang) * len);
+                }
+                Beam(g, Color.FromArgb(255, 214, 110), sx, sy, sy - ph, pw * 1.4f, fade);
+                Beam(g, Color.FromArgb(255, 252, 235), sx, sy, sy - ph, pw * 0.5f, fade);
+            }
+            for (int s = 0; s < 2; ++s)                               // 몸을 감고 올라가는 나선 반짝임
+                for (int j = 0; j < 9; ++j)
+                {
+                    float q = p * 1.5f - j * 0.075f;
+                    if (q <= 0f || q >= 1f) continue;
+                    float hx = (float)Math.Sin(q * 9f + s * Math.PI) * v.Px(0.95f * (1f - 0.35f * q));
+                    float hy = -v.Px(0.2f + 5.4f * q);
+                    Spark(g, sx + hx, sy + hy, v.Px(0.13f + 0.1f * (1f - q)), (int)(235 * (1f - q)), 255, 236, 150);
+                }
+            float fl = p / 0.25f;                                     // 시작 순간 크게 번쩍이는 별빛
+            if (fl > 0f && fl < 1f) Spark(g, sx, sy - v.Px(1.1f), v.Px(1.5f) * (1f - fl * 0.5f), (int)(255 * (1f - fl)), 255, 244, 190);
+            for (int k = 0; k < 14; ++k)                              // 반짝이는 불씨: 발밑에서 시작해 위로, 좌우로 살짝 흔들리며 올라간다
+            {
+                float q = (p * 1.6f - Rnd(fx, k + 50) * 0.5f);
+                if (q <= 0f || q >= 1f) continue;
+                float ox = (Rnd(fx, k) - 0.5f) * v.Px(2.2f) + (float)Math.Sin(q * 7f + k) * v.Px(0.18f);
+                float oy = -v.Px(0.3f + 4.6f * q * (0.6f + Rnd(fx, k + 20) * 0.6f));
+                float r = v.Px(0.1f + 0.12f * Rnd(fx, k + 30)) * (1f - 0.5f * q);
+                int a = (int)(240 * (1f - q));
+                g.FillEllipse(_res.Brush(a, 255, 240, 170), sx + ox - r, sy + oy - r, r * 2, r * 2);
+                g.FillEllipse(_res.Brush(a / 3, 255, 220, 110), sx + ox - r * 2.2f, sy + oy - r * 2.2f, r * 4.4f, r * 4.4f);
             }
         }
 
@@ -201,6 +305,7 @@ namespace GameViewer.App.Render
                     case EffectKind.DeathPuff: DrawDeath(g, w, fx, v, p, sx, sy); break;
                     case EffectKind.BossDeath: DrawBossDeath(g, w, fx, v, p, sx, sy); break;
                     case EffectKind.Heal: DrawHealSparkles(g, fx, v, w, now, p); break;
+                    case EffectKind.LevelUp: DrawLevelUpAir(g, w, fx, v, now, p); break;
                     case EffectKind.Banner: break;      // HUD 에서 그린다
                 }
                 } finally { KindMs[(int)fx.Kind] += Ms() - t0; }

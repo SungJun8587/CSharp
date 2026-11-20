@@ -4,9 +4,11 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
 using System.Threading;
+using System.Threading.Tasks;
 using Core.Net;
 using Core.Util;
 using Game.Generated;
+using Game.Persistence;
 using Game.ZoneCommon;
 
 namespace Game.GatewayServer;
@@ -34,6 +36,7 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
     private const long StateTtlMs = 120000;         // 보관 시간: 이 안에 다시 입장하면 체력/가방/관문 도착 지점이 이어진다
     private const long SaveWaitMs = 2000;           // 떠난 존의 상태가 도착하기를 기다리는 최대 시간(그 뒤엔 상태 없이 입장)
     private readonly ConcurrentDictionary<ulong, StoredState> _states = new ConcurrentDictionary<ulong, StoredState>();
+    private WriteBehindPlayerStore? _store;         // 캐릭터 상태 저장소(없으면 DB 없이 동작). 쓰기는 큐에 넣고 워커가 모아서 내려 쓴다
     private readonly object _travelLock = new object();
     private readonly Dictionary<ulong, long> _savePending = new Dictionary<ulong, long>();             // 캐릭터 ID -> 상태를 기다리는 마감 시각(TickCount64). _travelLock으로 보호
     private readonly Dictionary<ulong, ParkedEnter> _parkedEnters = new Dictionary<ulong, ParkedEnter>();   // 상태를 기다리느라 보류된 입장 요청. _travelLock으로 보호
@@ -79,6 +82,9 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
     public bool Start(GatewayOptions options)
     {
         _options = options;
+
+        if (!OpenStore(options))
+            return false;
 
         // 서버 간/클라이언트 연결 모두 작은 패킷을 자주 주고받으므로 Nagle을 끄고, 조용히 끊긴 연결을 keep-alive로 감지한다.
         if (!IPAddress.TryParse(options.ZoneBindIp, out IPAddress? zoneIp) || !IPAddress.TryParse(options.ClientBindIp, out IPAddress? clientIp))
@@ -129,6 +135,42 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
         ServerService? zone = _zoneService;
         _zoneService = null;
         zone?.Close();
+
+        // 마지막으로: 연결을 닫으면서 존이 보낸 퇴장 상태까지 DB 로 내려 쓴 뒤 저장소를 닫는다.
+        WriteBehindPlayerStore? store = _store;
+        _store = null;
+        if (store != null)
+        {
+            LogManager.Info("[GatewayServerMain] player store closing. pending={0}, saved={1}, dropped={2}", store.Pending, store.Saved, store.Dropped);
+            store.Dispose();
+        }
+    }
+
+    /// <summary>저장소를 연다. 옵션에 저장소가 있으면 그것을, 없고 연결 문자열이 있으면 MySQL 을, 둘 다 없으면 DB 없이 동작한다.</summary>
+    private bool OpenStore(GatewayOptions options)
+    {
+        IPlayerStore? inner = options.PlayerStore;
+        if (inner == null && options.MySqlConnectionString.Length != 0)
+        {
+#if USE_MYSQL
+            try
+            {
+                inner = new Game.Persistence.MySql.MySqlPlayerStore(options.MySqlConnectionString);
+            }
+            catch (Exception e)
+            {
+                LogManager.Error("[GatewayServerMain] MySQL store open failed: {0}", e.Message);
+                return false;
+            }
+#else
+            LogManager.Error("[GatewayServerMain] MySqlConnectionString is set but this build has no MySQL support (built with SkipMySql).");
+            return false;
+#endif
+        }
+        if (inner == null)
+            return true;
+        _store = new WriteBehindPlayerStore(inner, (int)options.SaveFlushIntervalMs, options.SaveBatchSize);
+        return true;
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -286,7 +328,7 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
         if (!GwEnterZoneReq.TryRead(packet, out GwEnterZoneReq req))
             return false;
 
-        uint zoneId = req.ZoneId;
+        uint zoneId = ZoneIds.ToInternal(req.ZoneId);     // 와이어 0 번(시험장)은 내부 값으로 바꿔 쓴다
         uint heroId = req.HeroId;       // 유효성은 존 서버가 영웅 데이터로 판정한다
 
         if (!client.IsLoggedIn)
@@ -315,8 +357,34 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
             }
         }
 
+        // 메모리에 보관한 상태가 없고 저장소가 있으면 DB 에서 읽어 온 뒤 입장한다(읽기가 끝날 때까지 패킷 처리는 막지 않는다).
+        if (_store != null && !_states.ContainsKey(client.CharId))
+        {
+            LoadThenEnter(_store, client, zoneId, heroId);
+            return true;
+        }
+
         EnterZoneCore(client, zoneId, heroId);
         return true;
+    }
+
+    /// <summary>저장소에서 상태를 읽어 보관 상태로 올린 뒤 입장을 이어간다. 저장된 적이 없으면(새 캐릭터) 상태 없이 입장한다.
+    /// 읽기에 실패하면 입장시키지 않는다: 빈 상태로 입장시키면 나중에 그 빈 상태가 저장돼 DB 의 좋은 데이터를 덮어쓴다.</summary>
+    private void LoadThenEnter(WriteBehindPlayerStore store, GatewayClientSession client, uint zoneId, uint heroId)
+    {
+        ulong charId = client.CharId;
+        store.LoadAsync(charId, CancellationToken.None).ContinueWith(t =>
+        {
+            if (t.IsFaulted || t.IsCanceled)
+            {
+                LogManager.Error("[GatewayServerMain] player load failed. charId={0}: {1}", charId, t.Exception?.GetBaseException().Message ?? "canceled");
+                SendEnterZoneRes(client, GatewayResult.ZoneError, zoneId, 0.0f, 0.0f);     // 이 시점엔 아직 존을 점유하지 않았다
+                return;
+            }
+            if (t.Result != null)
+                _states.TryAdd(charId, new StoredState(t.Result, Environment.TickCount64 + StateTtlMs));     // 그 사이 존이 더 새 상태를 보냈으면 그것을 지키려고 덮어쓰지 않는다
+            RunParkedEnter(new ParkedEnter(client, zoneId, heroId));
+        }, TaskScheduler.Default);
     }
 
     /// <summary>입장 요청의 본 처리: 존 점유 -> 노드/슬롯 확인 -> 보관 상태가 있으면 복원 패킷 -> 존 서버에 입장 요청. 결과는 클라이언트에 비동기로 간다.</summary>
@@ -410,10 +478,11 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
         }
         else
         {
-            result = _router.Register(session, req.ZoneId, (ZoneKind)req.Kind, req.Capacity, req.ServerName, Environment.TickCount64, out ZoneNode? node);
+            uint regZone = ZoneIds.ToInternal(req.ZoneId);
+            result = _router.Register(session, regZone, (ZoneKind)req.Kind, req.Capacity, req.ServerName, Environment.TickCount64, out ZoneNode? node);
             if (result == ZoneRegisterResult.Ok)
             {
-                session.BindZone(req.ZoneId, node!);
+                session.BindZone(regZone, node!);
                 LogManager.Info("[GatewayServerMain] zone registered. zoneId={0}, kind={1}, capacity={2}", req.ZoneId, req.Kind, req.Capacity);
             }
             else
@@ -557,6 +626,7 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
 
         ulong charId = save.State.CharId;
         _states[charId] = new StoredState(save.State, Environment.TickCount64 + StateTtlMs);
+        _store?.Enqueue(save.State);                // DB 로는 비동기로 내려 쓴다(패킷 처리는 기다리지 않는다)
         ReleaseSavePending(charId);
         return true;
     }
@@ -664,7 +734,7 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
         {
             Success = (byte)(reason == GatewayResult.Ok ? 1 : 0),
             Reason = (byte)reason,
-            ZoneId = zoneId,
+            ZoneId = ZoneIds.ToWire(zoneId),
             SpawnX = spawnX,
             SpawnY = spawnY,
         };
@@ -673,7 +743,7 @@ public sealed class GatewayServerMain : Game.ZoneCommon.IServerHost
 
     private static void SendZoneLost(GatewayClientSession client, uint zoneId)
     {
-        GwZoneLostNotify n = new GwZoneLostNotify { ZoneId = zoneId };
+        GwZoneLostNotify n = new GwZoneLostNotify { ZoneId = ZoneIds.ToWire(zoneId) };
         client.SendPacket(n);
     }
 

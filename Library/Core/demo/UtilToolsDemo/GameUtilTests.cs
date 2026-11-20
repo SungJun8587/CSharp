@@ -21,6 +21,8 @@ internal static class GameUtilTests
         StatTests(check);
         PathTests(check);
         WriteBehindTests(check);
+        WriteBehindWorkerTests(check);
+        CoreReviewFixTests(check);
         ShutdownTests(check);
         TimeProviderTests(check);
         BackoffTests(check);
@@ -306,6 +308,7 @@ internal static class GameUtilTests
         check("Buff Tick: 만료만 만료 순서로", n == 1 && expired.Count == 1 && expired[0] == (2, 2) && b.Has(1) && b.Has(3));
         check("Buff 다음 만료 시각", b.TryGetNextExpiry(out long next) && next == 1600);
         check("Buff RemoveStacks", b.RemoveStacks(3, 1, out bool rem) && rem && !b.Has(3));
+        { bool threw = false; try { b.RemoveStacks(3, -1, out _); } catch (ArgumentOutOfRangeException) { threw = true; } check("Buff RemoveStacks 음수 거부", threw); }
         check("Buff Remove", b.Remove(1) && !b.Remove(1) && b.Count == 0 && !b.TryGetNextExpiry(out _));
 
         var re = new BuffTimerSet<int>();
@@ -534,6 +537,198 @@ internal static class GameUtilTests
             }
             return -1;
         }
+    }
+
+    // ------------------------------------------------------------ WriteBehindWorker
+    private static void WriteBehindWorkerTests(Action<string, bool> check)
+    {
+        // 합치기 + 대기 값 읽기: 저장이 막혀 있는 동안 같은 키를 여러 번 넣으면 마지막 값 하나만 저장되고, 그동안 TryGetPending 이 최신 값을 돌려준다
+        var gate = new ManualResetEventSlim(false);
+        var saved = new List<KeyValuePair<int, int>>();
+        object sl = new object();
+        using (var w = new WriteBehindWorker<int, int>("T1",
+            (items, ct) => { gate.Wait(); lock (sl) saved.AddRange(items); },
+            (k, v, ct) => { gate.Wait(); lock (sl) saved.Add(new KeyValuePair<int, int>(k, v)); },
+            flushIntervalMs: 20))
+        {
+            w.Enqueue(1, 10);
+            Thread.Sleep(80);                                           // 첫 값이 저장 중(막힘)으로 넘어간다
+            w.Enqueue(1, 11); w.Enqueue(1, 12);
+            check("WriteBehindWorker 저장 중에도 최신 대기 값을 읽는다", w.TryGetPending(1, out int cur) && cur == 12);
+            check("WriteBehindWorker Pending 은 같은 키를 한 번만 센다", w.Pending == 1);
+            gate.Set();
+            check("WriteBehindWorker Flush", w.Flush(3000) && w.Pending == 0 && !w.TryGetPending(1, out _));
+            lock (sl) check("WriteBehindWorker 저장 중이던 값과 최신 값이 모두 저장됨, 중간 값은 합쳐짐", saved.Count == 2 && saved[0].Value == 10 && saved[1].Value == 12);
+        }
+
+        // 묶음 실패 → 건별 재시도: 키 2 만 계속 실패하면 나머지는 저장되고, 2 는 maxAttempts 번 뒤 버려진다
+        var ok = new HashSet<int>();
+        using (var w = new WriteBehindWorker<int, int>("T2",
+            (items, ct) => { if (items.Any(kv => kv.Key == 2)) throw new Exception("bad"); lock (sl) foreach (var kv in items) ok.Add(kv.Key); },
+            (k, v, ct) => { if (k == 2) throw new Exception("bad"); lock (sl) ok.Add(k); },
+            flushIntervalMs: 20, maxAttempts: 3, retryBackoffMs: 10, maxBackoffMs: 20))
+        {
+            w.Enqueue(1, 1); w.Enqueue(2, 2); w.Enqueue(3, 3);
+            bool done = false;
+            for (int i = 0; i < 200 && !done; ++i) { Thread.Sleep(20); done = w.Dropped == 1 && w.Pending == 0; }
+            lock (sl) check("WriteBehindWorker 문제 있는 한 건만 버려지고 나머지는 저장됨", done && ok.SetEquals(new[] { 1, 3 }) && w.FailedBatches >= 1);
+        }
+
+        // 일시 실패 후 복구: 두 번 실패하다가 성공하면 버려지지 않는다
+        int calls = 0; int got = -1;
+        using (var w = new WriteBehindWorker<int, int>("T3",
+            (items, ct) => { if (Interlocked.Increment(ref calls) <= 2) throw new Exception("down"); got = items[0].Value; },
+            (k, v, ct) => { if (Interlocked.Increment(ref calls) <= 2) throw new Exception("down"); got = v; },
+            flushIntervalMs: 20, maxAttempts: 10, retryBackoffMs: 10, maxBackoffMs: 20))
+        {
+            w.Enqueue(7, 70);
+            check("WriteBehindWorker 일시 실패 뒤 복구", w.Flush(5000) && got == 70 && w.Dropped == 0 && w.Saved == 1);
+        }
+
+        // Dispose 는 남은 것을 비우고, 이후 Enqueue 는 거절한다
+        int disposedSaved = 0;
+        var d = new WriteBehindWorker<int, int>("T4", (items, ct) => Interlocked.Add(ref disposedSaved, items.Count), (k, v, ct) => Interlocked.Increment(ref disposedSaved), flushIntervalMs: 60000);
+        for (int i = 0; i < 25; ++i) d.Enqueue(i, i);
+        d.Dispose();
+        check("WriteBehindWorker Dispose 가 아직 묵지 않은 것까지 비움", disposedSaved == 25 && !d.Enqueue(99, 99));
+
+        var tg = new WriteBehindQueue<int, int>();
+        tg.Enqueue(1, 5, 0);
+        check("WriteBehindQueue TryGet 은 빼지 않고 읽음", tg.TryGet(1, out int tv) && tv == 5 && tg.Count == 1 && !tg.TryGet(2, out _));
+    }
+
+    // ------------------------------------------------------------ 검토 수정 항목
+    private static void CoreReviewFixTests(Action<string, bool> check)
+    {
+        // WriteBehindWorker: 저장소가 죽어 있는 동안 Flush 를 해도 백오프를 지켜, 재시도 횟수가 순식간에 소진돼 버려지지 않는다
+        int calls = 0; bool down = true;
+        using (var w = new WriteBehindWorker<int, int>("RF1",
+            (items, ct) => { Interlocked.Increment(ref calls); if (Volatile.Read(ref down)) throw new Exception("down"); },
+            (k, v, ct) => { Interlocked.Increment(ref calls); if (Volatile.Read(ref down)) throw new Exception("down"); },
+            flushIntervalMs: 10, maxAttempts: 5, retryBackoffMs: 300, maxBackoffMs: 300))
+        {
+            w.Enqueue(1, 1);
+            bool flushed = w.Flush(500);
+            check("WriteBehindWorker 저장소 장애 중 Flush 는 시간 안에 끝나지 않고 데이터를 버리지 않음", !flushed && w.Dropped == 0 && w.Pending == 1);
+            int callsDuring = Volatile.Read(ref calls);
+            check("WriteBehindWorker 장애 중 시도 횟수가 백오프로 제한됨", callsDuring <= 8);
+            Volatile.Write(ref down, false);
+            check("WriteBehindWorker 복구 뒤 Flush 로 저장됨", w.Flush(3000) && w.Saved == 1 && w.Dropped == 0);
+        }
+
+        // JobQueue: PushAfter 를 안 쓰면 예약 목록을 만들지 않아도 동작하고, Close 는 예약된 작업을 취소한다
+        var jq = new JobQueue();
+        int ran = 0;
+        jq.Push(() => Interlocked.Increment(ref ran));
+        for (int i = 0; i < 100 && Volatile.Read(ref ran) == 0; ++i) Thread.Sleep(10);
+        check("JobQueue PushAfter 없이도 동작", Volatile.Read(ref ran) == 1);
+        jq.Close(discardPending: true);
+        var jq2 = new JobQueue();
+        int fired = 0;
+        ScheduledJob sj = jq2.PushAfter(60, () => Interlocked.Increment(ref fired));
+        jq2.Close(discardPending: true);
+        Thread.Sleep(150);
+        check("JobQueue Close 가 예약된 작업을 취소함", fired == 0);
+        var jq3 = new JobQueue();
+        jq3.Close();
+        ScheduledJob late = jq3.PushAfter(10, () => Interlocked.Increment(ref fired));
+        Thread.Sleep(80);
+        check("JobQueue 닫힌 뒤 예약은 취소됨", fired == 0);
+
+        // Deflate: 왕복, 출력 공간 부족, 빈 입력
+        var rnd = new Random(1);
+        byte[] src = new byte[4096];
+        for (int i = 0; i < src.Length; ++i) src[i] = (byte)(i % 7 == 0 ? rnd.Next(256) : 65);
+        byte[]? comp = CompressionUtil.Compress(src, CompressionKind.Deflate, 4);
+        byte[] back = new byte[src.Length];
+        bool rt = comp != null && comp.Length < src.Length && CompressionUtil.TryDecompress(comp, back, CompressionKind.Deflate, out int bn) && bn == src.Length && back.AsSpan().SequenceEqual(src);
+        check("Deflate 압축/해제 왕복", rt);
+        check("Deflate 출력 공간이 모자라면 압축 실패", !CompressionUtil.TryCompress(src, new byte[8], CompressionKind.Deflate, 4, out _));
+        check("Deflate 해제 출력이 모자라면 실패", comp != null && !CompressionUtil.TryDecompress(comp, new byte[100], CompressionKind.Deflate, out _));
+        check("Deflate 빈 입력/출력은 실패", !CompressionUtil.TryDecompress(ReadOnlySpan<byte>.Empty, back, CompressionKind.Deflate, out _) && !CompressionUtil.TryCompress(src, Span<byte>.Empty, CompressionKind.Deflate, 4, out _));
+
+        // WorkerPool.Stop(timeout): 멈춘 작업이 있어도 제한 시간 뒤 돌아온다
+        var stuck = new ManualResetEventSlim(false);
+        var wp = new WorkerPool(1, "RF");
+        wp.Post(() => stuck.Wait());
+        Thread.Sleep(30);
+        long t0 = Environment.TickCount64;
+        bool allStopped = wp.Stop(false, 200);
+        check("WorkerPool.Stop 은 제한 시간 뒤 false 로 돌아옴", !allStopped && Environment.TickCount64 - t0 < 2000);
+        stuck.Set();
+        check("WorkerPool 풀려나면 Stop 이 true", wp.Stop(true, 2000));
+
+        // ScheduledJob 취소: 취소한 잡은 실행되지 않고 취소 상태
+        int sfired = 0;
+        ScheduledJob cj = JobTimer.Shared.Reserve(50, () => Interlocked.Increment(ref sfired));
+        cj.Cancel();
+        Thread.Sleep(120);
+        check("ScheduledJob 취소 후 실행 안 됨", sfired == 0 && cj.IsCanceled);
+
+        // HashRing: 추가 순서가 달라도 같은 링(같은 키는 같은 노드)
+        var r1 = new HashRing<string>(); var r2 = new HashRing<string>();
+        foreach (string n in new[] { "a", "b", "c", "d" }) r1.AddNode(n);
+        foreach (string n in new[] { "d", "c", "b", "a" }) r2.AddNode(n);
+        bool sameRing = true;
+        for (int i = 0; i < 2000 && sameRing; ++i)
+            sameRing = r1.TryGetNode("key" + i, out string? n1) && r2.TryGetNode("key" + i, out string? n2) && n1 == n2;
+        check("HashRing 추가 순서와 무관하게 같은 매핑", sameRing);
+
+        // Backoff: 상한에 닿아도 지터가 유지되고 상한을 넘지 않는다
+        var seen = new HashSet<long>();
+        long maxSeen = 0;
+        for (int i = 0; i < 200; ++i) { long d = BackoffState.ComputeDelayMs(10, 100, 400, 2, 25); seen.Add(d); maxSeen = Math.Max(maxSeen, d); }
+        check("Backoff 상한 구간에서도 지터가 유지되고 상한 이하", seen.Count > 5 && maxSeen <= 400 && seen.Min() >= 375);
+        check("Backoff 지터 없으면 정확히 상한", BackoffState.ComputeDelayMs(10, 100, 400, 2) == 400 && BackoffState.ComputeDelayMs(1, 100, 400, 2) == 100);
+
+        // FileUtil.WriteAtomically 왕복
+        string fp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wa_" + Guid.NewGuid().ToString("N"));
+        FileUtil.WriteAtomically(fp, new byte[] { 1, 2, 3 });
+        FileUtil.WriteAtomically(fp, new byte[] { 4, 5 });
+        check("FileUtil.WriteAtomically 덮어쓰기", System.IO.File.ReadAllBytes(fp).AsSpan().SequenceEqual(new byte[] { 4, 5 }));
+        System.IO.File.Delete(fp);
+
+        // BitUtil 2 의 거듭제곱(LockFreeQueue 가 같은 함수를 쓴다)
+        var lfq = new LockFreeQueue<int>(1000);
+        int cnt = 0; while (lfq.TryEnqueue(cnt)) ++cnt;
+        check("LockFreeQueue 용량이 2의 거듭제곱으로 올림됨", cnt == 1024);
+
+        // Log: 레벨 필터, 비동기 쓰기 순서, 파일 실패 백오프
+        string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "logtest_" + Guid.NewGuid().ToString("N"));
+        var log = new Log();
+        log.Init(dir, "T", LogFileFormat.Daily, LogOutput.File);
+        for (int i = 0; i < 2000; ++i) log.LogWrite(LogType.Info, "line" + i, false);
+        log.Dispose();
+        string path = System.IO.Path.Combine(dir, Log.BuildFileName("T", LogFileFormat.Daily, DateTime.Now));
+        string[] lines = System.IO.File.ReadAllLines(path);
+        bool ordered = lines.Length == 2000;
+        for (int i = 0; ordered && i < lines.Length; ++i) ordered = lines[i].EndsWith("line" + i, StringComparison.Ordinal);
+        check("Log 비동기 쓰기 순서 유지 및 Dispose 가 비움", ordered);
+
+        var lm = LogManager.Instance;
+        LogType before = lm.MinLevel;
+        lm.MinLevel = LogType.Warning;
+        int formatted = 0;
+        var probe = new FormatProbe(() => formatted++);
+        LogManager.Info("{0}", probe);
+        check("LogManager 레벨 미만은 서식 처리 전에 버림", formatted == 0 && !lm.IsEnabled(LogType.Info) && lm.IsEnabled(LogType.Error));
+        lm.MinLevel = before;
+
+        string blocked = System.IO.Path.Combine(dir, "file_as_dir");
+        System.IO.File.WriteAllText(blocked, "x");
+        var bad = new Log { Async = false };
+        bad.Init(System.IO.Path.Combine(blocked, "sub"), "B", LogFileFormat.Daily, LogOutput.File);
+        bad.LogWrite(LogType.Info, "a", false); bad.LogWrite(LogType.Info, "b", false);
+        check("Log 파일 열기 실패 시 예외 없이 계속 진행", true);
+        bad.Dispose();
+        try { System.IO.Directory.Delete(dir, true); } catch { }
+    }
+
+    private sealed class FormatProbe
+    {
+        private readonly Action _onFormat;
+        public FormatProbe(Action onFormat) { _onFormat = onFormat; }
+        public override string ToString() { _onFormat(); return "x"; }
     }
 
     // ------------------------------------------------------------ WriteBehindQueue

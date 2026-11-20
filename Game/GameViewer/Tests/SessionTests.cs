@@ -166,6 +166,54 @@ namespace GameViewer.Tests
             return s;
         }
 
+        /// <summary>스킬 창: 서버가 알려 준 보유/장착 현황이 스킬바 순서가 되고, 구매/장착 요청이 올바른 패킷으로 나간다.</summary>
+        public static void SkillBook()
+        {
+            ZcSkillBookNotify n = new ZcSkillBookNotify { SkillIds = new ushort[] { 3, 9 }, Slots = new byte[] { 2, 0 } };
+            ZcSkillBookNotify back = ZcSkillBookNotify.Parse(n.ToBytes());
+            T.Check(back.SkillIds.Length == 2 && back.SkillIds[0] == 3 && back.Slots[0] == 2 && back.SkillIds[1] == 9 && back.Slots[1] == 0, "skill book round trip");
+            T.Eq(ZcSkillBookNotify.Size, n.ToBytes().Length, "skill book size");
+            ZcSkillOpResNotify op = ZcSkillOpResNotify.Parse(new ZcSkillOpResNotify { Op = ZcSkillOpResNotify.OpBuy, Result = SkillOpResult.NotEnough, SkillId = 17 }.ToBytes());
+            T.Check(op.Op == 1 && op.Result == SkillOpResult.NotEnough && op.SkillId == 17, "skill op result round trip");
+
+            using (FakeGateway gw = new FakeGateway())
+            {
+                ViewerSession s = Enter(gw, 1, false);
+                List<uint> mine = s.Data.SkillsOf(1);
+                T.Check(mine.Count >= 3 && !s.World.SkillBookKnown, "fixture hero has skills; no book yet");
+                T.Eq(mine.Count, s.MySkills.Count, "without a server book the bar shows every hero skill");
+
+                // 서버: 첫째 스킬은 3번 칸, 셋째 스킬은 1번 칸에 장착, 둘째는 보유만 한다. 상점 칸 7, 8 은 Lv25, Lv35 에 열린다.
+                ZcSkillBookNotify book = new ZcSkillBookNotify { SkillIds = new ushort[] { (ushort)mine[0], (ushort)mine[1], (ushort)mine[2] }, Slots = new byte[] { 3, 0, 1 }, ShopSlot7Level = 25, ShopSlot8Level = 35 };
+                gw.Send(book.ToBytes());
+                Pump(s, null, delegate { return s.World.SkillBookKnown; }, 3000);
+                List<uint> bar = s.MySkills;
+                T.Check(bar.Count == 8 && bar[0] == mine[2] && bar[1] == 0 && bar[2] == mine[0] && bar[6] == 0 && bar[7] == 0, "the bar has eight slots in slot order with holes for empty ones");
+                T.Check(s.Owns(mine[1]) && s.SlotOf(mine[1]) == 0 && s.SlotOf(mine[0]) == 3, "owned but unequipped keeps slot 0");
+                T.Check(s.SlotLockLevel(7) == 25 && s.SlotLockLevel(8) == 35 && s.SlotLockLevel(1) == 0, "shop slots report their unlock level, open slots report 0");
+
+                // 고정 칸(1~6)의 스킬은 끌어 옮길 수 없다.
+                T.Check(!s.SwapSkillSlots(0, 2), "fixed slots cannot be swapped");
+                T.Check(s.EquipSkill(mine[1], 7), "equip request sent");
+                Frame? eq = gw.Wait(ZcSkillEquipReq.Type, null, 2000);
+                T.Check(eq.HasValue, "server got the equip request");
+                if (eq.HasValue)
+                {
+                    PacketReader r = new PacketReader(eq.Value.Data, 4);
+                    T.Check(r.U32() == mine[1], "equip skill id"); T.Check(r.U8() == 7, "equip target slot");
+                }
+                T.Check(s.BuySkill(mine[1]), "buy request sent");
+                Frame? by = gw.Wait(ZcSkillBuyReq.Type, null, 2000);
+                T.Check(by.HasValue && new PacketReader(by.Value.Data, 4).U32() == mine[1], "server got the buy request");
+
+                // 실패 결과는 로그로 남는다.
+                int logs = s.World.Log.Count;
+                gw.Send(new ZcSkillOpResNotify { Op = ZcSkillOpResNotify.OpBuy, Result = SkillOpResult.LevelTooLow, SkillId = mine[1] }.ToBytes());
+                Pump(s, null, delegate { return s.World.LastSkillOpId == mine[1]; }, 3000);
+                T.Check(s.World.Log.Count > logs && s.World.LastSkillResult == SkillOpResult.LevelTooLow, "a failed purchase is logged with its reason");
+            }
+        }
+
         public static void EndToEnd()
         {
             using (FakeGateway gw = new FakeGateway())

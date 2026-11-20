@@ -152,7 +152,7 @@ internal sealed class ServiceCore
     {
         try
         {
-            sweep(Environment.TickCount64);
+            sweep(NetClock.NowMs);
         }
         catch (Exception e)
         {

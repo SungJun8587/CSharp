@@ -125,6 +125,25 @@ internal static class Program
         }
         Check(allSplit, "parser: split at every boundary");
 
+        var pe = new RedisParser(); pe.Feed(Encoding.ASCII.GetBytes("*6\r\n+\r\n+\r\n+\r\n+\r\n+\r\n+\r\n"));
+        Check(pe.TryParse(out RedisValue? ev) == RedisParseResult.Success && ev!.ArrayVal.Length == 6, "parser: empty simple strings array");
+        // 바이너리 안전: UTF-8 이 아닌 바이트도 BytesVal 로 손상 없이, 텍스트는 그대로
+        byte[] bin = { 0xFF, 0xFE, 0x00, 0x80, 0x01 };
+        var pbin = new RedisParser();
+        var wireBin = new List<byte>(Encoding.ASCII.GetBytes("*2\r\n$5\r\n")); wireBin.AddRange(bin); wireBin.AddRange(Encoding.ASCII.GetBytes("\r\n$5\r\nhello\r\n"));
+        foreach (byte wb in wireBin) pbin.Feed(new[] { wb });         // 한 바이트씩: 증분 스캔 경로
+        bool gotBin = false;
+        for (int i = 0; i < 1; ++i) gotBin = pbin.TryParse(out RedisValue? bv) == RedisParseResult.Success && bv!.ArrayVal[0].BytesVal.AsSpan().SequenceEqual(bin) && bv.ArrayVal[1].StrVal == "hello" && bv.ArrayVal[1].BytesVal.AsSpan().SequenceEqual("hello"u8);
+        Check(gotBin, "parser: binary bulk preserved via BytesVal, text unchanged");
+
+        var bargs = new RedisBinaryArgs().Add("SET").Add("k").Add(bin);
+        byte[] enc = RedisCommandBuilder.Build(bargs);
+        var expect = new List<byte>(Encoding.ASCII.GetBytes("*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$5\r\n")); expect.AddRange(bin); expect.AddRange(Encoding.ASCII.GetBytes("\r\n"));
+        Check(enc.AsSpan().SequenceEqual(expect.ToArray()) && RedisCommandBuilder.CalcEncodedSize(bargs) == enc.Length, "builder: binary arg encoded raw, size matches");
+        IReadOnlyList<string> snap = RedisHelper.SnapshotArgs(bargs);
+        Check(snap is RedisBinaryArgs && RedisCommandBuilder.Build(snap).AsSpan().SequenceEqual(enc), "snapshot keeps binary args");
+        Check(RedisCommandBuilder.Build(RedisHelper.SnapshotArgs(new[] { "PING" })).Length > 0, "snapshot copies plain args");
+
         var pn = new RedisParser(); pn.Feed(Encoding.ASCII.GetBytes("$-1\r\n*-1\r\n"));
         Check(pn.TryParse(out var nv) == RedisParseResult.Success && nv!.IsNull, "parser: null bulk");
         Check(pn.TryParse(out nv) == RedisParseResult.Success && nv!.IsNull, "parser: null array");

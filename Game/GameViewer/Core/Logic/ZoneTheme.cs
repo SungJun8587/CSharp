@@ -25,10 +25,17 @@ namespace GameViewer.Core.Logic
         };
 
         /// <summary>고를 수 있는 존 번호(시작 화면의 맵 선택에 쓴다).</summary>
-        public static readonly uint[] Zones = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+        public static readonly uint[] Zones = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0 };
+
+        /// <summary>모든 몬스터(일반 3마리씩, 보스 1마리씩)가 나오는 시험용 존. 0 번 존이다. 지형(장애물/배경)은 ZoneRule 의 Terrain 이 가리키는 1~10 번 존의 것을 빌려 쓴다.</summary>
+        public const uint TestZone = 0;
+
+        /// <summary>시험장에서 고를 수 있는 지형(1~10 존의 지형).</summary>
+        public static readonly uint[] TerrainZones = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
 
         public static string NameOf(uint zoneId)
         {
+            if (zoneId == TestZone) return "시험장";      // 모든 몬스터가 나오는 존(맵 종류는 숲)
             switch (For(zoneId))
             {
                 case MapKind.Desert: return "사막";
@@ -62,11 +69,20 @@ namespace GameViewer.Core.Logic
         /// <summary>지금 그리는 존의 종류. 장면 그리기를 시작할 때 SceneRenderer 가 정한다.</summary>
         public static MapKind Current = MapKind.Forest;
 
+        /// <summary>시험장(존 11)에서 고른 지형(1~10 존의 지형). 서버는 지형을 모르고(존 11 에는 장애물이 없다) 뷰어가 그리는 모양만 바꾼다.</summary>
+        public static uint TestTerrain = 1;
+
+        /// <summary>그리는 데 쓰는 지형 번호. 시험장이면 고른 지형, 그 밖의 존은 자기 번호.</summary>
+        public static uint TerrainId(uint zoneId) { return zoneId == TestZone ? TestTerrain : zoneId; }
+
         public static MapKind For(uint zoneId)
         {
             MapKind k;
-            return ById.TryGetValue(zoneId, out k) ? k : MapKind.Forest;
+            return ById.TryGetValue(TerrainId(zoneId), out k) ? k : MapKind.Forest;
         }
+
+        /// <summary>지형 이름(시험장의 지형 선택 창에 쓴다).</summary>
+        public static string TerrainName(uint terrain) { return NameOf(terrain == TestZone ? 1 : terrain); }
 
         /// <summary>장애물(원형) 반지름으로 소품 크기를 고른다(설원/화산/늪): 작은 것 / 중간 / 큰 것.</summary>
         public enum PropSize { Small, Mid, Large }

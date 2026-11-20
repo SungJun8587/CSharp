@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Threading;
+using System.Threading.Tasks;
 using Core.Net;
 using Game.GatewayServer;
 using Game.Generated;
@@ -329,6 +330,449 @@ public static class Program
         Check(d.IsRegisterRejected, "with DuplicateRetryMs=0 the duplicate is rejected at once");
     }
 
+    // 0 번 존(시험장): 존 서버가 0 번으로 등록하고, 클라이언트가 0 번 입장을 요청하면 0 번으로 답이 오고, 존 1 과 0 을 오갈 수 있다.
+    static void TestZoneZero()
+    {
+        string data = FindData();
+        using GatewayServerMain gw = new GatewayServerMain();
+        using ZoneServerMain z0 = new ZoneServerMain();
+        using ZoneServerMain z1 = new ZoneServerMain();
+        gw.Start(new GatewayOptions { ClientBindIp = "127.0.0.1", ClientPort = 0, ZoneBindIp = "127.0.0.1", ZonePort = 0, ClientMaxPacketsPerSec = 0 });
+        ushort port = (ushort)gw.ZoneEndPoint!.Port;
+        Check(z0.Start(new ZoneServerOptions { ZoneId = 0, Capacity = 50, TickIntervalMs = 50, GatewayIp = "127.0.0.1", GatewayPort = port, GameDataDir = data, MetricsIntervalMs = 0 }), "zone 0 starts");
+        Check(z1.Start(new ZoneServerOptions { ZoneId = 1, Capacity = 50, TickIntervalMs = 50, GatewayIp = "127.0.0.1", GatewayPort = port, GameDataDir = data, MetricsIntervalMs = 0 }), "zone 1 starts");
+        for (int i = 0; i < 200 && !(z0.IsRegistered && z1.IsRegistered); ++i) Thread.Sleep(25);
+        Check(z0.IsRegistered, "zone 0 registers with the gateway");
+        using ClientService svc = new ClientService(gw.ClientEndPoint!, () => new Client(), new NetServiceOptions { MaxSessionCount = 4 });
+        Client c = Connect(svc);
+        Check(Login(c, 777001), "login (zone 0 test)");
+        GwEnterZoneRes? r = Enter(c, 0, 1);
+        Check(r != null && r.Value.Success == 1 && r.Value.ZoneId == 0, "enter zone 0 succeeds and the answer says zone 0");
+        Check(OnZone(z0, zz => zz.PlayerCount) == 1, "the player is on the zone 0 server");
+        int kinds = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(data, "Monster.json"))).RootElement.GetProperty("Monster").GetArrayLength();
+        int bosses = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(data, "Boss.json"))).RootElement.GetProperty("Boss").GetArrayLength();
+        Check(OnZone(z0, zz => zz.MonsterCount) == (kinds - bosses) * 3 + bosses, "zone 0 spawns every regular monster x3 and every boss x1 from ZoneRule alone");
+        c.Tx(new GwLeaveZoneReq());
+        c.Take((ushort)GatewayPacketType.GwLeaveZoneRes);
+        GwEnterZoneRes? r1 = Enter(c, 1, 1);
+        Check(r1 != null && r1.Value.Success == 1 && r1.Value.ZoneId == 1, "then zone 1 still works");
+        Check(OnZone(z0, zz => zz.PlayerCount) == 0 && OnZone(z1, zz => zz.PlayerCount) == 1, "players moved from zone 0 to zone 1");
+    }
+
+    // 시험장 지형 치트: 존 0 만 ZcTerrainReq 를 받아 장애물 맵을 바꾸고(존 전원에게 ZcTerrainNotify), 새 장애물 안에 있던 엔티티는 밖으로 옮긴다.
+    // 다른 존은 요청을 무시한다. 바뀐 뒤 들어온 플레이어는 입장 때 현재 지형을 받는다.
+    static void TestTerrainCheat()
+    {
+        string data = FindData();
+        using GatewayServerMain gw = new GatewayServerMain();
+        using ZoneServerMain z0 = new ZoneServerMain();
+        using ZoneServerMain z1 = new ZoneServerMain();
+        gw.Start(new GatewayOptions { ClientBindIp = "127.0.0.1", ClientPort = 0, ZoneBindIp = "127.0.0.1", ZonePort = 0, ClientMaxPacketsPerSec = 0 });
+        ushort port = (ushort)gw.ZoneEndPoint!.Port;
+        Check(z0.Start(new ZoneServerOptions { ZoneId = 0, Capacity = 50, TickIntervalMs = 50, GatewayIp = "127.0.0.1", GatewayPort = port, GameDataDir = data, MetricsIntervalMs = 0 }), "terrain: zone 0 starts");
+        Check(z1.Start(new ZoneServerOptions { ZoneId = 1, Capacity = 50, TickIntervalMs = 50, GatewayIp = "127.0.0.1", GatewayPort = port, GameDataDir = data, MetricsIntervalMs = 0 }), "terrain: zone 1 starts");
+        for (int i = 0; i < 200 && !(z0.IsRegistered && z1.IsRegistered); ++i) Thread.Sleep(25);
+        using ClientService svc = new ClientService(gw.ClientEndPoint!, () => new Client(), new NetServiceOptions { MaxSessionCount = 8 });
+
+        Check(GameDataLoader.LoadBlockMap(data, 1, 0, 0, 1000, 1000, out BlockMap? map1) && map1 != null, "terrain: map 1 loads");
+        Check(GameDataLoader.LoadBlockMap(data, 5, 0, 0, 1000, 1000, out BlockMap? map5) && map5 != null, "terrain: map 5 loads");
+        Vec2 inside5 = new Vec2 { X = 796.4f, Y = 525.8f };                 // 지형 5 의 첫 장애물 안(지형 1 에서는 비어 있어야 한다)
+        Check(map5!.IsBlocked(inside5) && !map1!.IsBlocked(inside5), "terrain: the probe point is blocked only in terrain 5");
+
+        Client a = Connect(svc);
+        Check(Login(a, 777101) && Enter(a, 0, 1)?.Success == 1, "terrain: client A enters zone 0");
+        int blocked0 = OnZone(z0, zz => zz.BlockMap!.BlockedCellCount);
+        Check(blocked0 == map1!.BlockedCellCount, "terrain: zone 0 starts with the ZoneRule terrain (1)");
+        Check(OnZone(z0, zz => zz.Teleport(777101UL, inside5)), "terrain: A is placed where terrain 5 has an obstacle");
+
+        a.Tx(new ZcTerrainReq { Terrain = 5 });
+        byte[]? n = a.Take(TerrainPacketType.Notify);
+        Check(n != null && ZcTerrainNotify.TryRead(n, out ZcTerrainNotify tn) && tn.Terrain == 5, "terrain: the zone answers with ZcTerrainNotify(5)");
+        Check(OnZone(z0, zz => zz.BlockMap!.BlockedCellCount) == map5.BlockedCellCount, "terrain: zone 0 now uses the terrain 5 obstacles");
+        Vec2 pos = OnZone(z0, zz => zz.FindEntity(777101UL)!.Pos);
+        Check(!map5.IsBlocked(pos) && Vec2.DistanceSq(pos, inside5) < 80.0f * 80.0f, "terrain: A was moved out of the new obstacle");
+        byte[]? fix = a.Take((ushort)ZonePacketType.ZcCorrectPosNotify, 2000);
+        Check(fix != null, "terrain: A got a position correction");
+
+        Client b = Connect(svc);
+        Check(Login(b, 777102) && Enter(b, 0, 1)?.Success == 1, "terrain: client B enters zone 0 later");
+        byte[]? nb = b.Take(TerrainPacketType.Notify, 3000);
+        Check(nb != null && ZcTerrainNotify.TryRead(nb, out ZcTerrainNotify tb) && tb.Terrain == 5, "terrain: a late entrant is told the current terrain");
+
+        a.Tx(new ZcTerrainReq { Terrain = 3 });                              // 쿨다운(500ms) 안의 연타는 무시한다
+        Thread.Sleep(700);
+        a.Tx(new ZcTerrainReq { Terrain = 3 });
+        Check(a.Take(TerrainPacketType.Notify, 3000) != null && b.Take(TerrainPacketType.Notify, 3000) != null, "terrain: a change reaches everyone in the zone");
+
+        a.Tx(new ZcTerrainReq { Terrain = 99 });
+        Thread.Sleep(700);
+        Check(OnZone(z0, zz => zz.BlockMap != null), "terrain: an unknown terrain keeps the current map");
+
+        Client c = Connect(svc);
+        Check(Login(c, 777103) && Enter(c, 1, 1)?.Success == 1, "terrain: client C enters zone 1");
+        c.Tx(new ZcTerrainReq { Terrain = 4 });
+        Check(c.Take(TerrainPacketType.Notify, 1000) == null, "terrain: other zones ignore the cheat");
+    }
+
+    // 저장 실패를 흉내 내는 저장소: FailAll 이면 모두, PoisonId 는 항상 실패한다.
+    sealed class FlakyStore : Game.Persistence.IPlayerStore
+    {
+        public readonly Game.Persistence.InMemoryPlayerStore Inner = new Game.Persistence.InMemoryPlayerStore();
+        public volatile bool FailAll;
+        public int FailNext;                 // 앞으로 이 횟수만큼의 저장 호출을 실패시킨다
+        public ulong PoisonId;
+        public int SaveCalls;
+        public Task<PlayerState?> LoadAsync(ulong id, CancellationToken ct) => FailAll ? Task.FromException<PlayerState?>(new InvalidOperationException("db down")) : Inner.LoadAsync(id, ct);
+        public Task SaveAsync(PlayerState s, CancellationToken ct)
+        {
+            Interlocked.Increment(ref SaveCalls);
+            if (FailAll || s.CharId == PoisonId || Interlocked.Decrement(ref FailNext) >= 0) return Task.FromException(new InvalidOperationException("db error"));
+            return Inner.SaveAsync(s, ct);
+        }
+        public Task SaveBatchAsync(IReadOnlyList<PlayerState> states, CancellationToken ct)
+        {
+            Interlocked.Increment(ref SaveCalls);
+            if (FailAll || states.Any(x => x.CharId == PoisonId) || Interlocked.Decrement(ref FailNext) >= 0) return Task.FromException(new InvalidOperationException("db error"));
+            return Inner.SaveBatchAsync(states, ct);
+        }
+    }
+
+    static PlayerState PS(ulong id, int hp) { PlayerState p = new PlayerState { CharId = id, HeroId = 1, HasVitals = true, Hp = hp, Mp = 1 }; p.Items.Add(new KeyValuePair<uint, uint>(1001, 3)); return p; }
+
+    static bool WaitFor(Func<bool> f, int ms = 5000) { long end = Environment.TickCount64 + ms; while (Environment.TickCount64 < end) { if (f()) return true; Thread.Sleep(10); } return f(); }
+
+    // 경험치/레벨: 표 검사, 저장된 레벨 복원, 처치 경험치, 레벨 업(능력치 재계산 + 완전 회복), 퇴장 시 저장.
+    static void TestLevel()
+    {
+        string data = FindData();
+        LevelData bad = new LevelData();
+        Check(!bad.Validate(out _), "an empty level table is invalid");
+        Check(!bad.AddLevel(new LevelData.Row { Level = 2, ExpToNext = 10, StatPercent = 100 }), "levels must start at 1");
+        bad.AddLevel(new LevelData.Row { Level = 1, ExpToNext = 10, StatPercent = 110 });
+        Check(!bad.Validate(out _), "level 1 must have statPercent 100");
+
+        LevelData lv = new LevelData();
+        lv.AddLevel(new LevelData.Row { Level = 1, ExpToNext = 10, StatPercent = 100 });
+        lv.AddLevel(new LevelData.Row { Level = 2, ExpToNext = 20, StatPercent = 150 });
+        lv.AddLevel(new LevelData.Row { Level = 3, ExpToNext = 0, StatPercent = 200 });
+        Check(lv.Validate(out _) && lv.MaxLevel == 3, "a consecutive table validates");
+        CombatStats cs = CombatStats.Default; cs.MaxHp = 1000; cs.Attack = 10; cs.AttackRange = 2.5f; cs.AttackIntervalMs = 800;
+        CombatStats sc = lv.Scale(cs, 2);
+        Check(sc.MaxHp == 1500 && sc.Attack == 15 && sc.AttackRange == 2.5f && sc.AttackIntervalMs == 800, "scale multiplies hp/attack only");
+        Check(lv.Scale(cs, 99).MaxHp == 2000 && lv.ClampLevel(0) == 1, "out-of-range levels are clamped");
+
+        PlayerState w = PS(1, 10); w.Level = 7; w.Exp = 123456;
+        Span<byte> buf = stackalloc byte[ZoneStateSave.PacketSize];
+        new ZoneStateSave { State = w }.Write(buf);
+        Check(ZoneStateSave.TryRead(buf, out ZoneStateSave back) && back.State.Level == 7 && back.State.Exp == 123456 && back.State.Items.Count == 1 && back.State.Items[0].Value == 3, "level/exp survive the wire format");
+
+        ZcExpNotify en = new ZcExpNotify { Level = 5, Flags = ZcExpNotify.FlagLevelUp, Exp = 9, ExpToNext = 99, Gained = 4 };
+        Span<byte> eb = stackalloc byte[ZcExpNotify.Size];
+        en.Write(eb);
+        Span<byte> cb = stackalloc byte[ZcCurrencyNotify.Size];
+        new ZcCurrencyNotify { CurrencyId = 1, Amount = 77, Gained = 5 }.Write(cb);
+        Check(ZcCurrencyNotify.TryRead(cb, out ZcCurrencyNotify c2) && c2.CurrencyId == 1 && c2.Amount == 77 && c2.Gained == 5, "ZcCurrencyNotify round trip");
+        PlayerState ws = PS(2, 10); ws.Wallet.Add(new KeyValuePair<uint, uint>(1, 123456)); ws.Wallet.Add(new KeyValuePair<uint, uint>(2, 9));
+        Span<byte> wb = stackalloc byte[ZoneStateSave.PacketSize];
+        new ZoneStateSave { State = ws }.Write(wb);
+        Check(ZoneStateSave.TryRead(wb, out ZoneStateSave wback) && wback.State.Wallet.Count == 2 && wback.State.Wallet[0].Value == 123456 && wback.State.Wallet[1].Key == 2 && wback.State.Items.Count == 1, "wallet survives the wire format");
+        CurrencyData cd = new CurrencyData();
+        cd.AddCurrency(new CurrencyData.Currency { Id = 1, Name = "gold", MaxAmount = 100 });
+        cd.AddReward(new CurrencyData.Reward { MonsterId = 1, CurrencyId = 1, MinAmount = 5, MaxAmount = 50, ChancePermille = 500 });
+        Check(cd.Validate(out _), "a valid currency table validates");
+        cd.AddReward(new CurrencyData.Reward { MonsterId = 2, CurrencyId = 1, MinAmount = 5, MaxAmount = 500, ChancePermille = 500 });
+        Check(!cd.Validate(out _), "a reward above the currency cap is invalid");
+        CurrencyData cd2 = new CurrencyData();
+        cd2.AddCurrency(new CurrencyData.Currency { Id = 1, Name = "gold", MaxAmount = 100 });
+        cd2.AddReward(new CurrencyData.Reward { MonsterId = 1, CurrencyId = 9, MinAmount = 1, MaxAmount = 2, ChancePermille = 1000 });
+        Check(!cd2.Validate(out _), "a reward of an unknown currency is invalid");
+        Check(ZcExpNotify.TryRead(eb, out ZcExpNotify e2) && e2.Level == 5 && e2.Exp == 9 && e2.ExpToNext == 99 && e2.Gained == 4 && e2.Flags == ZcExpNotify.FlagLevelUp, "ZcExpNotify round trip");
+
+        var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(data, "Level.json"))).RootElement.GetProperty("Level");
+        uint need3 = doc[2].GetProperty("ExpToNext").GetUInt32(), pct4 = doc[3].GetProperty("StatPercent").GetUInt32();
+        uint slimeExp = 0;
+        foreach (var r in System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(data, "MonsterExp.json"))).RootElement.GetProperty("MonsterExp").EnumerateArray())
+            if (r.GetProperty("MonsterId").GetUInt32() == 1) slimeExp = r.GetProperty("Exp").GetUInt32();
+        Check(slimeExp > 0, "slime has an exp value");
+
+        // 골드 확률이 1000분율이라 시험은 항상 주도록 확률만 1000으로 바꾼 사본을 쓴다.
+        string cdata = Path.Combine(Path.GetTempPath(), "travel_tests_currency_" + Environment.ProcessId);
+        Directory.CreateDirectory(cdata);
+        foreach (string f in Directory.GetFiles(data, "*.json")) File.Copy(f, Path.Combine(cdata, Path.GetFileName(f)), true);
+        File.WriteAllText(Path.Combine(cdata, "MonsterCurrency.json"), System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(Path.Combine(data, "MonsterCurrency.json")), "\"ChancePermille\": \\d+", "\"ChancePermille\": 1000"));
+        uint goldMin = 0, goldMax = 0;
+        foreach (var r in System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(data, "MonsterCurrency.json"))).RootElement.GetProperty("MonsterCurrency").EnumerateArray())
+            if (r.GetProperty("MonsterId").GetUInt32() == 1) { goldMin = r.GetProperty("MinAmount").GetUInt32(); goldMax = r.GetProperty("MaxAmount").GetUInt32(); }
+        Check(goldMax >= goldMin && goldMin > 0, "slime has a gold range");
+
+        Game.Persistence.InMemoryPlayerStore store = new Game.Persistence.InMemoryPlayerStore();
+        const ulong Id = 880101;
+        PlayerState seed = PS(Id, 50); seed.Wallet.Add(new KeyValuePair<uint, uint>(1, 1000)); seed.Level = 3; seed.Exp = need3 - 1;      // 레벨 3에서 한 마리만 잡아도 레벨 업
+        store.SaveAsync(seed, CancellationToken.None).GetAwaiter().GetResult();
+
+        using (GatewayServerMain gw = new GatewayServerMain())
+        using (ZoneServerMain z1 = new ZoneServerMain())
+        {
+            Check(gw.Start(new GatewayOptions { ClientBindIp = "127.0.0.1", ClientPort = 0, ZoneBindIp = "127.0.0.1", ZonePort = 0, PlayerStore = store, SaveFlushIntervalMs = 50 }), "level: gateway starts");
+            Check(z1.Start(new ZoneServerOptions { ZoneId = 1, Capacity = 50, TickIntervalMs = 50, GatewayIp = "127.0.0.1", GatewayPort = (ushort)gw.ZoneEndPoint!.Port, GameDataDir = cdata }), "level: zone starts");
+            for (int i = 0; i < 200 && !z1.IsRegistered; ++i) Thread.Sleep(25);
+            using ClientService svc = new ClientService(gw.ClientEndPoint!, () => new Client(), new NetServiceOptions { MaxSessionCount = 4 });
+
+            Client c = Connect(svc);
+            Check(Login(c, Id), "level: login");
+            GwEnterZoneRes? r = Enter(c, 1, 1);
+            Check(r != null && r.Value.Success == 1, "level: enter");
+            int baseHp = 4500;
+            Check(OnZone(z1, zz => (int)((ZonePlayer)zz.FindEntityBase(Id)!).Level) == 3, "the saved level is restored");
+            Check(OnZone(z1, zz => zz.FindEntityBase(Id)!.CombatStats.MaxHp) == baseHp * (int)doc[2].GetProperty("StatPercent").GetUInt32() / 100, "max hp follows the level");
+
+            Check(OnZone(z1, zz => (long)((ZonePlayer)zz.FindEntityBase(Id)!).Wallet.GetValueOrDefault(1u)) == 1000, "the saved gold is restored");
+
+            OnZone(z1, zz =>
+            {
+                Monster? slime = null;
+                zz.ForEachInRadius(new Vec2(500, 500), 5000f, e => { if (slime == null && e is Monster m && m.Template.Id == 1 && !m.IsBoss) slime = m; });
+                zz.DealDamage(slime!, zz.FindEntityBase(Id), 1_000_000);
+                return 0;
+            });
+            Check(OnZone(z1, zz => (int)((ZonePlayer)zz.FindEntityBase(Id)!).Level) == 4, "a kill that completes the bar raises the level");
+            Check(OnZone(z1, zz => (long)((ZonePlayer)zz.FindEntityBase(Id)!).Exp) == slimeExp - 1, "surplus exp carries over to the new level");
+            Check(OnZone(z1, zz => zz.FindEntityBase(Id)!.CombatStats.MaxHp) == baseHp * (int)pct4 / 100, "level up recomputes max hp");
+            Check(OnZone(z1, zz => zz.FindEntityBase(Id)!.Hp == zz.FindEntityBase(Id)!.CombatStats.MaxHp), "level up refills hp");
+
+            uint gold = OnZone(z1, zz => ((ZonePlayer)zz.FindEntityBase(Id)!).Wallet.GetValueOrDefault(1u));
+            Check(gold >= 1000 + goldMin && gold <= 1000 + goldMax, "a kill pays gold from the monster's range");
+
+            c.Tx(new GwLeaveZoneReq());
+            Check(WaitFor(() => { PlayerState? p = store.Peek(Id); return p != null && p.Wallet.Count == 1 && p.Wallet[0].Value == gold; }), "gold is saved on leave");
+            Check(WaitFor(() => { PlayerState? p = store.Peek(Id); return p != null && p.Level == 4 && p.Exp == slimeExp - 1; }), "level and exp are saved on leave");
+        }
+    }
+
+    // 스킬 개방/구매/장착: 무료 스킬은 레벨이 되면 고정 칸(1~6)으로 자동 지급되고, 상점 스킬은 레벨/재화를 검사해 사서 레벨로 열린 칸 7·8 에 끼운다. 상태는 저장된다.
+    static void TestSkillBook()
+    {
+        // 와이어 왕복: 보유 스킬과 장착 칸이 상태 저장 패킷을 거쳐도 그대로다.
+        PlayerState ws = PS(2, 10); ws.Skills.Add(new KeyValuePair<uint, byte>(60, 7)); ws.Skills.Add(new KeyValuePair<uint, byte>(2, 2));
+        Span<byte> wb = stackalloc byte[ZoneStateSave.PacketSize];
+        new ZoneStateSave { State = ws }.Write(wb);
+        Check(ZoneStateSave.TryRead(wb, out ZoneStateSave back) && back.State.Skills.Count == 2 && back.State.Skills[0].Key == 60 && back.State.Skills[0].Value == 7 && back.State.Skills[1].Value == 2, "skills survive the state wire");
+        Check(Game.Persistence.PlayerStateCopy.Clone(ws).Skills.Count == 2, "clone keeps skills");
+        Span<byte> bk = stackalloc byte[ZcSkillBookNotify.Size];
+        new ZcSkillBookNotify { Count = 2, SkillIds = new ushort[] { 3, 9 }, Slots = new byte[] { 1, 0 }, ShopSlot7Level = 25, ShopSlot8Level = 35 }.Write(bk);
+        Check(ZcSkillBookNotify.TryRead(bk, out ZcSkillBookNotify bn) && bn.Count == 2 && bn.SkillIds[1] == 9 && bn.Slots[0] == 1 && bn.ShopSlot7Level == 25 && bn.ShopSlot8Level == 35, "ZcSkillBookNotify round trip");
+
+        string data = FindData();
+        uint price60 = 0, level61 = 0;
+        foreach (var r in System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(data, "HeroSkill.json"))).RootElement.GetProperty("HeroSkill").EnumerateArray())
+        {
+            if (r.GetProperty("HeroId").GetUInt32() != 1) continue;
+            if (r.GetProperty("SkillId").GetUInt32() == 60) price60 = r.GetProperty("Price").GetUInt32();
+            if (r.GetProperty("SkillId").GetUInt32() == 61) level61 = r.GetProperty("UnlockLevel").GetUInt32();
+        }
+        Check(price60 > 0 && level61 > SkillRules.SlotUnlockLevel(7), "hero 1 has shop skills 60 and 61 (61 needs a higher level)");
+
+        Game.Persistence.InMemoryPlayerStore store = new Game.Persistence.InMemoryPlayerStore();
+        const ulong Id = 880301;
+        PlayerState seed = PS(Id, 50); seed.Level = SkillRules.SlotUnlockLevel(7); seed.Wallet.Add(new KeyValuePair<uint, uint>(1, price60 + 2000));
+        store.SaveAsync(seed, CancellationToken.None).GetAwaiter().GetResult();
+
+        using (GatewayServerMain gw = new GatewayServerMain())
+        using (ZoneServerMain z1 = new ZoneServerMain())
+        {
+            Check(gw.Start(new GatewayOptions { ClientBindIp = "127.0.0.1", ClientPort = 0, ZoneBindIp = "127.0.0.1", ZonePort = 0, PlayerStore = store, SaveFlushIntervalMs = 50 }), "skills: gateway start");
+            Check(z1.Start(new ZoneServerOptions { ZoneId = 1, Capacity = 50, TickIntervalMs = 50, GatewayIp = "127.0.0.1", GatewayPort = (ushort)gw.ZoneEndPoint!.Port, GameDataDir = data }), "skills: zone start");
+            for (int i = 0; i < 200 && !z1.IsRegistered; ++i) Thread.Sleep(25);
+            using ClientService svc = new ClientService(gw.ClientEndPoint!, () => new Client(), new NetServiceOptions { MaxSessionCount = 4 });
+            Client c = Connect(svc);
+            Check(Login(c, Id), "skills: login");
+            GwEnterZoneRes? r = Enter(c, 1, 1);
+            Check(r != null && r.Value.Success == 1, "skills: enter");
+
+            Dictionary<uint, byte> Book() => OnZone(z1, zz => new Dictionary<uint, byte>(((ZonePlayer)zz.FindEntityBase(Id)!).Skills));
+            uint Gold() => OnZone(z1, zz => ((ZonePlayer)zz.FindEntityBase(Id)!).Wallet.GetValueOrDefault(1u));
+
+            Dictionary<uint, byte> b0 = Book();
+            Check(b0.Count == 6 && b0[1] == 1 && b0[2] == 2 && b0[7] == 3 && b0[16] == 4 && b0[17] == 5 && b0[28] == 6 && !b0.ContainsKey(60), "the six free skills are granted into their fixed slots");
+
+            c.Tx(new ZcSkillBuyReq { SkillId = 61 });       // 레벨이 모자란다
+            c.Tx(new ZcSkillBuyReq { SkillId = 999 });      // 내 영웅의 스킬이 아니다
+            c.Tx(new ZcSkillBuyReq { SkillId = 7 });        // 이미 보유(무료)
+            Thread.Sleep(300);
+            Check(Book().Count == 6 && Gold() == price60 + 2000, "rejected purchases change nothing");
+
+            c.Tx(new ZcSkillBuyReq { SkillId = 60 });
+            Check(WaitFor(() => Book().ContainsKey(60)), "a shop skill is bought");
+            Check(Book()[60] == 7 && Gold() == 2000, "the price is charged and the skill goes into the first open shop slot");
+            c.Tx(new ZcSkillBuyReq { SkillId = 60 });
+            Thread.Sleep(200);
+            Check(Gold() == 2000, "buying twice does not charge twice");
+
+            c.Tx(new ZcSkillEquipReq { SkillId = 17, Slot = 7 });       // 무료 스킬은 고정 칸
+            c.Tx(new ZcSkillEquipReq { SkillId = 60, Slot = 8 });       // 칸 8 은 아직 안 열렸다
+            c.Tx(new ZcSkillEquipReq { SkillId = 60, Slot = 3 });       // 고정 칸에는 끼울 수 없다
+            Thread.Sleep(300);
+            Dictionary<uint, byte> b1 = Book();
+            Check(b1[17] == 5 && b1[60] == 7, "fixed skills stay put, locked and fixed slots are refused");
+            c.Tx(new ZcSkillEquipReq { SkillId = 60, Slot = 0 });
+            Check(WaitFor(() => Book()[60] == 0), "a shop skill can be unequipped");
+            c.Tx(new ZcSkillEquipReq { SkillId = 60, Slot = 7 });
+            Check(WaitFor(() => Book()[60] == 7), "and equipped again");
+
+            c.Tx(new GwLeaveZoneReq());
+            Check(WaitFor(() =>
+            {
+                PlayerState? p = store.Peek(Id);
+                if (p == null) return false;
+                Dictionary<uint, byte> d = new Dictionary<uint, byte>();
+                foreach (var kv in p.Skills) d[kv.Key] = kv.Value;
+                return d.Count == 7 && d[60] == 7 && d[28] == 6 && p.Wallet.Count == 1 && p.Wallet[0].Value == 2000;
+            }), "skills, slots and the remaining gold are saved");
+        }
+    }
+
+    // 몬스터 기본 공격: 바로 때리지 않고 예비 동작(시전)을 거친 뒤 맞힌다. 예비 동작 중 대상이 사거리 밖으로 피하면 빗나간다.
+    static void TestMonsterWindup()
+    {
+        string data = FindData();
+        const ulong Id = 880301;
+        Game.Persistence.InMemoryPlayerStore store = new Game.Persistence.InMemoryPlayerStore();
+        store.SaveAsync(PS(Id, 4000), CancellationToken.None).GetAwaiter().GetResult();
+        using GatewayServerMain gw = new GatewayServerMain();
+        using ZoneServerMain z1 = new ZoneServerMain();
+        gw.Start(new GatewayOptions { ClientBindIp = "127.0.0.1", ClientPort = 0, ZoneBindIp = "127.0.0.1", ZonePort = 0, PlayerStore = store });
+        Check(z1.Start(new ZoneServerOptions { ZoneId = 1, Capacity = 50, TickIntervalMs = 10, GatewayIp = "127.0.0.1", GatewayPort = (ushort)gw.ZoneEndPoint!.Port, GameDataDir = data, MetricsIntervalMs = 0 }), "windup: zone starts");
+        for (int i = 0; i < 200 && !z1.IsRegistered; ++i) Thread.Sleep(25);
+        using ClientService svc = new ClientService(gw.ClientEndPoint!, () => new Client(), new NetServiceOptions { MaxSessionCount = 4 });
+        Client c = Connect(svc);
+        Check(Login(c, Id), "windup: login");
+        GwEnterZoneRes? r = Enter(c, 1, 1);
+        Check(r != null && r.Value.Success == 1, "windup: enter");
+
+        ulong monId = OnZone(z1, zz =>
+        {
+            Monster? slime = null;
+            zz.ForEachInRadius(new Vec2(500, 500), 5000f, e => { if (slime == null && e is Monster m && m.Template.Id == 1 && !m.IsBoss) slime = m; });
+            zz.Teleport(Id, new Vec2(slime!.Pos.X + 1.2f, slime.Pos.Y));      // 몬스터를 옮기면 복귀 한계를 넘어 돌아가 버리므로 플레이어를 옮긴다
+            slime.AddThreat(Id, 100);
+            return slime.Id;
+        });
+
+        int startHp = OnZone(z1, zz => zz.FindEntityBase(Id)!.Hp);
+        bool sawWindup = false, hitAfterWindup = false;
+        long end = Environment.TickCount64 + 6000;
+        while (Environment.TickCount64 < end && !hitAfterWindup)
+        {
+            (bool casting, int hp) = OnZone(z1, zz => (zz.FindEntityBase(monId)!.IsCasting, zz.FindEntityBase(Id)!.Hp));
+            if (casting) sawWindup = true;
+            if (hp < startHp) hitAfterWindup = sawWindup;
+            if (hp < startHp) break;
+            Thread.Sleep(5);
+        }
+        Check(sawWindup, "a monster prepares (casts) before its basic attack lands");
+        Check(hitAfterWindup, "the basic attack lands after the windup");
+
+        // 예비 동작 중에 멀리 피하면 빗나간다.
+        int hp0 = OnZone(z1, zz => zz.FindEntityBase(Id)!.Hp);
+        bool dodged = false;
+        for (long end2 = Environment.TickCount64 + 6000; Environment.TickCount64 < end2 && !dodged;)
+        {
+            bool casting = OnZone(z1, zz => zz.FindEntityBase(monId)!.IsCasting);
+            if (!casting) { Thread.Sleep(5); continue; }
+            int before = OnZone(z1, zz => zz.FindEntityBase(Id)!.Hp);
+            OnZone(z1, zz => { Vec2 mp = zz.FindEntityBase(monId)!.Pos; foreach (Vec2 d in new[] { new Vec2(30f, 0f), new Vec2(-30f, 0f), new Vec2(0f, 30f), new Vec2(0f, -30f) }) if (zz.Teleport(Id, new Vec2(mp.X + d.X, mp.Y + d.Y))) break; return 0; });      // 다른 몬스터가 없을 만큼 멀리
+            Thread.Sleep(700);
+            dodged = OnZone(z1, zz => zz.FindEntityBase(Id)!.Hp) >= before;      // 체력 재생이 있으므로 줄지 않았는지만 본다
+        }
+        Check(dodged, "leaving the reach during the windup makes the attack miss");
+    }
+
+    // 쓰기 큐: 같은 캐릭터 합치기, 대기 중 최신 상태 읽기, 실패 후 재시도, 문제 있는 한 건 격리(버림), 종료 때 내려 쓰기.
+    static void TestWriteBehind()
+    {
+        FlakyStore fs = new FlakyStore();
+        using (Game.Persistence.WriteBehindPlayerStore wb = new Game.Persistence.WriteBehindPlayerStore(fs, flushIntervalMs: 200, batchSize: 10, maxAttempts: 3, retryBackoffMs: 20))
+        {
+            wb.Enqueue(PS(1, 10)); wb.Enqueue(PS(1, 20)); wb.Enqueue(PS(1, 30));
+            PlayerState? pend = wb.LoadAsync(1, CancellationToken.None).GetAwaiter().GetResult();
+            Check(pend != null && pend.Hp == 30, "load sees the newest pending state before it reaches the db");
+            Check(wb.Flush(3000), "flush drains the queue");
+            Check(fs.Inner.Peek(1)?.Hp == 30 && fs.Inner.Count == 1, "same character is coalesced: only the newest state is written");
+            Check(fs.Inner.Peek(1)!.Items.Count == 1 && fs.Inner.Peek(1)!.Items[0].Key == 1001, "items are saved");
+
+            fs.FailNext = 2; wb.Enqueue(PS(2, 55));      // 묶음 저장과 한 명씩 저장이 한 번씩 실패한 뒤 다음 시도에서 성공한다
+            Check(WaitFor(() => fs.Inner.Peek(2)?.Hp == 55), "a failed save is retried and lands once the db is back");
+            Check(wb.Dropped == 0, "nothing dropped after a recovered failure");
+
+            fs.FailNext = 0; fs.PoisonId = 666;
+            long dropped0 = wb.Dropped;
+            wb.Enqueue(PS(666, 1)); wb.Enqueue(PS(3, 77)); wb.Enqueue(PS(4, 78));
+            Check(WaitFor(() => fs.Inner.Peek(3)?.Hp == 77 && fs.Inner.Peek(4)?.Hp == 78), "one poison record does not block the others (batch falls back to single saves)");
+            Check(WaitFor(() => wb.Dropped == dropped0 + 1 && wb.Pending == 0), "the poison record is dropped after max attempts");
+
+            fs.FailAll = true;
+            Task<PlayerState?> failed = wb.LoadAsync(999, CancellationToken.None);
+            Check(WaitFor(() => failed.IsCompleted) && failed.IsFaulted, "a db read failure surfaces as an error, not as 'new character'");
+            fs.FailAll = false;
+
+            wb.Enqueue(PS(5, 90));
+        }
+        Check(fs.Inner.Peek(5)?.Hp == 90, "dispose flushes what is still queued");
+    }
+
+    // Gateway + 저장소: 떠날 때 상태가 저장되고, 새 Gateway(메모리 상태 없음)가 저장소에서 읽어 복원하며, 읽기 실패는 입장을 거부한다.
+    static void TestPersistence()
+    {
+        string data = FindData();
+        Game.Persistence.InMemoryPlayerStore store = new Game.Persistence.InMemoryPlayerStore();
+        const ulong LeaveId = 880001, SeededId = 880002, NewId = 880003;
+
+        using (GatewayServerMain gw = new GatewayServerMain())
+        using (ZoneServerMain z1 = new ZoneServerMain())
+        {
+            Check(gw.Start(new GatewayOptions { ClientBindIp = "127.0.0.1", ClientPort = 0, ZoneBindIp = "127.0.0.1", ZonePort = 0, PlayerStore = store, SaveFlushIntervalMs = 50 }), "gateway with a store starts");
+            Check(z1.Start(new ZoneServerOptions { ZoneId = 1, Capacity = 50, TickIntervalMs = 50, GatewayIp = "127.0.0.1", GatewayPort = (ushort)gw.ZoneEndPoint!.Port, GameDataDir = data, MetricsIntervalMs = 0 }), "zone starts (persistence test)");
+            for (int i = 0; i < 200 && !z1.IsRegistered; ++i) Thread.Sleep(25);
+            using ClientService svc = new ClientService(gw.ClientEndPoint!, () => new Client(), new NetServiceOptions { MaxSessionCount = 8 });
+
+            Client c = Connect(svc);
+            Check(Login(c, NewId), "login new character");
+            GwEnterZoneRes? r = Enter(c, 1, 1);
+            Check(r != null && r.Value.Success == 1, "a character without a saved row enters normally");
+            int maxHp = OnZone(z1, zz => zz.FindEntityBase(NewId)!.CombatStats.MaxHp);
+            Check(OnZone(z1, zz => zz.FindEntityBase(NewId)!.Hp) == maxHp, "new character starts at full hp");
+            c.Tx(new GwLeaveZoneReq());
+            Check(WaitFor(() => store.Peek(NewId) != null), "leaving the zone writes the character to the store");
+
+            // 저장소에 미리 넣어 둔 상태(예: 이전 접속 때 저장된 것)를 새로 접속하면 읽어 와 복원한다. Gateway 메모리에는 없다.
+            store.SaveAsync(PS(SeededId, 50), CancellationToken.None).GetAwaiter().GetResult();
+            Client c2 = Connect(svc);
+            Check(Login(c2, SeededId), "login seeded character");
+            GwEnterZoneRes? r2 = Enter(c2, 1, 1);
+            Check(r2 != null && r2.Value.Success == 1, "seeded character enters");
+            Check(OnZone(z1, zz => zz.FindEntityBase(SeededId)?.Hp ?? -1) == 50, "hp is restored from the store");
+        }
+
+        // 저장소 읽기가 실패하면 입장시키지 않는다(빈 상태로 들어가 좋은 데이터를 덮어쓰지 않도록).
+        FlakyStore down = new FlakyStore { FailAll = true };
+        using (GatewayServerMain gw = new GatewayServerMain())
+        using (ZoneServerMain z1 = new ZoneServerMain())
+        {
+            Check(gw.Start(new GatewayOptions { ClientBindIp = "127.0.0.1", ClientPort = 0, ZoneBindIp = "127.0.0.1", ZonePort = 0, PlayerStore = down }), "gateway with a failing store starts");
+            Check(z1.Start(new ZoneServerOptions { ZoneId = 1, Capacity = 50, TickIntervalMs = 50, GatewayIp = "127.0.0.1", GatewayPort = (ushort)gw.ZoneEndPoint!.Port, GameDataDir = data, MetricsIntervalMs = 0 }), "zone starts (failing store test)");
+            for (int i = 0; i < 200 && !z1.IsRegistered; ++i) Thread.Sleep(25);
+            using ClientService svc = new ClientService(gw.ClientEndPoint!, () => new Client(), new NetServiceOptions { MaxSessionCount = 4 });
+            Client c = Connect(svc);
+            Check(Login(c, 880010), "login (failing store)");
+            GwEnterZoneRes? r = Enter(c, 1, 1);
+            Check(r != null && r.Value.Success == 0, "enter is refused when the store cannot be read");
+            Check(OnZone(z1, zz => zz.PlayerCount) == 0, "and nobody was placed in the zone");
+            down.FailAll = false;
+            GwEnterZoneRes? r2 = Enter(c, 1, 1);
+            Check(r2 != null && r2.Value.Success == 1, "after the db is back the same character can enter");
+        }
+    }
+
     sealed class FakeConfig : IServerConfig<int>
     {
         public bool Init(string path) => true;
@@ -357,6 +801,13 @@ public static class Program
         AbortExitCode();
         SilentGateway();
         DuplicateZoneRetry();
+        TestZoneZero();
+        TestTerrainCheat();
+        TestMonsterWindup();
+        TestSkillBook();
+        TestWriteBehind();
+        TestPersistence();
+        TestLevel();
         if (args.Length > 0 && args[0] == "chaos") return Chaos(args.Length > 1 ? int.Parse(args[1]) : 60, args.Length > 2 ? int.Parse(args[2]) : 20);
         if (args.Length > 0 && args[0] == "load") return Load(args.Length > 1 ? int.Parse(args[1]) : 100, args.Length > 2 ? int.Parse(args[2]) : 10);
         string realData = FindData();

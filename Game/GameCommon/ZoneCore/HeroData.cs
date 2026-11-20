@@ -16,7 +16,22 @@ public sealed class HeroTemplate
     public string Name = string.Empty;                  // 이름 (UTF-8, 로그/디버깅용)
     public CombatStats Stats = CombatStats.Default;     // 전투 능력치
     public float Speed = 6.0f;                          // 이동 속도 (units/sec)
-    public readonly List<uint> Skills = new List<uint>();   // 사용할 수 있는 스킬 ID (최대 MaxHeroSkills). HeroData.AssignSkill로 채운다
+    public readonly List<uint> Skills = new List<uint>();   // 이 영웅이 배울 수 있는 스킬 ID (최대 MaxHeroSkills, 표 순서). HeroData.AssignSkill로 채운다
+    public readonly Dictionary<uint, SkillUnlock> Unlocks = new Dictionary<uint, SkillUnlock>();    // 스킬 ID -> 개방 조건(레벨, 가격)
+}
+
+/// <summary>
+/// 스킬 개방 조건(HeroSkill 시트의 한 행). Price 가 0이면 UnlockLevel 에 이르면 Slot 칸으로 자동 지급되고,
+/// 0보다 크면 UnlockLevel 이상에서 PriceCurrencyId 재화 Price 만큼을 내고 사서 상점 칸(7·8)에 장착한다.
+/// </summary>
+public sealed class SkillUnlock
+{
+    public uint UnlockLevel = 1;
+    public uint PriceCurrencyId;
+    public uint Price;
+    public uint Slot;       // 무료 스킬이 들어가는 고정 칸(1~). 상점 스킬은 0이며 칸 7·8 중 고른 곳에 장착한다
+
+    public bool IsFree => Price == 0;
 }
 
 /// <summary>
@@ -60,7 +75,7 @@ public sealed class HeroData
 
     /// <summary>영웅에게 스킬을 연결한다. 영웅이 쓸 수 있는 스킬이 된다.</summary>
     /// <returns>연결했으면 true, 영웅/스킬이 없거나 이미 연결됐거나 영웅당 상한(MaxHeroSkills)을 넘으면 false</returns>
-    public bool AssignSkill(uint heroId, uint skillId)
+    public bool AssignSkill(uint heroId, uint skillId, uint unlockLevel = 1, uint priceCurrencyId = 0, uint price = 0, uint slot = 0)
     {
         if (!_heroes.TryGetValue(heroId, out HeroTemplate? hero) || !_skills.ContainsKey(skillId))
             return false;
@@ -68,8 +83,15 @@ public sealed class HeroData
         List<uint> skills = hero.Skills;
         if (skills.Count >= SkillRules.MaxHeroSkills || skills.Contains(skillId))
             return false;
+        if (price > 0 ? slot != 0 : slot > SkillRules.FixedSlots)
+            return false;           // 상점 스킬은 고정 칸이 없고, 무료 스킬은 칸 1~6 이어야 한다
+        if (slot != 0)
+            foreach (SkillUnlock other in hero.Unlocks.Values)
+                if (other.Slot == slot)
+                    return false;   // 같은 고정 칸을 둘이 쓸 수 없다
 
         skills.Add(skillId);
+        hero.Unlocks[skillId] = new SkillUnlock { UnlockLevel = Math.Max(1u, unlockLevel), PriceCurrencyId = priceCurrencyId, Price = price, Slot = slot };
         return true;
     }
 

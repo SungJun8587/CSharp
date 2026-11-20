@@ -87,7 +87,7 @@ public sealed class PendingRequests<TResponse> : IDisposable
         _onError = onError;
         if (maxPerOwner <= 0) throw new ArgumentOutOfRangeException(nameof(maxPerOwner));
         _maxPerOwner = maxPerOwner;
-        _clock = clock ?? (() => Environment.TickCount64);
+        _clock = clock ?? (() => NetClock.NowMs);
         _wheel = new TimerWheel(_clock(), tickMs, onError);
     }
 

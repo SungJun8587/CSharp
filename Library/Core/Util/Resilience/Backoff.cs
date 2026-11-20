@@ -62,7 +62,12 @@ public sealed class BackoffState
         int shift = Math.Max(0, Math.Min(failCount - 1, Math.Min(maxShift, 62)));
         long delay = baseMs > (long.MaxValue >> shift) ? maxMs : Math.Min(baseMs << shift, maxMs);
         if (jitterMs > 0)
-            delay = Math.Min(delay + Random.Shared.Next(0, jitterMs + 1), maxMs);
+        {
+            // 상한을 넘기지 않으면서 지터를 유지한다: 상한에 닿은 구간은 [max-jitter, max] 로 아래쪽에 분산한다.
+            // (더한 뒤 상한으로 자르면 상한 도달 후 지터가 사라져 모든 클라이언트가 같은 간격으로 동시에 재시도한다)
+            long j = Random.Shared.Next(0, jitterMs + 1);
+            delay = delay + j > maxMs ? Math.Max(0, maxMs - j) : delay + j;
+        }
         return delay;
     }
 }

@@ -88,11 +88,20 @@ public sealed class HashRing<TNode> where TNode : notnull
     private void Rebuild()
     {
         int total = _nodes.Count * _virtualNodes;
-        var entries = new List<(ulong Point, TNode Owner)>(total);
+        var entries = new List<(ulong Point, TNode Owner, string Name)>(total);
         foreach (KeyValuePair<TNode, ulong[]> kv in _nodes)
+        {
+            string name = _nameOf(kv.Key);
             foreach (ulong p in kv.Value)
-                entries.Add((p, kv.Key));
-        entries.Sort((a, b) => a.Point.CompareTo(b.Point));
+                entries.Add((p, kv.Key, name));
+        }
+
+        // 같은 점이 겹치면 노드 이름으로 정한다: 추가 순서/정렬 구현과 무관하게 프로세스마다 같은 링이 나오게(일관 해싱의 전제).
+        entries.Sort((a, b) =>
+        {
+            int c = a.Point.CompareTo(b.Point);
+            return c != 0 ? c : string.CompareOrdinal(a.Name, b.Name);
+        });
         ulong[] points = new ulong[entries.Count];
         TNode[] owners = new TNode[entries.Count];
         for (int i = 0; i < entries.Count; ++i)

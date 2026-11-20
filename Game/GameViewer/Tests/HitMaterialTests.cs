@@ -11,8 +11,9 @@ namespace GameViewer.Tests
             T.Check(HitMaterial.Of(19, true) == HitMat.Metal && HitMaterial.Of(20, true) == HitMat.Metal && HitMaterial.Of(14, true) == HitMat.Metal, "knights and bomb are metal");
             T.Check(HitMaterial.Of(5, true) == HitMat.Plant && HitMaterial.Of(9, true) == HitMat.Plant && HitMaterial.Of(122, true) == HitMat.Stone, "mushroom and cactus are plant, golem boss is stone");
             T.Check(HitMaterial.Of(3, true) == HitMat.Flesh && HitMaterial.Of(7, true) == HitMat.Flesh && HitMaterial.Of(6, true) == HitMat.Shell && HitMaterial.Of(12, true) == HitMat.Shell, "beasts are flesh, hermit and crab are shell");
+            T.Check(HitMaterial.Of(23, true) == HitMat.Wood && HitMaterial.Of(24, true) == HitMat.Fire, "treant is wood, flame spirit is fire");
             T.Check(HitMaterial.Of(1, false) == HitMat.Flesh, "players are never gel");
-            for (int t = 1; t <= 22; ++t)
+            for (int t = 1; t <= 24; ++t)
             {
                 HitMat m = HitMaterial.Of((uint)t, true); int a, b; HitMaterial.Colors(m, out a, out b);
                 T.Check(a != b && a >= 0 && b >= 0 && a <= 0xFFFFFF && b <= 0xFFFFFF, "valid colors for template " + t);

@@ -41,7 +41,7 @@ public sealed class RedisConnectionPool : IDisposable
 
     private sealed class PendingCommand
     {
-        public string[] Args = Array.Empty<string>();
+        public IReadOnlyList<string> Args = Array.Empty<string>();
         public RedisCallback? Callback;
         public long EnqueuedMs;                 // 대기 시작 시각(단조 시계) — 오래 기다린 요청을 에러로 끝내는 기준
     }
@@ -246,9 +246,7 @@ public sealed class RedisConnectionPool : IDisposable
                     return false;
                 }
 
-                var argsCopy = new string[args.Count];
-                for (int i = 0; i < argsCopy.Length; ++i)
-                    argsCopy[i] = args[i];
+                IReadOnlyList<string> argsCopy = RedisHelper.SnapshotArgs(args);
 
                 _pending.Enqueue(new PendingCommand { Args = argsCopy, Callback = callback, EnqueuedMs = TimeUtil.MonotonicNowMillis() });
                 return true;

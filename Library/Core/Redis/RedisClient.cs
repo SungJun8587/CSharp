@@ -234,7 +234,9 @@ public sealed class RedisClient : IDisposable
             pending = conn.Pending;
             conn.Pending = null;
             Interlocked.Exchange(ref conn.CommandStartMs, 0);
-            conn.SendQueue.Clear();     // 송신 중인 버퍼는 송신 루프가 쥐고 있어 여기서 반납하지 않는다
+            // 아직 꺼내지 않은 항목의 버퍼는 여기서 반납한다. 송신 중인 버퍼는 송신 루프가 쥐고 있어 그쪽에서 반납한다.
+            while (conn.SendQueue.TryDequeue(out SendItem queued))
+                ArrayPool<byte>.Shared.Return(queued.Buffer);
         }
 
         pending?.Invoke(RedisHelper.MakeError(ReasonToString(reason)));

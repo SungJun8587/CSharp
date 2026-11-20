@@ -47,6 +47,7 @@ public class Monster : ZoneEntity
     internal ulong _nextThinkMs;                            // 다음 사고 시각 (존 논리 시간)
     internal ulong _targetId;                               // 현재 추적/공격 대상 (0이면 없음)
     internal Vec2 _lastTargetPos;                           // 마지막으로 이동 명령을 내릴 때의 대상 위치 (재경로 판단용)
+    internal ulong _basicReadyAtMs;                         // 기본 공격 예비 동작용 가상 스킬의 재사용 시각 (실제 간격은 NextAttackMs 가 정한다)
     internal ulong _skillReadyAtMs;                         // 몬스터 스킬을 다시 쓸 수 있는 존 논리 시각
     internal ulong _noAggroUntilMs;                         // 이 시각 전에는 근접 선공으로 새 대상을 잡지 않는다
     internal ulong _tauntId;                                // 도발한 엔티티 ID (_tauntUntilMs 전까지 이 대상을 우선 추적)

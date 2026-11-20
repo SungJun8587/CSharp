@@ -1,0 +1,116 @@
+{
+  "MonsterExp": [
+    {
+      "MonsterId": 1,
+      "Exp": 19
+    },
+    {
+      "MonsterId": 2,
+      "Exp": 26
+    },
+    {
+      "MonsterId": 3,
+      "Exp": 26
+    },
+    {
+      "MonsterId": 4,
+      "Exp": 35
+    },
+    {
+      "MonsterId": 5,
+      "Exp": 34
+    },
+    {
+      "MonsterId": 6,
+      "Exp": 51
+    },
+    {
+      "MonsterId": 7,
+      "Exp": 53
+    },
+    {
+      "MonsterId": 8,
+      "Exp": 66
+    },
+    {
+      "MonsterId": 9,
+      "Exp": 73
+    },
+    {
+      "MonsterId": 10,
+      "Exp": 68
+    },
+    {
+      "MonsterId": 11,
+      "Exp": 75
+    },
+    {
+      "MonsterId": 12,
+      "Exp": 86
+    },
+    {
+      "MonsterId": 13,
+      "Exp": 85
+    },
+    {
+      "MonsterId": 14,
+      "Exp": 27
+    },
+    {
+      "MonsterId": 15,
+      "Exp": 71
+    },
+    {
+      "MonsterId": 16,
+      "Exp": 91
+    },
+    {
+      "MonsterId": 17,
+      "Exp": 91
+    },
+    {
+      "MonsterId": 18,
+      "Exp": 140
+    },
+    {
+      "MonsterId": 19,
+      "Exp": 132
+    },
+    {
+      "MonsterId": 20,
+      "Exp": 163
+    },
+    {
+      "MonsterId": 21,
+      "Exp": 176
+    },
+    {
+      "MonsterId": 22,
+      "Exp": 232
+    },
+    {
+      "MonsterId": 23,
+      "Exp": 173
+    },
+    {
+      "MonsterId": 24,
+      "Exp": 134
+    },
+    {
+      "MonsterId": 101,
+      "Exp": 800
+    },
+    {
+      "MonsterId": 108,
+      "Exp": 1500
+    },
+    {
+      "MonsterId": 121,
+      "Exp": 3000
+    },
+    {
+      "MonsterId": 122,
+      "Exp": 6000
+    }
+  ]
+}

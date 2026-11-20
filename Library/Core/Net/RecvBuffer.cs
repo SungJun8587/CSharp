@@ -1,6 +1,7 @@
 ﻿// RecvBuffer.cs : implementation of the RecvBuffer class.
 using System;
 using System.Buffers;
+using Core.Util;
 
 namespace Core.Net;
 
@@ -39,7 +40,7 @@ public sealed class RecvBuffer
         if (bufferSize <= 0 || wanted > MaxCapacity)
             throw new ArgumentOutOfRangeException(nameof(bufferSize));
 
-        return (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)wanted);
+        return BitUtil.NextPowerOfTwo((int)wanted);
     }
 
     /// <summary>전체 용량(논리 크기). 풀에서 대여한 실제 배열은 이보다 클 수 있다.</summary>

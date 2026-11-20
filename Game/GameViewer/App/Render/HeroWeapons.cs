@@ -165,7 +165,6 @@ namespace GameViewer.App.Render
             float vib = t >= 0f && t < 260f ? (float)Math.Sin(t * 0.55) * (1f - t / 260f) * u * 0.28f : 0f;   // 놓은 뒤 시위 떨림
             float hh = u * 0.95f, bend = u * (0.34f + 0.28f * draw);
             int A = (int)(255 * Math.Min(1f, op));
-            float perpX = 0f;
 
             PointF top = new PointF(bowX, bowY - hh), bot = new PointF(bowX, bowY + hh);
             PointF mid = new PointF(bowX + fx * bend, bowY);

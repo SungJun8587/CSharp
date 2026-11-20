@@ -16,6 +16,10 @@ namespace Game.Generated
 
 		public uint HeroId { get; set; }
 		public uint SkillId { get; set; }
+		public uint UnlockLevel { get; set; }
+		public uint PriceCurrencyId { get; set; }
+		public uint Price { get; set; }
+		public uint Slot { get; set; }
 
 		/// <summary>헤더의 [min..max]를 벗어난 값을 errors에 덧붙인다.</summary>
 		public void Validate(string where, List<string> errors)

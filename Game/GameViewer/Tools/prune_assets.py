@@ -4,9 +4,12 @@
       python prune_assets.py <Assets 폴더> --apply    (실제로 <Assets>\\_unused 로 이동)
 기준: sprites.json 의 모든 pattern(걷기/공격/피격/사망/대기, 무기, 앵커)이 가리키는 파일과 atlases 에 적힌 파일.
 몬스터/영웅/나무 폴더 안에서는 참조되지 않는 파일만, 폴더 전체가 참조되지 않으면 폴더째 옮긴다.
-sprites.json 이 모르는 폴더(Forest 배경, 사운드 등 다른 코드가 읽는 것)도 후보에 올라오므로 --apply 전에 목록을 꼭 확인할 것.
+fx, props, skillicons 는 코드가 직접 읽으므로 건드리지 않는다. 그 밖에 코드가 직접 읽는 폴더가 더 생기면 KEEP 에 더한다.
 """
 import json, os, shutil, sys
+
+# 코드가 sprites.json 과 상관없이 직접 읽는 폴더(FxSprites, Decor, SkillIcons)는 후보에서 뺀다.
+KEEP = {'fx', 'props', 'skillicons'}
 
 def fmt(p, *a):
     return p.replace('{0:000}', '{0:03d}').replace('{1:00}', '{1:02d}').replace('{0}', '{0}').format(*a)
@@ -63,7 +66,7 @@ def main():
     cand = []
     for name in sorted(os.listdir(root)):
         p = os.path.join(root, name)
-        if name.startswith('_') or name == 'sprites.json' or not os.path.isdir(p): continue
+        if name.startswith('_') or name in KEEP or name == 'sprites.json' or not os.path.isdir(p): continue
         if name not in folders_used: cand.append((name, True)); continue
         for dp, dn, fn in os.walk(p):
             for f in fn:

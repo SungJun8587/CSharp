@@ -76,6 +76,10 @@ public static class SkillRules
 {
     public const uint MaxSkillTargets = 32;                         // Area 한 번에 맞을 수 있는 수의 절대 상한
     public const uint MaxHeroSkills = GameConsts.MaxHeroSkills;     // 영웅 한 명이 가질 수 있는 스킬 수 상한 (Const 시트)
+    public const int FixedSlots = 6;                                // 칸 1~6: 레벨이 되면 자동 지급되는 무료 스킬의 고정 칸
+    public const int TotalSlots = 8;                                // 칸 7~8: 상점에서 산 스킬을 끼우는 칸
+    public static readonly uint[] ShopSlotUnlockLevels = { 25, 35 };    // 칸 7, 8 이 열리는 레벨
+    public static uint SlotUnlockLevel(int slot) => slot > FixedSlots && slot <= TotalSlots ? ShopSlotUnlockLevels[slot - FixedSlots - 1] : 1u;
     public const uint MaxSkillDamagePercent = 100000;
     public const uint MaxCastTimeMs = 10000;                        // 시전 시간 상한
     public const float MaxProjectileSpeed = 1000.0f;                // 투사체 속도 상한 (units/sec)

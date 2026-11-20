@@ -70,7 +70,8 @@ internal sealed class SendBufferChunk
 
     public SendBufferChunk(int chunkSize)
     {
-        _array = new byte[chunkSize];
+        // 쓴 만큼만 보내므로 0으로 채울 필요가 없다(64KB 청크를 매번 지우는 비용을 던다). 송신 큐에 남은 구간은 항상 Close 된 쓰기 영역이다.
+        _array = GC.AllocateUninitializedArray<byte>(chunkSize);
     }
 
     public bool IsOpen => _openBuffer != null;

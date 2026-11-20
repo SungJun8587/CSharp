@@ -30,6 +30,7 @@ namespace GameViewer.App.Render
             }
             DrawThreats(g, s, v, now);
             DrawStreak(g, w, v, now);
+            DrawLevelUp(g, w, v, now);
         }
 
         // ------------------------------------------------------------------ 저체력
@@ -132,6 +133,53 @@ namespace GameViewer.App.Render
                     new PointF(ix + (float)Math.Cos(ang - 2.5) * sz, iy + (float)Math.Sin(ang - 2.5) * sz) };
                 g.FillPolygon(_res.Brush(Resources.Clamp(a + 30), 255, 90, 70), tri);
                 g.DrawPolygon(_res.Pen(Resources.Clamp(a + 60), 255, 235, 200, 2f), tri);
+            }
+        }
+
+        // ------------------------------------------------------------------ 레벨 업
+
+        /// <summary>화면 위쪽 가운데에 커졌다 가라앉는 "LEVEL UP!"과 새 레벨. 효과가 끝나기 전에 서서히 사라진다.</summary>
+        private void DrawLevelUp(Graphics g, WorldModel w, ViewState v, long now)
+        {
+            for (int i = 0; i < w.Effects.Count; ++i)
+            {
+                ViewEffect fx = w.Effects[i];
+                if (fx.Kind != EffectKind.LevelUp || fx.Expired(now)) continue;
+                float p = fx.Progress(now);
+                float pop = 1f + 1.3f * Math.Max(0f, 1f - p * 7f) * Math.Max(0f, 1f - p * 7f);      // 크게 나타나 제자리로 내려앉는다
+                float a = p > 0.78f ? (1f - p) / 0.22f : 1f;
+                float cx = v.Width / 2f, cy = v.Height * 0.26f - p * 8f;
+                if (p < 0.12f)                                                                        // 화면 전체가 금빛으로 번쩍
+                    g.FillRectangle(_res.Brush((int)(80 * (1f - p / 0.12f)), 255, 240, 190), 0, 0, v.Width, v.Height);
+                float fw = v.Width * 0.5f * Math.Min(1f, p * 5f);                                     // 좌우로 뻗는 빛줄기
+                if (fw > 2f)
+                {
+                    using (System.Drawing.Drawing2D.LinearGradientBrush lb = new System.Drawing.Drawing2D.LinearGradientBrush(new RectangleF(cx - fw, cy - 3f, fw * 2f, 6f), Color.Transparent, Color.Transparent, 0f))
+                    {
+                        System.Drawing.Drawing2D.ColorBlend cb = new System.Drawing.Drawing2D.ColorBlend(3);
+                        int fa = Resources.Clamp((int)(230 * a));
+                        cb.Colors = new Color[] { Color.FromArgb(0, 255, 226, 120), Color.FromArgb(fa, 255, 246, 200), Color.FromArgb(0, 255, 226, 120) };
+                        cb.Positions = new float[] { 0f, 0.5f, 1f };
+                        lb.InterpolationColors = cb;
+                        g.FillRectangle(lb, cx - fw, cy - 3f, fw * 2f, 6f);
+                        g.FillRectangle(lb, cx - fw, cy - 1f, fw * 2f, 2f);
+                    }
+                }
+                System.Drawing.Drawing2D.GraphicsState gs = g.Save();
+                g.TranslateTransform(cx, cy);
+                g.ScaleTransform(pop, pop);
+                int ta = Resources.Clamp((int)(255 * a));
+                _res.OutlinedText(g, fx.Text ?? "LEVEL UP!", _res.Huge, Color.FromArgb(ta, 255, 214, 90), 0f, 2f, _center);       // 아래에 깔리는 짙은 금색
+                _res.OutlinedText(g, fx.Text ?? "LEVEL UP!", _res.Huge, Color.FromArgb(ta, 255, 240, 170), 0f, 0f, _center);
+                float sh = (float)Math.Sin(p * 26f);                                                                               // 글자 위를 스치는 번쩍임
+                if (p < 0.6f && sh > 0f) _res.OutlinedText(g, fx.Text ?? "LEVEL UP!", _res.Huge, Color.FromArgb(Resources.Clamp((int)(150 * sh * a)), 255, 255, 255), 0f, 0f, _center);
+                float ow = 120f + 40f * Math.Min(1f, p * 6f);                                                                      // Lv 양옆 장식선과 마름모
+                g.DrawLine(_res.Pen((int)(200 * a), 255, 226, 120, 2f), -ow - 70f, 56f, -70f, 56f);
+                g.DrawLine(_res.Pen((int)(200 * a), 255, 226, 120, 2f), 70f, 56f, ow + 70f, 56f);
+                g.FillPolygon(_res.Brush((int)(240 * a), 255, 244, 190), new PointF[] { new PointF(-66f, 56f), new PointF(-60f, 50f), new PointF(-54f, 56f), new PointF(-60f, 62f) });
+                g.FillPolygon(_res.Brush((int)(240 * a), 255, 244, 190), new PointF[] { new PointF(66f, 56f), new PointF(60f, 50f), new PointF(54f, 56f), new PointF(60f, 62f) });
+                _res.OutlinedText(g, "Lv " + fx.Value, _res.Big, Color.FromArgb(ta, 255, 250, 225), 0f, 46f, _center);
+                g.Restore(gs);
             }
         }
 

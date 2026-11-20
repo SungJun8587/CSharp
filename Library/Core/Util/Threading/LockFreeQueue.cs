@@ -44,7 +44,7 @@ public sealed class LockFreeQueue<T>
         if (capacity > (1 << 30))
             throw new ArgumentOutOfRangeException(nameof(capacity));
 
-        int size = (int)RoundUpPow2((uint)capacity);
+        int size = BitUtil.NextPowerOfTwo(capacity);
         _slots = new Slot[size];
         _mask = size - 1;
         for (int i = 0; i < size; ++i)
@@ -296,12 +296,5 @@ public sealed class LockFreeQueue<T>
     {
         if (Volatile.Read(ref _producersWaiting) != 0)
             lock (_producerGate) Monitor.Pulse(_producerGate);
-    }
-
-    private static uint RoundUpPow2(uint v)
-    {
-        v--;
-        v |= v >> 1; v |= v >> 2; v |= v >> 4; v |= v >> 8; v |= v >> 16;
-        return v + 1;
     }
 }

@@ -65,6 +65,10 @@ public abstract class PacketSession : Session
 
         while (true)
         {
+            // 핸들러가 Disconnect 했다면 같은 버퍼에 남은 패킷은 처리하지 않는다(끊긴 세션이 계속 명령을 실행하지 않게).
+            if (!IsConnected)
+                break;
+
             int dataSize = buffer.Length - processed;
             if (dataSize < PacketHeader.HeaderSize)
                 break;

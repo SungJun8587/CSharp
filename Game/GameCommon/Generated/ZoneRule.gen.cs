@@ -17,6 +17,9 @@ namespace Game.Generated
 		public uint ZoneId { get; set; }
 		public bool AllowPvp { get; set; }
 		public bool AllowDuel { get; set; }
+		public uint Terrain { get; set; }
+		public uint AllMonsterCount { get; set; }
+		public uint AllBossCount { get; set; }
 
 		/// <summary>헤더의 [min..max]를 벗어난 값을 errors에 덧붙인다.</summary>
 		public void Validate(string where, List<string> errors)

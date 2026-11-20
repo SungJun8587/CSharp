@@ -45,7 +45,7 @@ namespace GameViewer.App.Render
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
             g.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
-            ZoneTheme.Current = ZoneTheme.For(s.ZoneId); ZoneTheme.CurrentZoneId = s.ZoneId; ZoneGates.Current = s.Data.Gates;
+            ZoneTheme.Current = ZoneTheme.For(s.ZoneId); ZoneTheme.CurrentZoneId = ZoneTheme.TerrainId(s.ZoneId); ZoneGates.Current = s.Data.Gates;
             g.Clear(ClearColor(ZoneTheme.Current));
             float shx, shy; s.World.ShakeOffset(now, out shx, out shy);
             float shk = v.Settings.ShakeScale;

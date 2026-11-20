@@ -1,6 +1,7 @@
 ﻿//***************************************************************************
 // ZoneThemeTests.cs : 존 번호 -> 맵 분위기, 사막 소품 고르기.
 //***************************************************************************
+using GameViewer.Core.Data;
 using GameViewer.Core.Logic;
 
 namespace GameViewer.Tests
@@ -22,7 +23,9 @@ namespace GameViewer.Tests
             T.Eq(MapKind.Volcano, ZoneTheme.For(4), "zone 4 is volcano");
             T.Eq(MapKind.Swamp, ZoneTheme.For(5), "zone 5 is swamp");
             T.Eq("설원", ZoneTheme.NameOf(3), "zone 3 name");
-            T.Eq(10, ZoneTheme.Zones.Length, "ten selectable zones");
+            T.Eq(11, ZoneTheme.Zones.Length, "ten themed zones plus the test zone");
+            T.Eq("시험장", ZoneTheme.NameOf(0), "zone 0 is the test zone");
+            T.Eq(0u, ZoneTheme.TestZone, "test zone id is 0");
             T.Eq(MapKind.Crystal, ZoneTheme.For(8), "zone 8 is crystal cave");
             T.Eq("암흑", ZoneTheme.NameOf(10), "zone 10 name");
             for (int z = 3; z <= 10; ++z) T.Check(ZonePools.All[(uint)z].Length >= 4, "zone " + z + " has pools");
@@ -64,6 +67,61 @@ namespace GameViewer.Tests
             T.Check(ZoneGates.Entered(gs, 997, 600, 0, 0, 1000, 1000, 6) == null, "edge outside gate width does not");
             float cx, cy; ZoneGates.CenterOf(e, 0, 0, 1000, 1000, out cx, out cy);
             T.Check(cx == 1000 && cy == 500, "gate center");
+        }
+
+        public static void TestTerrainPick()
+        {
+            uint keep = ZoneTheme.TestTerrain;
+            for (uint t = 1; t <= 10; ++t)
+            {
+                ZoneTheme.TestTerrain = t;
+                T.Check(ZoneTheme.For(ZoneTheme.TestZone) == ZoneTheme.For(t), "test zone shows terrain " + t);
+                T.Eq(t, ZoneTheme.TerrainId(ZoneTheme.TestZone), "terrain id " + t);
+                T.Eq(t, ZoneTheme.TerrainId(t), "other zones keep their own terrain " + t);
+            }
+            T.Check(ZoneTheme.NameOf(ZoneTheme.TestZone) == "시험장", "test zone keeps its name");
+            T.Eq(10, ZoneTheme.TerrainZones.Length, "ten terrains");
+            ZoneTheme.TestTerrain = keep;
+        }
+
+        public static void TestTerrainData()
+        {
+            uint keep = ZoneTheme.TestTerrain;
+            System.Func<string, string> read = delegate (string t)
+            {
+                if (t == "Block") return "{\"Block\":[{\"ZoneId\":1,\"Type\":\"Rect\",\"X\":1,\"Y\":2,\"W\":3,\"H\":4,\"R\":0},{\"ZoneId\":3,\"Type\":\"Rect\",\"X\":9,\"Y\":2,\"W\":3,\"H\":4,\"R\":0}]}";
+                if (t == "ZoneRule") return "{\"ZoneRule\":[{\"ZoneId\":0,\"Terrain\":3},{\"ZoneId\":1,\"Terrain\":0}]}";
+                return null;
+            };
+            GameData a = GameData.Load(read, 0);
+            T.Eq(3u, a.Terrain, "test zone takes the terrain from ZoneRule");
+            T.Eq(1, a.Blocks.Count, "and its obstacles"); T.Eq(9f, a.Blocks[0].X, "obstacles of terrain 3");
+            T.Eq(3u, ZoneTheme.TestTerrain, "the view theme follows the data");
+            GameData b = GameData.Load(read, 0, 1);
+            T.Eq(1u, b.Terrain, "override beats ZoneRule"); T.Eq(1f, b.Blocks[0].X, "override obstacles");
+            GameData c = GameData.Load(read, 1);
+            T.Eq(1u, c.Terrain, "a normal zone keeps its own terrain"); T.Eq(1, c.Blocks.Count, "own obstacles only");
+            GameData e = GameData.Load(delegate (string t) { return t == "Block" ? read(t) : null; }, 0);
+            T.Eq(1u, e.Terrain, "without a rule the test zone uses terrain 1");
+            ZoneTheme.TestTerrain = keep;
+        }
+
+        public static void TestAllSpawns()
+        {
+            System.Func<string, string> read = delegate (string tb)
+            {
+                if (tb == "Monster") return "{\"Monster\":[{\"Id\":1},{\"Id\":2},{\"Id\":101}]}";
+                if (tb == "Boss") return "{\"Boss\":[{\"Id\":1,\"MonsterId\":101}]}";
+                if (tb == "ZoneRule") return "{\"ZoneRule\":[{\"ZoneId\":0,\"AllMonsterCount\":3,\"AllBossCount\":1},{\"ZoneId\":1}]}";
+                return null;
+            };
+            GameData d = GameData.Load(read, 0);
+            T.Eq(3, d.Spawns.Count, "one spawn row per kind");
+            T.Eq(101u, d.Spawns[0].MonsterId, "bosses come first"); T.Eq(1u, d.Spawns[0].Count, "boss x1");
+            T.Eq(1u, d.Spawns[1].MonsterId, "then regular kinds by id"); T.Eq(3u, d.Spawns[1].Count, "regular x3");
+            T.Eq(46f, d.Spawns[1].X, "same grid as the server"); T.Eq(64f, d.Spawns[1].Y, "regular rows start below the boss row");
+            T.Eq(70f, d.Spawns[2].X, "next cell");
+            T.Eq(0, GameData.Load(read, 1).Spawns.Count, "other zones are untouched");
         }
     }
 }

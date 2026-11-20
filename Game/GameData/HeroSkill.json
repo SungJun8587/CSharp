@@ -2,95 +2,259 @@
   "HeroSkill": [
     {
       "HeroId": 1,
-      "SkillId": 1
+      "SkillId": 1,
+      "UnlockLevel": 1,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 1
     },
     {
       "HeroId": 1,
-      "SkillId": 2
+      "SkillId": 2,
+      "UnlockLevel": 1,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 2
     },
     {
       "HeroId": 1,
-      "SkillId": 7
-    },
-    {
-      "HeroId": 2,
-      "SkillId": 3
-    },
-    {
-      "HeroId": 2,
-      "SkillId": 4
-    },
-    {
-      "HeroId": 3,
-      "SkillId": 5
-    },
-    {
-      "HeroId": 3,
-      "SkillId": 6
+      "SkillId": 7,
+      "UnlockLevel": 5,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 3
     },
     {
       "HeroId": 1,
-      "SkillId": 16
+      "SkillId": 16,
+      "UnlockLevel": 10,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 4
     },
     {
       "HeroId": 1,
-      "SkillId": 17
+      "SkillId": 17,
+      "UnlockLevel": 15,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 5
+    },
+    {
+      "HeroId": 1,
+      "SkillId": 28,
+      "UnlockLevel": 20,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 6
+    },
+    {
+      "HeroId": 1,
+      "SkillId": 60,
+      "UnlockLevel": 25,
+      "PriceCurrencyId": 1,
+      "Price": 8000,
+      "Slot": 0
+    },
+    {
+      "HeroId": 1,
+      "SkillId": 61,
+      "UnlockLevel": 35,
+      "PriceCurrencyId": 1,
+      "Price": 25000,
+      "Slot": 0
     },
     {
       "HeroId": 2,
-      "SkillId": 15
+      "SkillId": 3,
+      "UnlockLevel": 1,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 1
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 4,
+      "UnlockLevel": 1,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 2
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 15,
+      "UnlockLevel": 5,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 3
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 20,
+      "UnlockLevel": 10,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 4
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 22,
+      "UnlockLevel": 15,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 5
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 23,
+      "UnlockLevel": 20,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 6
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 62,
+      "UnlockLevel": 25,
+      "PriceCurrencyId": 1,
+      "Price": 8000,
+      "Slot": 0
+    },
+    {
+      "HeroId": 2,
+      "SkillId": 63,
+      "UnlockLevel": 35,
+      "PriceCurrencyId": 1,
+      "Price": 25000,
+      "Slot": 0
     },
     {
       "HeroId": 3,
-      "SkillId": 12
+      "SkillId": 5,
+      "UnlockLevel": 1,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 1
     },
     {
       "HeroId": 3,
-      "SkillId": 13
+      "SkillId": 6,
+      "UnlockLevel": 1,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 2
     },
     {
       "HeroId": 3,
-      "SkillId": 14
+      "SkillId": 12,
+      "UnlockLevel": 5,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 3
+    },
+    {
+      "HeroId": 3,
+      "SkillId": 13,
+      "UnlockLevel": 10,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 4
+    },
+    {
+      "HeroId": 3,
+      "SkillId": 14,
+      "UnlockLevel": 15,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 5
+    },
+    {
+      "HeroId": 3,
+      "SkillId": 29,
+      "UnlockLevel": 20,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 6
+    },
+    {
+      "HeroId": 3,
+      "SkillId": 64,
+      "UnlockLevel": 25,
+      "PriceCurrencyId": 1,
+      "Price": 8000,
+      "Slot": 0
+    },
+    {
+      "HeroId": 3,
+      "SkillId": 65,
+      "UnlockLevel": 35,
+      "PriceCurrencyId": 1,
+      "Price": 25000,
+      "Slot": 0
     },
     {
       "HeroId": 4,
-      "SkillId": 18
+      "SkillId": 18,
+      "UnlockLevel": 1,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 1
     },
     {
       "HeroId": 4,
-      "SkillId": 19
-    },
-    {
-      "HeroId": 2,
-      "SkillId": 20
-    },
-    {
-      "HeroId": 2,
-      "SkillId": 21
-    },
-    {
-      "HeroId": 2,
-      "SkillId": 22
-    },
-    {
-      "HeroId": 2,
-      "SkillId": 23
+      "SkillId": 19,
+      "UnlockLevel": 1,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 2
     },
     {
       "HeroId": 4,
-      "SkillId": 24
+      "SkillId": 24,
+      "UnlockLevel": 5,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 3
     },
     {
       "HeroId": 4,
-      "SkillId": 25
+      "SkillId": 25,
+      "UnlockLevel": 10,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 4
     },
     {
       "HeroId": 4,
-      "SkillId": 26
+      "SkillId": 26,
+      "UnlockLevel": 15,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 5
     },
     {
       "HeroId": 4,
-      "SkillId": 27
+      "SkillId": 27,
+      "UnlockLevel": 20,
+      "PriceCurrencyId": 0,
+      "Price": 0,
+      "Slot": 6
+    },
+    {
+      "HeroId": 4,
+      "SkillId": 66,
+      "UnlockLevel": 25,
+      "PriceCurrencyId": 1,
+      "Price": 8000,
+      "Slot": 0
+    },
+    {
+      "HeroId": 4,
+      "SkillId": 67,
+      "UnlockLevel": 35,
+      "PriceCurrencyId": 1,
+      "Price": 25000,
+      "Slot": 0
     }
   ]
 }

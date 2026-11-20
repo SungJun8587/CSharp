@@ -33,6 +33,7 @@ public sealed class MonsterSystemConfig
     public uint MaxMonsters = (uint)MonsterData.MaxSpawnPerZone;
     public float HealThreatRange = 20.0f;
     public uint HealThreatPercent = 50;
+    public bool BasicAttackWindup = true;      // true 면 기본 공격이 예비 동작(윈드업) 뒤에 들어간다. 그 사이 대상이 사거리 밖으로 피하면 빗나간다
 
     public MonsterSystemConfig Clone() => (MonsterSystemConfig)MemberwiseClone();
 }
@@ -51,6 +52,10 @@ public sealed class MonsterSystemConfig
 public sealed class MonsterSystem
 {
     private const float ArriveDistanceSq = 0.25f;       // 복귀 도착으로 보는 거리(0.5 units)의 제곱
+    /// <summary>기본 공격 예비 동작용 가상 스킬 ID 대역(데이터 표에는 없다). 클라이언트는 이 대역이면 "몬스터가 공격을 준비한다"로 그린다.</summary>
+    public const uint BasicAttackSkillIdBase = 90000;
+    private readonly Dictionary<uint, SkillTemplate> _basicSkills = new Dictionary<uint, SkillTemplate>();
+
     private const float ChaseStandRatio = 0.8f;         // 추적 목적지를 대상 앞 사거리의 이 비율 지점으로 잡는다
 
     private readonly FieldZoneBase _zone;               // 대상 존
@@ -481,6 +486,9 @@ public sealed class MonsterSystem
             // 쿨다운 중에는 요청 자체를 건너뛴다.
             if (nowMs >= monster.NextAttackMs)
             {
+                if (_config.BasicAttackWindup && TryBasicWindup(monster, target, nowMs))
+                    return;
+
                 switch (_zone.RequestAttack(monster, target.Id))
                 {
                     case AttackResult.TargetDead:
@@ -707,6 +715,49 @@ public sealed class MonsterSystem
         Activate(ally);
         ally._nextThinkMs = _alertNowMs;
         ++_alertCount;
+    }
+
+    /// <summary>
+    /// 기본 공격을 예비 동작(시전 시간)이 있는 가상 스킬로 시작한다. 시전 중에는 멈춰 서고, 끝나는 순간 대상이 사거리 안이어야 맞는다.
+    /// 일반 몬스터는 공격 간격의 30%(250~450ms) 동안 준비하고 한 명을 때린다. 보스는 700ms 준비한 뒤 앞쪽 부채꼴 안의 여럿을 때려 밀어낸다.
+    /// 시전을 시작했으면 true. 거부되면 false 를 돌려주고, 호출자가 기존 즉시 기본 공격 경로로 처리(거부 사유 처리 포함)한다.
+    /// </summary>
+    private bool TryBasicWindup(Monster monster, ZoneEntity target, ulong nowMs)
+    {
+        SkillTemplate skill = BasicAttackSkill(monster);
+        bool cone = skill.Shape == ESkillShape.Cone;
+        if (_zone.CastSkill(monster, skill, cone ? 0UL : target.Id, target.Pos, ref monster._basicReadyAtMs) != SkillResult.Ok)
+            return false;
+
+        monster._nextAttackMs = (monster._nextAttackMs > nowMs ? monster._nextAttackMs : nowMs) + monster.Template.Stats.AttackIntervalMs;
+        return true;
+    }
+
+    private SkillTemplate BasicAttackSkill(Monster monster)
+    {
+        MonsterTemplate tmpl = monster.Template;
+        bool boss = monster._boss != null;
+        uint key = tmpl.Id * 2u + (boss ? 1u : 0u);
+        SkillTemplate? s;
+        if (_basicSkills.TryGetValue(key, out s))
+            return s;
+
+        uint interval = tmpl.Stats.AttackIntervalMs;
+        s = new SkillTemplate
+        {
+            Id = BasicAttackSkillIdBase + tmpl.Id,
+            Name = "기본 공격",
+            Shape = boss ? ESkillShape.Cone : ESkillShape.Single,
+            DamagePercent = 100,
+            Range = tmpl.Stats.AttackRange + (boss ? 1.0f : 0.0f),
+            MaxTargets = boss ? 6u : 1u,
+            CooldownMs = 1,
+            CastTimeMs = boss ? 700u : Math.Clamp(interval * 3u / 10u, 250u, 450u),
+            Angle = boss ? 110.0f : 0.0f,
+            KnockbackDistance = boss ? 1.5f : 0.0f,
+        };
+        _basicSkills[key] = s;
+        return s;
     }
 
     /// <summary>몬스터 스킬을 쓴다. 재사용 대기가 끝났고 대상이 스킬 사거리 안일 때만 시전한다. Single은 대상을, Area는 대상 위치를, Self는 자기 위치를, Cone/Line은 대상 쪽 방향을 겨냥한다.</summary>

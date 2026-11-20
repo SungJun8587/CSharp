@@ -27,6 +27,23 @@ namespace GameViewer.Core.World
         /// <summary>서버 왕복 지연 측정(세션이 핑을 보내고, 응답은 여기서 받는다).</summary>
         public readonly GameViewer.Core.Logic.PingMeter Ping = new GameViewer.Core.Logic.PingMeter();
         public long DamageDealtBySelf, DamageTakenBySelf, KillsBySelf, SelfDeaths;
+        public uint MyLevel = 1, MyExp, MyExpToNext;                       // 서버가 알려 준 내 레벨/경험치(레벨 표가 없는 서버면 MyExpToNext 가 0 이고 갱신되지 않는다)
+        public bool MyMaxLevel;
+        public int MyMp, MyMaxMp;                                          // 내 MP/최대 MP (MaxMp 0 이면 MP를 쓰지 않는 영웅이라 화면에 그리지 않는다)
+        public readonly Dictionary<uint, uint> Wallet = new Dictionary<uint, uint>();      // 재화 ID -> 보유량
+        /// <summary>서버가 알려 준 내 영웅의 보유 스킬(스킬 ID -> 장착 칸 1~6, 0이면 장착 안 함). SkillBookKnown 이 false 면 서버가 알려 준 적이 없다(데모 등).</summary>
+        public readonly Dictionary<uint, byte> SkillSlots = new Dictionary<uint, byte>();
+        public bool SkillBookKnown;
+        public uint ShopSlot7Level, ShopSlot8Level;        // 상점 칸 7, 8 이 열리는 레벨(서버가 알려 준다)
+        public byte LastSkillOp, LastSkillResult; public uint LastSkillOpId; public long LastSkillOpMs;     // 마지막 구매/장착 결과(창에 사유를 보여 준다)
+        /// <summary>서버가 알려 준 시험장 지형(치트로 바뀐 값). 화면이 읽어 반영하고 0 으로 되돌린다.</summary>
+        public uint ServerTerrain;
+
+        public uint Gold { get { uint v; return Wallet.TryGetValue(ZcCurrencyNotify.Gold, out v) ? v : 0u; } }
+        /// <summary>서버가 기본 공격의 예비 동작을 알릴 때 쓰는 가상 스킬 ID 대역(서버 MonsterSystem.BasicAttackSkillIdBase 와 같다). 표에 없는 ID.</summary>
+        public const uint BasicAttackSkillIdBase = 90000;
+        public const int LevelUpDurMs = 3200;                                 // 레벨 업 연출 길이
+        public long LevelUpMs = -100000;                                      // 마지막 레벨 업 시각(화면 효과용)
         public readonly KillStreak Streak = new KillStreak();
         public readonly ComboCounter Combo = new ComboCounter();            // 내가 연속으로 때린 횟수
         public long SelfHitMs = -100000; public float SelfHitRatio;        // 내가 마지막으로 맞은 시각과 최대 체력 대비 피해 비율(피격 화면 효과용)
@@ -62,7 +79,7 @@ namespace GameViewer.Core.World
             e.Id = SelfId; e.Type = (byte)EntityType.Player; e.TemplateId = heroId;
             e.X = x; e.Y = y; e.DestX = x; e.DestY = y;
             HeroRow h = Data.Hero(heroId);
-            if (h != null) { e.MaxHp = h.MaxHp; e.Hp = h.MaxHp; e.Speed = (float)h.Speed; }
+            if (h != null) { e.MaxHp = h.MaxHp; e.Hp = h.MaxHp; e.Speed = (float)h.Speed; MyMaxMp = h.MaxMp; MyMp = h.MaxMp; }
             Entities[SelfId] = e;
             Self = e;
             AddLog(now, 0, "입장: 스폰 (" + x.ToString("0.0") + ", " + y.ToString("0.0") + ")");
@@ -71,6 +88,8 @@ namespace GameViewer.Core.World
         public void Clear()
         {
             Entities.Clear(); Effects.Clear(); _projectiles.Clear(); _lastSkillMs.Clear(); Self = null;
+            MyLevel = 1; MyExp = 0; MyExpToNext = 0; MyMaxLevel = false; MyMp = 0; MyMaxMp = 0; Wallet.Clear(); ServerTerrain = 0;
+            SkillSlots.Clear(); SkillBookKnown = false; ShopSlot7Level = 0; ShopSlot8Level = 0; LastSkillOp = 0; LastSkillResult = 0; LastSkillOpId = 0; LastSkillOpMs = 0;
         }
 
         public void AddLog(long now, int level, string text) { AddLog(now, level, text, LogCat.System, true); }
@@ -202,6 +221,11 @@ namespace GameViewer.Core.World
             ++PacketCount;
             try
             {
+                if (f.Type == ZcExpNotify.Type) { OnExp(ZcExpNotify.Parse(f.Data), now); return; }
+                if (f.Type == ZcCurrencyNotify.Type) { OnCurrency(ZcCurrencyNotify.Parse(f.Data), now); return; }
+                if (f.Type == ZcSkillBookNotify.Type) { OnSkillBook(ZcSkillBookNotify.Parse(f.Data)); return; }
+                if (f.Type == ZcSkillOpResNotify.Type) { OnSkillOp(ZcSkillOpResNotify.Parse(f.Data), now); return; }
+                if (f.Type == ZcTerrainNotify.Type) { ServerTerrain = ZcTerrainNotify.Parse(f.Data).Terrain; return; }
                 switch ((ZonePacketType)f.Type)
                 {
                     case ZonePacketType.ZcSpawnNotify: OnSpawn(ZcSpawnNotify.Parse(f.Data), now); break;
@@ -221,6 +245,7 @@ namespace GameViewer.Core.World
                     case ZonePacketType.ZcProjectileNotify: OnProjectile(ZcProjectileNotify.Parse(f.Data), now); break;
                     case ZonePacketType.ZcSkillImpactNotify: OnImpact(ZcSkillImpactNotify.Parse(f.Data), now); break;
                     case ZonePacketType.ZcStatusNotify: OnStatus(ZcStatusNotify.Parse(f.Data), now); break;
+                    case ZonePacketType.ZcStatNotify: { ZcStatNotify st = ZcStatNotify.Parse(f.Data); MyMp = st.Mp; MyMaxMp = st.MaxMp; break; }
                     case ZonePacketType.ZcPongNotify: Ping.OnPong(ZcPongNotify.Parse(f.Data).Seq, now); break;
                     default: ++UnknownPacketCount; break;
                 }
@@ -229,6 +254,42 @@ namespace GameViewer.Core.World
             {
                 ++MalformedPacketCount;
             }
+        }
+
+        private void OnExp(ZcExpNotify p, long now)
+        {
+            MyLevel = p.Level; MyExp = p.Exp; MyExpToNext = p.ExpToNext; MyMaxLevel = p.MaxLevel;
+            if (p.LevelUp)
+            {
+                LevelUpMs = now; AddLog(now, 1, "레벨 업! Lv " + p.Level);
+                if (Self != null)
+                {
+                    float x, y; Self.PosAt(now, out x, out y);
+                    ViewEffect lv = NewFx(EffectKind.LevelUp, now, LevelUpDurMs, x, y);
+                    lv.EntityId = Self.Id; lv.Value = (int)p.Level; lv.Text = "LEVEL UP!";
+                }
+            }
+            else if (p.Gained > 0) AddLog(now, 0, "경험치 +" + p.Gained);
+        }
+
+        private void OnSkillBook(ZcSkillBookNotify p)
+        {
+            SkillSlots.Clear();
+            for (int i = 0; i < p.SkillIds.Length; ++i) SkillSlots[p.SkillIds[i]] = p.Slots[i];
+            ShopSlot7Level = p.ShopSlot7Level; ShopSlot8Level = p.ShopSlot8Level;
+            SkillBookKnown = true;
+        }
+
+        private void OnSkillOp(ZcSkillOpResNotify p, long now)
+        {
+            LastSkillOp = p.Op; LastSkillResult = p.Result; LastSkillOpId = p.SkillId; LastSkillOpMs = now;
+            if (p.Result != SkillOpResult.Ok) AddLog(now, 1, (p.Op == ZcSkillOpResNotify.OpBuy ? "스킬 구매 실패: " : "스킬 장착 실패: ") + SkillOpResult.Text(p.Result));
+        }
+
+        private void OnCurrency(ZcCurrencyNotify p, long now)
+        {
+            Wallet[p.CurrencyId] = p.Amount;
+            if (p.Gained > 0) AddLog(now, 0, (p.CurrencyId == ZcCurrencyNotify.Gold ? "골드" : "재화#" + p.CurrencyId) + " +" + p.Gained.ToString("N0"));
         }
 
         private void OnSpawn(ZcSpawnNotify p, long now)
@@ -438,6 +499,12 @@ namespace GameViewer.Core.World
         private void OnSkill(ZcSkillNotify p, long now)
         {
             Entity c = Find(p.CasterId);
+            if (p.SkillId >= BasicAttackSkillIdBase)
+            {
+                // 예비 동작이 끝나고 기본 공격이 들어가는 순간. 스킬 연출(베기 궤적 등)은 없고 몬스터의 기본 공격 동작만 시작한다.
+                if (c != null) { EndCast(c); c.AttackAnimMs = now; c.AttackKind = 0; c.Face(p.X, p.Y, now); }
+                return;
+            }
             _lastSkillMs[p.CasterId] = now;
             if (c != null)
             {

@@ -11,5 +11,8 @@
   "HeartbeatIntervalMs": 2000,
   "HeartbeatTimeoutMs": 10000,
   "ClientMaxPacketsPerSec": 120,
-  "ClientMaxSendQueueBytes": 1048576
+  "ClientMaxSendQueueBytes": 1048576,
+  "GameDB": "",
+  "SaveFlushIntervalMs": 1000,
+  "SaveBatchSize": 100
 }

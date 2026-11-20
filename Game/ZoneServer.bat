@@ -1,6 +1,10 @@
 @ECHO OFF
 chcp 65001 >nul
 CD /D "%~dp0"
+
+REM ---- 이 배치 파일이 띄울 존 ID. 여기만 바꾸면 된다(0 = 시험장). 실행 때 --zone-id 를 따로 주면 그 값이 우선한다. ----
+SET ZONE_ID=0
+
 SET EXE=Bin\Release\Game.ZoneServer.exe
 IF NOT EXIST "%EXE%" SET EXE=Bin\Debug\Game.ZoneServer.exe
 IF NOT EXIST "%EXE%" (
@@ -8,7 +12,8 @@ IF NOT EXIST "%EXE%" (
     PAUSE
     EXIT /B 1
 )
-"%EXE%" --config "Config\zoneserver_config.json" %*
+ECHO [ZoneServer] zone-id=%ZONE_ID%
+"%EXE%" --config "Config\zoneserver_config.json" --zone-id %ZONE_ID% %*
 SET RC=%ERRORLEVEL%
 ECHO.
 ECHO [ZoneServer] exit code=%RC%
@@ -19,7 +24,7 @@ EXIT /B %RC%
 :: ZoneServer.bat [옵션...]   (C# 서버: Game.sln을 Release로 빌드하면 Bin\Release에 Game.ZoneServer.exe가 만들어진다)
 :: [설명]
 ::  - 존 하나를 호스팅하는 프로세스. Gateway의 존 서버 포트에 접속해 등록하고, 틱 루프로 이동/AOI/전투/몬스터 AI를 처리
-::  - 필드/던전마다 zone-id를 다르게 해서 프로세스를 여러 개 띄운다(설정 파일을 공유하고 --zone-id만 바꿔도 됨). 예) ZoneServer.bat --zone-id 2
+::  - 필드/던전마다 zone-id를 다르게 해서 프로세스를 여러 개 띄운다. 이 배치 파일은 위쪽 SET ZONE_ID 값(기본 0, 시험장)으로 띄우며, 다른 존은 ZONE_ID 를 바꾸거나 ZoneServer.bat --zone-id 2 처럼 옵션을 주면 된다(뒤에 준 --zone-id 가 우선)
 ::  - Gateway가 등록을 거부하면(중복 zone-id 등) 스스로 종료
 ::  - 영웅/몬스터/스폰/보스/드롭/차단 맵 데이터는 GameDataDir(기본 GameData)의 JSON에서 읽음. Hero.json, Monster.json, Spawn.json은 필수
 ::  - 배치 파일에 준 옵션은 실행 줄 끝의 %* 로 그대로 서버에 전달된다
@@ -41,4 +46,3 @@ EXIT /B %RC%
 ::      TickIntervalMs, MinX, MinY, MaxX, MaxY, CellSize, SpawnX, SpawnY, RespawnDelayMs, RespawnInvulnMs, AllowPvp,
 ::      GameDataDir, MonsterThinkIntervalMs, MaxMonsterCount, MetricsIntervalMs, RequestGuardEnabled
 ::  종료: Ctrl+C
-

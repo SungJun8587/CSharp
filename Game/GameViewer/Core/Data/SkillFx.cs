@@ -64,6 +64,14 @@ namespace GameViewer.Core.Data
             { 25, new SkillFxInfo(SkillFxStyle.Nova,     0x58E0C0, 0xE0FFF4, 700, 0f) },     // 질풍 돌격
             { 26, new SkillFxInfo(SkillFxStyle.Lance,    0xFFB84A, 0xFFF4D8, 0, 3f) },       // 갑옷 꿰기
             { 27, new SkillFxInfo(SkillFxStyle.Blade,    0xFFE080, 0xFFFFFF, 0, 4f) },       // 제압 휘두르기 (부채꼴)
+            { 60, new SkillFxInfo(SkillFxStyle.Blade,    0xE0302C, 0xFFD0B0, 0, 4f) },       // 분노의 일격
+            { 61, new SkillFxInfo(SkillFxStyle.Quake,    0xB88848, 0xFFE0A0, 1100, 6f) },    // 지축 흔들기
+            { 62, new SkillFxInfo(SkillFxStyle.Arrow,    0xFF4A4A, 0xFFFFFF, 0, 2f) },       // 저격
+            { 63, new SkillFxInfo(SkillFxStyle.Volley,   0x6CD23C, 0xE8FFB8, 1100, 0f) },    // 독화살 세례
+            { 64, new SkillFxInfo(SkillFxStyle.Blast,    0xFF7A28, 0xFFF0B0, 1300, 7f) },    // 유성
+            { 65, new SkillFxInfo(SkillFxStyle.Nova,     0x6CB4FF, 0xE8F4FF, 900, 0f) },     // 속박의 사슬
+            { 66, new SkillFxInfo(SkillFxStyle.Lance,    0xFFFFFF, 0xE0F0FF, 0, 3f) },       // 섬광 찌르기 (직선)
+            { 67, new SkillFxInfo(SkillFxStyle.Whirl,    0x40E0B8, 0xE0FFF4, 900, 4f) },     // 창의 폭풍
         };
         /// <summary>지속 피해 상태의 불씨 색. 표에 없으면 주황(화상). 독은 초록, 출혈은 붉은색.</summary>
         public static int DotColor(uint statusId)

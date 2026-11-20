@@ -52,6 +52,21 @@ public sealed class WriteBehindQueue<TKey, TValue> where TKey : notnull
         }
     }
 
+    /// <summary>대기 중인 키의 현재 값을 꺼내 보지 않고 읽는다(큐에서 빼지 않는다). 없으면 false.</summary>
+    public bool TryGet(TKey key, out TValue value)
+    {
+        lock (_lock)
+        {
+            if (_map.TryGetValue(key, out Entry? e))
+            {
+                value = e.Value;
+                return true;
+            }
+        }
+        value = default!;
+        return false;
+    }
+
     /// <summary>대기 중인 값을 저장하지 않고 버린다.</summary>
     public bool Discard(TKey key)
     {

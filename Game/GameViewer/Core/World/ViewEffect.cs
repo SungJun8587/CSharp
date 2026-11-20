@@ -22,6 +22,7 @@ namespace GameViewer.Core.World
         Banner,         // 화면 중앙 알림 (보스 페이즈 돌입 등. Text, EntityId, Value=페이즈, Variant 1 = 경고(붉은 경보))
         BossDeath,      // 보스 사망 폭발과 빛기둥 (X,Y, EntityId)
         Streak,         // 연속 처치 알림 (Value=연속 횟수, Text=칭호)
+        LevelUp,        // 내 레벨 업 연출 (EntityId=나, Value=새 레벨). 나를 따라다니는 빛기둥/고리와 화면 알림
     }
 
     public sealed class ViewEffect

@@ -1,0 +1,200 @@
+{
+  "MonsterCurrency": [
+    {
+      "MonsterId": 1,
+      "CurrencyId": 1,
+      "MinAmount": 10,
+      "MaxAmount": 19,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 2,
+      "CurrencyId": 1,
+      "MinAmount": 13,
+      "MaxAmount": 26,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 3,
+      "CurrencyId": 1,
+      "MinAmount": 13,
+      "MaxAmount": 26,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 4,
+      "CurrencyId": 1,
+      "MinAmount": 18,
+      "MaxAmount": 35,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 5,
+      "CurrencyId": 1,
+      "MinAmount": 17,
+      "MaxAmount": 34,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 6,
+      "CurrencyId": 1,
+      "MinAmount": 26,
+      "MaxAmount": 51,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 7,
+      "CurrencyId": 1,
+      "MinAmount": 26,
+      "MaxAmount": 53,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 8,
+      "CurrencyId": 1,
+      "MinAmount": 33,
+      "MaxAmount": 66,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 9,
+      "CurrencyId": 1,
+      "MinAmount": 36,
+      "MaxAmount": 73,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 10,
+      "CurrencyId": 1,
+      "MinAmount": 34,
+      "MaxAmount": 68,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 11,
+      "CurrencyId": 1,
+      "MinAmount": 38,
+      "MaxAmount": 75,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 12,
+      "CurrencyId": 1,
+      "MinAmount": 43,
+      "MaxAmount": 86,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 13,
+      "CurrencyId": 1,
+      "MinAmount": 42,
+      "MaxAmount": 85,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 14,
+      "CurrencyId": 1,
+      "MinAmount": 14,
+      "MaxAmount": 27,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 15,
+      "CurrencyId": 1,
+      "MinAmount": 36,
+      "MaxAmount": 71,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 16,
+      "CurrencyId": 1,
+      "MinAmount": 46,
+      "MaxAmount": 91,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 17,
+      "CurrencyId": 1,
+      "MinAmount": 46,
+      "MaxAmount": 91,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 18,
+      "CurrencyId": 1,
+      "MinAmount": 70,
+      "MaxAmount": 140,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 19,
+      "CurrencyId": 1,
+      "MinAmount": 66,
+      "MaxAmount": 132,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 20,
+      "CurrencyId": 1,
+      "MinAmount": 82,
+      "MaxAmount": 163,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 21,
+      "CurrencyId": 1,
+      "MinAmount": 88,
+      "MaxAmount": 176,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 22,
+      "CurrencyId": 1,
+      "MinAmount": 116,
+      "MaxAmount": 232,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 23,
+      "CurrencyId": 1,
+      "MinAmount": 86,
+      "MaxAmount": 173,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 24,
+      "CurrencyId": 1,
+      "MinAmount": 67,
+      "MaxAmount": 134,
+      "ChancePermille": 800
+    },
+    {
+      "MonsterId": 101,
+      "CurrencyId": 1,
+      "MinAmount": 400,
+      "MaxAmount": 800,
+      "ChancePermille": 1000
+    },
+    {
+      "MonsterId": 108,
+      "CurrencyId": 1,
+      "MinAmount": 750,
+      "MaxAmount": 1500,
+      "ChancePermille": 1000
+    },
+    {
+      "MonsterId": 121,
+      "CurrencyId": 1,
+      "MinAmount": 1500,
+      "MaxAmount": 3000,
+      "ChancePermille": 1000
+    },
+    {
+      "MonsterId": 122,
+      "CurrencyId": 1,
+      "MinAmount": 3000,
+      "MaxAmount": 6000,
+      "ChancePermille": 1000
+    }
+  ]
+}

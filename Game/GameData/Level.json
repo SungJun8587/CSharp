@@ -1,0 +1,254 @@
+{
+  "Level": [
+    {
+      "Level": 1,
+      "ExpToNext": 100,
+      "StatPercent": 100
+    },
+    {
+      "Level": 2,
+      "ExpToNext": 348,
+      "StatPercent": 106
+    },
+    {
+      "Level": 3,
+      "ExpToNext": 722,
+      "StatPercent": 112
+    },
+    {
+      "Level": 4,
+      "ExpToNext": 1213,
+      "StatPercent": 118
+    },
+    {
+      "Level": 5,
+      "ExpToNext": 1812,
+      "StatPercent": 124
+    },
+    {
+      "Level": 6,
+      "ExpToNext": 2516,
+      "StatPercent": 130
+    },
+    {
+      "Level": 7,
+      "ExpToNext": 3320,
+      "StatPercent": 136
+    },
+    {
+      "Level": 8,
+      "ExpToNext": 4222,
+      "StatPercent": 142
+    },
+    {
+      "Level": 9,
+      "ExpToNext": 5220,
+      "StatPercent": 148
+    },
+    {
+      "Level": 10,
+      "ExpToNext": 6310,
+      "StatPercent": 154
+    },
+    {
+      "Level": 11,
+      "ExpToNext": 7490,
+      "StatPercent": 160
+    },
+    {
+      "Level": 12,
+      "ExpToNext": 8760,
+      "StatPercent": 166
+    },
+    {
+      "Level": 13,
+      "ExpToNext": 10118,
+      "StatPercent": 172
+    },
+    {
+      "Level": 14,
+      "ExpToNext": 11562,
+      "StatPercent": 178
+    },
+    {
+      "Level": 15,
+      "ExpToNext": 13091,
+      "StatPercent": 184
+    },
+    {
+      "Level": 16,
+      "ExpToNext": 14703,
+      "StatPercent": 190
+    },
+    {
+      "Level": 17,
+      "ExpToNext": 16399,
+      "StatPercent": 196
+    },
+    {
+      "Level": 18,
+      "ExpToNext": 18176,
+      "StatPercent": 202
+    },
+    {
+      "Level": 19,
+      "ExpToNext": 20033,
+      "StatPercent": 208
+    },
+    {
+      "Level": 20,
+      "ExpToNext": 21971,
+      "StatPercent": 214
+    },
+    {
+      "Level": 21,
+      "ExpToNext": 23988,
+      "StatPercent": 220
+    },
+    {
+      "Level": 22,
+      "ExpToNext": 26083,
+      "StatPercent": 226
+    },
+    {
+      "Level": 23,
+      "ExpToNext": 28256,
+      "StatPercent": 232
+    },
+    {
+      "Level": 24,
+      "ExpToNext": 30506,
+      "StatPercent": 238
+    },
+    {
+      "Level": 25,
+      "ExpToNext": 32832,
+      "StatPercent": 244
+    },
+    {
+      "Level": 26,
+      "ExpToNext": 35233,
+      "StatPercent": 250
+    },
+    {
+      "Level": 27,
+      "ExpToNext": 37710,
+      "StatPercent": 256
+    },
+    {
+      "Level": 28,
+      "ExpToNext": 40261,
+      "StatPercent": 262
+    },
+    {
+      "Level": 29,
+      "ExpToNext": 42886,
+      "StatPercent": 268
+    },
+    {
+      "Level": 30,
+      "ExpToNext": 45585,
+      "StatPercent": 274
+    },
+    {
+      "Level": 31,
+      "ExpToNext": 48356,
+      "StatPercent": 280
+    },
+    {
+      "Level": 32,
+      "ExpToNext": 51200,
+      "StatPercent": 286
+    },
+    {
+      "Level": 33,
+      "ExpToNext": 54116,
+      "StatPercent": 292
+    },
+    {
+      "Level": 34,
+      "ExpToNext": 57103,
+      "StatPercent": 298
+    },
+    {
+      "Level": 35,
+      "ExpToNext": 60162,
+      "StatPercent": 304
+    },
+    {
+      "Level": 36,
+      "ExpToNext": 63291,
+      "StatPercent": 310
+    },
+    {
+      "Level": 37,
+      "ExpToNext": 66491,
+      "StatPercent": 316
+    },
+    {
+      "Level": 38,
+      "ExpToNext": 69761,
+      "StatPercent": 322
+    },
+    {
+      "Level": 39,
+      "ExpToNext": 73100,
+      "StatPercent": 328
+    },
+    {
+      "Level": 40,
+      "ExpToNext": 76508,
+      "StatPercent": 334
+    },
+    {
+      "Level": 41,
+      "ExpToNext": 79985,
+      "StatPercent": 340
+    },
+    {
+      "Level": 42,
+      "ExpToNext": 83531,
+      "StatPercent": 346
+    },
+    {
+      "Level": 43,
+      "ExpToNext": 87145,
+      "StatPercent": 352
+    },
+    {
+      "Level": 44,
+      "ExpToNext": 90827,
+      "StatPercent": 358
+    },
+    {
+      "Level": 45,
+      "ExpToNext": 94576,
+      "StatPercent": 364
+    },
+    {
+      "Level": 46,
+      "ExpToNext": 98393,
+      "StatPercent": 370
+    },
+    {
+      "Level": 47,
+      "ExpToNext": 102277,
+      "StatPercent": 376
+    },
+    {
+      "Level": 48,
+      "ExpToNext": 106227,
+      "StatPercent": 382
+    },
+    {
+      "Level": 49,
+      "ExpToNext": 110243,
+      "StatPercent": 388
+    },
+    {
+      "Level": 50,
+      "ExpToNext": 0,
+      "StatPercent": 394
+    }
+  ]
+}

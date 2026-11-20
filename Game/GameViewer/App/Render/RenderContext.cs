@@ -18,7 +18,8 @@ namespace GameViewer.App.Render
         public bool HasMouse;
         public int MouseX = -1, MouseY = -1;     // 화면 좌표의 마우스(창 안의 호버 표시용)
         public float MouseWorldX, MouseWorldY;
-        public bool ShowHelp = true;
+        public bool ShowInfo = false;       // 경험치바 아래 정보 창(입장 상태/위치/전투 기록)은 기본으로 꺼 두고 단축키(기본 I)로 연다
+        public bool ShowHelp = false;      // 도움말(F1)은 기본으로 꺼 두고, 오른쪽 위 안내 칩으로 단축키를 알려 준다
         public int LogMode;                     // 0 떠오르는 줄, 1 탭 로그 창, 2 끔 (L 키로 돈다)
         public bool ShowLog { get { return LogMode == 0; } set { LogMode = value ? 0 : 2; } }
         public GameViewer.Core.Logic.LogTab LogTabSel = GameViewer.Core.Logic.LogTab.All;
@@ -41,6 +42,11 @@ namespace GameViewer.App.Render
         public double FrameMs;                  // 마지막 프레임을 그리는 데 걸린 시간
         public ulong HoverId;                   // 마우스가 올라가 있는 엔티티
         public bool HeroSelectOpen;             // 영웅 선택 창이 열려 있는가 (열려 있으면 게임 입력은 막는다)
+        public bool SkillBookOpen;              // 스킬 창(구매/장착)이 열려 있는가 (열려 있으면 게임 입력은 막는다)
+        public int SkillBookTarget;             // 스킬 창에서 고른 장착 칸(1~6, 0이면 첫 빈 칸)
+        public bool ZoneSelectOpen;             // 존 변경 창이 열려 있는가 (열려 있으면 게임 입력은 막는다)
+        public bool ZoneTerrainPick;            // 존 변경 창이 시험장의 지형(1~10) 고르기 단계인가
+        public int ZoneSelectIndex;             // 존 변경 창에서 가리키는 줄
         public int HeroSelectIndex;             // 영웅 선택 창에서 가리키는 줄
         public double Fps;
 

@@ -269,26 +269,48 @@ public class ZoneEntity
         if (_inZone)
             return;
 
-        _stats = stats;
-        if (_stats.MaxHp < 1)
-            _stats.MaxHp = 1;
-        if (_stats.Attack < 0)
-            _stats.Attack = 0;
-        if (_stats.Defense < 0)
-            _stats.Defense = 0;
-        if (!float.IsFinite(_stats.AttackRange) || _stats.AttackRange < 0.0f)
-            _stats.AttackRange = 0.0f;
-        if (_stats.AttackIntervalMs < 1)
-            _stats.AttackIntervalMs = 1;
-        if (_stats.MaxMp < 0)
-            _stats.MaxMp = 0;
-        if (_stats.HpRegen < 0)
-            _stats.HpRegen = 0;
-        if (_stats.MpRegen < 0)
-            _stats.MpRegen = 0;
-
+        _stats = Sanitize(stats);
         _hp = _stats.MaxHp;
         _mp = _stats.MaxMp;
+    }
+
+    private static CombatStats Sanitize(CombatStats stats)
+    {
+        CombatStats s = stats;
+        if (s.MaxHp < 1)
+            s.MaxHp = 1;
+        if (s.Attack < 0)
+            s.Attack = 0;
+        if (s.Defense < 0)
+            s.Defense = 0;
+        if (!float.IsFinite(s.AttackRange) || s.AttackRange < 0.0f)
+            s.AttackRange = 0.0f;
+        if (s.AttackIntervalMs < 1)
+            s.AttackIntervalMs = 1;
+        if (s.MaxMp < 0)
+            s.MaxMp = 0;
+        if (s.HpRegen < 0)
+            s.HpRegen = 0;
+        if (s.MpRegen < 0)
+            s.MpRegen = 0;
+        return s;
+    }
+
+    /// <summary>존 안에서 전투 능력치를 바꾼다(레벨 업 등). SetCombatStats와 같은 보정을 하고, fill이면 살아 있을 때 체력/MP를 가득 채우며
+    /// 아니면 현재 값을 새 최대치로 깎는다. 존 스레드에서 FieldZoneBase.ChangeStats로 호출한다.</summary>
+    internal void ReplaceStats(CombatStats stats, bool fill)
+    {
+        _stats = Sanitize(stats);
+        if (fill && !_dead)
+        {
+            _hp = _stats.MaxHp;
+            _mp = _stats.MaxMp;
+        }
+        else
+        {
+            _hp = Math.Min(_hp, _stats.MaxHp);
+            _mp = Math.Min(_mp, _stats.MaxMp);
+        }
     }
 
     internal int _restoreHp = -1;       // RestoreVitals()로 정한 입장 시 체력(없으면 -1)

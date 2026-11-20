@@ -230,6 +230,24 @@ namespace GameViewer.Core.Logic
         /// <summary>하얗게 번쩍이는 시간(밀리초).</summary>
         public static float FlashMs(Entity e) { return 90f + 60f * e.HitPower; }
 
+        /// <summary>시체가 쓰러진 채 또렷이 남아 있는 시간(ms). 쓰러지는 그림(420ms)이 끝난 뒤 잠깐 보여 준다. 보스는 처치 연출이 끝날 때까지.</summary>
+        public static float DeathHoldMs(Entity e) { return e != null && e.IsBoss ? BossFx.DeathMs : 900f; }
+        /// <summary>시체가 흐려지며 사라지는 데 걸리는 시간(ms).</summary>
+        public static float DeathFadeMs(Entity e) { return e != null && e.IsBoss ? 2600f : 1800f; }
+
+        /// <summary>사망 후 age(ms) 에서의 불투명도 1 -> 0. 안 죽었거나 age 가 음수면 1. 0 이 되면 더는 그리지 않는다.</summary>
+        public static float DeathAlpha(Entity e, float age)
+        {
+            float hold = DeathHoldMs(e), fade = DeathFadeMs(e);
+            if (age <= hold) return 1f;
+            float t = (age - hold) / fade;
+            if (t >= 1f) return 0f;
+            return 1f - t * t * (3f - 2f * t);          // smoothstep: 천천히 시작해 부드럽게 끝난다
+        }
+
+        /// <summary>시체가 완전히 사라지는 시각(사망 후 ms). 이름표도 이때 내린다.</summary>
+        public static float DeathGoneMs(Entity e) { return DeathHoldMs(e) + DeathFadeMs(e); }
+
         /// <summary>죽는 순간 맞은 방향으로 미끄러지는 거리(월드 단위)의 진행도 0~1 에 대한 위치. age 는 사망 후 경과(ms), 반환은 거리.</summary>
         public static float DeathSlide(Entity e, float age)
         {

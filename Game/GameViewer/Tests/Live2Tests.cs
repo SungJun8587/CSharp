@@ -78,16 +78,17 @@ namespace GameViewer.Tests
             T.Eq(57, k.Get(BindAction.Skill9), "default skill9 = '9'");
             BindAction a;
             T.Check(k.TryActionFor(116, out a) && a == BindAction.Reconnect, "F5 -> reconnect");
-            T.Check(!k.TryActionFor(90, out a), "unbound key has no action");
+            T.Check(k.TryActionFor(90, out a) && a == BindAction.ZoneSelect, "Z -> zone select");
+            T.Check(!k.TryActionFor(88, out a), "unbound key has no action");
 
             BindAction sw;
-            T.Eq(BindResult.Ok, k.Set(BindAction.BasicAttack, 90, out sw), "bind to free key");
-            T.Eq(90, k.Get(BindAction.BasicAttack), "Z bound");
+            T.Eq(BindResult.Ok, k.Set(BindAction.BasicAttack, 88, out sw), "bind to free key");
+            T.Eq(88, k.Get(BindAction.BasicAttack), "X bound");
             T.Check(!k.TryActionFor(81, out a), "old key freed");
-            T.Eq(BindResult.Swapped, k.Set(BindAction.SelectBoss, 90, out sw), "taking a used key swaps");
+            T.Eq(BindResult.Swapped, k.Set(BindAction.SelectBoss, 88, out sw), "taking a used key swaps");
             T.Check(sw == BindAction.BasicAttack, "swapped partner reported");
-            T.Eq(90, k.Get(BindAction.SelectBoss), "boss key now Z"); T.Eq(66, k.Get(BindAction.BasicAttack), "attack got boss's old key B");
-            T.Eq(BindResult.Ok, k.Set(BindAction.SelectBoss, 90, out sw), "rebinding the same key is a no-op");
+            T.Eq(88, k.Get(BindAction.SelectBoss), "boss key now X"); T.Eq(66, k.Get(BindAction.BasicAttack), "attack got boss's old key B");
+            T.Eq(BindResult.Ok, k.Set(BindAction.SelectBoss, 88, out sw), "rebinding the same key is a no-op");
             T.Eq(BindResult.Reserved, k.Set(BindAction.Chat, 27, out sw), "Esc reserved");
             T.Eq(BindResult.Reserved, k.Set(BindAction.Chat, 37, out sw), "arrow reserved");
             T.Eq(BindResult.Reserved, k.Set(BindAction.Chat, 100, out sw), "numpad4 reserved (mirrors skill 4)");

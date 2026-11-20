@@ -81,20 +81,23 @@ namespace GameViewer.App.Render
             return new RectangleF(ox + (aw - total) / 2f + i * (cw + CardGap), CardTop(h), cw, CardH(h));
         }
 
+        private const float StartShiftLeft = 100f;
+
         /// <summary>"게임 시작" 버튼 영역.</summary>
         public static RectangleF StartRect(int w, int h)
         {
             float y = Math.Min(h - 96f, CardTop(h) + CardH(h) + 28f);
             float ox = Inset(w);
-            return new RectangleF(ox + (w - ox - 240f) / 2f, y, 240f, 50f);
+            float x = Math.Max(ox + 8f, ox + (w - ox - 240f) / 2f - StartShiftLeft);       // 가운데에서 왼쪽으로 StartShiftLeft 만큼 옮긴다(서버 칸과 맵 칸도 이 버튼을 따라간다)
+            return new RectangleF(x, y, 240f, 50f);
         }
 
         /// <summary>맵(존) 선택 칸 i: "게임 시작" 버튼 오른쪽에 나란히 놓는다.</summary>
         public static RectangleF ZoneRect(int w, int h, int i)
         {
             RectangleF b = StartRect(w, h);
-            float x0 = Math.Max(b.Right + 4f, Math.Min(b.Right + 28f, w - 8f - (5 * 78f - 6f)));
-            int perRow = Math.Max(2, Math.Min(5, (int)((w - 8f - x0 + 6f) / 78f)));        // 창이 좁으면 줄을 바꾼다
+            float x0 = Math.Max(b.Right + 4f, Math.Min(b.Right + 28f, w - 8f - (6 * 78f - 6f)));
+            int perRow = Math.Max(2, Math.Min(6, (int)((w - 8f - x0 + 6f) / 78f)));        // 창이 좁으면 줄을 바꾼다
             int row = i / perRow, col = i % perRow;
             return new RectangleF(x0 + col * 78f, b.Y - 4f + row * 36f, 72f, 32f);
         }
@@ -246,9 +249,9 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>영웅 선택 화면. sel 은 선택된 카드, hover 는 마우스가 올라간 카드(-1 없음), target 은 접속 대상 설명.</summary>
-        public void DrawSelect(Graphics g, int w, int h, GameData data, int sel, int hover, string target, long now) { DrawSelect(g, w, h, data, sel, hover, target, now, 0); }
+        public void DrawSelect(Graphics g, int w, int h, GameData data, int sel, int hover, string target, long now) { DrawSelect(g, w, h, data, sel, hover, target, now, uint.MaxValue); }
 
-        /// <summary>zoneId 가 0 이 아니면 시작 버튼 옆에 맵 선택 칸을 그린다. hover: -2 시작 버튼, -3-i 맵 칸 i.</summary>
+        /// <summary>zoneId 가 uint.MaxValue(존 없음)가 아니면 시작 버튼 옆에 맵 선택 칸을 그린다. hover: -2 시작 버튼, -3-i 맵 칸 i.</summary>
         public void DrawSelect(Graphics g, int w, int h, GameData data, int sel, int hover, string target, long now, uint zoneId)
         {
             List<uint> ids = data.HeroIds();
@@ -274,7 +277,7 @@ namespace GameViewer.App.Render
             g.DrawRectangle(_res.Pen(230, 230, 255, 200, 1.6f), b.X, b.Y, b.Width, b.Height);
             g.DrawString("게임 시작", _res.Big, _res.Brush(Color.FromArgb(14, 30, 16)), b, _res.Center);
             if (Servers != null && Servers.List.Count > 0) DrawServers(g, w, h, now);
-            if (zoneId != 0)
+            if (zoneId != uint.MaxValue)
             {
                 RectangleF z0 = ZoneRect(w, h, 0);
                 g.DrawString("맵 (Tab)", _res.Small, _res.Brush(Color.FromArgb(200, 215, 200)), z0.X, z0.Y - 20);

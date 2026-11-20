@@ -115,6 +115,7 @@ public sealed class BuffTimerSet<TKey> where TKey : notnull
     public bool RemoveStacks(TKey key, int stacks, out bool removed)
     {
         removed = false;
+        if (stacks < 0) throw new ArgumentOutOfRangeException(nameof(stacks));
         if (!_entries.TryGetValue(key, out Entry? e)) return false;
         e.Stacks -= stacks;
         if (e.Stacks <= 0)

@@ -53,6 +53,12 @@ namespace GameViewer.Core.Protocol
         public static byte[] Status(ulong ent, uint status, ulong caster, uint dur, bool applied)
         { PacketWriter w = W(ZonePacketType.ZcStatusNotify, 29); w.U64(ent); w.U32(status); w.U64(caster); w.U32(dur); w.U8((byte)(applied ? 1 : 0)); return w.Finish(); }
 
+        public static byte[] Exp(uint level, uint exp, uint toNext, uint gained, bool levelUp, bool maxLevel)
+        { return new ZcExpNotify { Level = level, Exp = exp, ExpToNext = toNext, Gained = gained, Flags = (byte)((levelUp ? ZcExpNotify.FlagLevelUp : 0) | (maxLevel ? ZcExpNotify.FlagMaxLevel : 0)) }.ToBytes(); }
+
+        public static byte[] Currency(uint id, uint amount, uint gained)
+        { return new ZcCurrencyNotify { CurrencyId = id, Amount = amount, Gained = gained }.ToBytes(); }
+
         public static Frame F(byte[] pkt) { return new Frame((ushort)(pkt[2] | (pkt[3] << 8)), pkt); }
     }
 }

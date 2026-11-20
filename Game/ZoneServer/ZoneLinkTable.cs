@@ -61,8 +61,6 @@ public static class ZoneLinkTable
                 return Fail(path, "행 " + row + ": Edge는 W/E/N/S 중 하나");
             if (!float.IsFinite(r.Pos) || !float.IsFinite(r.Width) || r.Width <= 0f || !float.IsFinite(r.TargetX) || !float.IsFinite(r.TargetY))
                 return Fail(path, "행 " + row + ": 숫자 열(Width는 양수, 모두 유한한 값)");
-            if (r.TargetZone == 0)
-                return Fail(path, "행 " + row + ": TargetZone");
 
             list.Add(new ZoneGateLink { Edge = r.Edge[0], Pos = r.Pos, Width = r.Width, TargetZone = r.TargetZone, TargetX = r.TargetX, TargetY = r.TargetY });
         }

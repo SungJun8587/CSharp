@@ -1,5 +1,6 @@
 ﻿// Log.cs : implementation of the Log and LogManager classes.
 using System;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -122,6 +123,22 @@ public sealed class Log : IDisposable
     private StreamWriter? _writer;      // 현재 열려 있는 로그 파일
     private string? _currentPath;       // 현재 열려 있는 로그 파일 경로
 
+    // 파일명 캐시: 파일명은 분할 단위(초/분/시/일/월)가 바뀔 때만 달라지므로, 그때까지는 매 줄 문자열을 만들지 않는다.
+    private string? _cachedPath;
+    private DateTime _cachedUntil = DateTime.MinValue;
+
+    // 파일 열기/쓰기에 실패하면 이 시각(단조 ms)까지는 파일 쓰기를 건너뛴다. 디스크가 가득 찼거나 권한이 없을 때 줄마다 열기를 재시도하지 않게 한다.
+    private long _retryAfterMs;
+    private bool _retryPending;
+    private const int FileRetryDelayMs = 5000;
+
+    /// <summary>
+    /// true(기본)이면 호출 스레드는 줄을 만들어 큐에 넣기만 하고, 파일/콘솔 쓰기는 공용 쓰기 스레드가 한다.
+    /// 느린 디스크나 콘솔이 게임 틱을 붙잡지 않는다. 큐가 가득 차면 새 줄을 버리고 <see cref="LogPump.Dropped"/>로 센다. false 이면 호출 스레드에서 바로 쓴다.
+    /// 같은 Log 의 줄 순서는 어느 쪽이든 유지된다.
+    /// </summary>
+    public bool Async { get; set; } = true;
+
     //***************************************************************************
     // @brief 로그 시스템을 초기화합니다.
     // @param directory 로그 파일을 저장할 디렉토리 경로 (없으면 첫 기록 시 생성)
@@ -135,6 +152,8 @@ public sealed class Log : IDisposable
         lock (_sync)
         {
             CloseWriter();
+            _cachedPath = null;
+            _retryPending = false;
 
             _directory = directory ?? string.Empty;
             _fileNamePrefix = fileNamePrefix ?? string.Empty;
@@ -155,10 +174,11 @@ public sealed class Log : IDisposable
     }
 
     //***************************************************************************
-    // @brief 열려 있는 로그 파일을 닫습니다. 이후 기록 시 필요하면 다시 열립니다.
+    // @brief 큐에 쌓인 줄을 모두 쓴 뒤 열려 있는 로그 파일을 닫습니다. 이후 기록 시 필요하면 다시 열립니다.
     //***************************************************************************
     public void Dispose()
     {
+        LogPump.Flush();
         lock (_sync)
         {
             CloseWriter();
@@ -198,15 +218,32 @@ public sealed class Log : IDisposable
             ? "[" + now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "] # " + message
             : message;
 
+        if (Async)
+        {
+            // 파일/디버그 출력과 콘솔을 서로 다른 쓰기 스레드로 보낸다: 콘솔이 막혀도(파이프가 가득 찬 경우 등) 파일 로그는 밀리지 않는다.
+            LogOutput output = _output;
+            if ((output & (LogOutput.File | LogOutput.DebugOutput)) != 0)
+                LogPump.File.Enqueue(this, type, now, line, output & (LogOutput.File | LogOutput.DebugOutput));
+            if ((output & LogOutput.Console) != 0)
+                LogPump.Console.Enqueue(this, type, now, line, LogOutput.Console);
+            return;
+        }
+
+        WriteNow(type, now, line, _output);
+    }
+
+    // 쓰기 스레드(또는 동기 모드의 호출 스레드)에서 parts 에 해당하는 출력을 한다.
+    internal void WriteNow(LogType type, DateTime now, string line, LogOutput parts)
+    {
         lock (_sync)
         {
-            if ((_output & LogOutput.File) != 0)
+            if ((parts & LogOutput.File) != 0)
                 WriteFile(now, line);
 
-            if ((_output & LogOutput.Console) != 0)
+            if ((parts & LogOutput.Console) != 0)
                 WriteConsole(type, Truncate(line));
 
-            if ((_output & LogOutput.DebugOutput) != 0)
+            if ((parts & LogOutput.DebugOutput) != 0)
                 System.Diagnostics.Trace.WriteLine(Truncate(line));
         }
     }
@@ -216,9 +253,12 @@ public sealed class Log : IDisposable
         if (_directory.Length == 0)
             return; // 초기화되지 않음
 
+        if (_retryPending && TimeUtil.MonotonicNowMillis() < _retryAfterMs)
+            return; // 직전 실패 뒤 쉬는 중(그동안의 줄은 파일에 남지 않는다. 콘솔/디버그 출력은 계속된다)
+
         try
         {
-            string path = Path.Combine(_directory, BuildFileName(_fileNamePrefix, _logFmt, now));
+            string path = CurrentPath(now);
 
             if (_writer == null || !string.Equals(path, _currentPath, StringComparison.Ordinal))
             {
@@ -232,13 +272,49 @@ public sealed class Log : IDisposable
             }
 
             _writer.WriteLine(line);
+            _retryPending = false;
         }
         catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is ArgumentException || e is NotSupportedException)
         {
-            // 로그 기록 실패가 호출자를 죽이지 않도록 삼킨다. 다음 기록 때 파일을 다시 연다.
+            // 로그 기록 실패가 호출자를 죽이지 않도록 삼키고, FileRetryDelayMs 뒤에 파일을 다시 연다.
             CloseWriter();
+            _retryPending = true;
+            _retryAfterMs = TimeUtil.MonotonicNowMillis() + FileRetryDelayMs;
         }
     }
+
+    private string CurrentPath(DateTime now)
+    {
+        if (_cachedPath != null && now < _cachedUntil && now >= _cachedUntil - BoundarySpan(_logFmt, now))
+            return _cachedPath;
+
+        _cachedPath = Path.Combine(_directory, BuildFileName(_fileNamePrefix, _logFmt, now));
+        _cachedUntil = NextBoundary(_logFmt, now);
+        return _cachedPath;
+    }
+
+    // now 가 속한 분할 단위의 다음 경계 시각.
+    private static DateTime NextBoundary(LogFileFormat format, DateTime now)
+    {
+        switch (format)
+        {
+            case LogFileFormat.Sec: return new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, now.Kind).AddSeconds(1);
+            case LogFileFormat.Min: return new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0, now.Kind).AddMinutes(1);
+            case LogFileFormat.Hours: return new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, now.Kind).AddHours(1);
+            case LogFileFormat.Monthly: return new DateTime(now.Year, now.Month, 1, 0, 0, 0, now.Kind).AddMonths(1);
+            default: return now.Date.AddDays(1);
+        }
+    }
+
+    // 시각이 거꾸로 가는 경우(시계 조정)를 걸러 내려는 최대 경계 길이. 캐시 구간 [until - span, until) 밖이면 다시 계산한다.
+    private static TimeSpan BoundarySpan(LogFileFormat format, DateTime now) => format switch
+    {
+        LogFileFormat.Sec => TimeSpan.FromSeconds(1),
+        LogFileFormat.Min => TimeSpan.FromMinutes(1),
+        LogFileFormat.Hours => TimeSpan.FromHours(1),
+        LogFileFormat.Monthly => TimeSpan.FromDays(31),
+        _ => TimeSpan.FromDays(1) + TimeSpan.FromHours(1),      // 일 경계(서머타임 25시간 포함)
+    };
 
     private static void WriteConsole(LogType type, string line)
     {
@@ -299,6 +375,26 @@ public sealed class LogManager
         new Lazy<LogManager>(() => new LogManager(), LazyThreadSafetyMode.ExecutionAndPublication);
 
     private readonly Log[] _logs = new Log[(int)LogType.MaxNum]; // 로그 타입별 Log 인스턴스 배열
+    private int _minLevel;                                       // 이 레벨 미만은 서식 처리 전에 버린다(LogType 값)
+
+    /// <summary>이 레벨 미만의 로그는 서식을 만들기 전에 버린다(예: 운영에서 Info 이상만). 기본 Debug(전부 기록).</summary>
+    public LogType MinLevel
+    {
+        get => (LogType)Volatile.Read(ref _minLevel);
+        set => Volatile.Write(ref _minLevel, (int)value);
+    }
+
+    public bool IsEnabled(LogType type) => (int)type >= Volatile.Read(ref _minLevel);
+
+    /// <summary>모든 로그 타입의 비동기 쓰기를 한꺼번에 켜고 끈다(<see cref="Log.Async"/>).</summary>
+    public bool Async
+    {
+        get => _logs[0].Async;
+        set { foreach (Log log in _logs) log.Async = value; }
+    }
+
+    /// <summary>비동기 큐에 쌓인 줄을 모두 쓸 때까지 기다린다(최대 5초).</summary>
+    public void Flush() => LogPump.Flush();
 
     private LogManager()
     {
@@ -339,7 +435,7 @@ public sealed class LogManager
     public void Write(LogType type, bool withTimestamp, string format, params object?[] args)
     {
         int index = (int)type;
-        if (index < 0 || index >= _logs.Length)
+        if (index < 0 || index >= _logs.Length || index < Volatile.Read(ref _minLevel))
             return;
 
         _logs[index].LogWrite(type, Format(format, args), withTimestamp);
@@ -348,6 +444,7 @@ public sealed class LogManager
     /// <summary>열려 있는 모든 로그 파일을 닫습니다. 이후 기록하면 필요할 때 다시 열립니다.</summary>
     public void Shutdown()
     {
+        LogPump.Flush();
         foreach (Log log in _logs)
             log.Dispose();
     }
@@ -380,5 +477,103 @@ public sealed class LogManager
             // 서식과 인자가 맞지 않아도 로그가 유실되지 않도록 원본 서식을 그대로 기록한다.
             return format;
         }
+    }
+}
+
+//***************************************************************************
+// @brief 비동기 쓰기 큐와 쓰기 스레드입니다(File: 파일/디버그 출력용, Console: 콘솔용 — 둘은 서로 막지 않습니다).
+// @detail 한 큐의 스레드는 하나라서 같은 Log 의 줄 순서가 유지됩니다.
+//         큐는 MaxQueued 로 묶여 있어, 쓰기가 오래 막히면 새 줄을 버리고(Dropped) 메모리가 불어나지 않게 합니다.
+//         스레드는 백그라운드라 프로세스 종료를 막지 않으며, 종료 직전 LogManager.Shutdown 이 Flush 로 비웁니다.
+//***************************************************************************
+internal sealed class LogPump
+{
+    private readonly struct Entry
+    {
+        public readonly Log Log;
+        public readonly LogType Type;
+        public readonly DateTime Time;
+        public readonly string Line;
+        public readonly LogOutput Parts;
+        public Entry(Log log, LogType type, DateTime time, string line, LogOutput parts) { Log = log; Type = type; Time = time; Line = line; Parts = parts; }
+    }
+
+    public const int MaxQueued = 100_000;
+
+    public static readonly LogPump File = new LogPump("Core.LogWriter");
+    public static readonly LogPump Console = new LogPump("Core.LogConsole");
+
+    private readonly string _name;
+    private readonly ConcurrentQueue<Entry> _queue = new ConcurrentQueue<Entry>();
+    private readonly AutoResetEvent _signal = new AutoResetEvent(false);
+    private readonly object _startLock = new object();
+    private Thread? _thread;
+    private int _count;         // 큐에 있거나 쓰는 중인 줄 수(쓰기가 끝나야 줄어든다)
+    private long _dropped;
+
+    private LogPump(string name) { _name = name; }
+
+    /// <summary>큐가 가득 차서 버려진 줄 수(누적, 두 큐 합계).</summary>
+    public static long Dropped => System.Threading.Interlocked.Read(ref File._dropped) + System.Threading.Interlocked.Read(ref Console._dropped);
+
+    public void Enqueue(Log log, LogType type, DateTime time, string line, LogOutput parts)
+    {
+        if (Volatile.Read(ref _count) >= MaxQueued)
+        {
+            Interlocked.Increment(ref _dropped);
+            return;             // 버렸다(호출 스레드에서 동기로 쓰면 막히므로 동기 쓰기로 돌리지 않는다)
+        }
+
+        Interlocked.Increment(ref _count);
+        _queue.Enqueue(new Entry(log, type, time, line, parts));
+        EnsureStarted();
+        _signal.Set();
+    }
+
+    private void EnsureStarted()
+    {
+        if (Volatile.Read(ref _thread) != null)
+            return;
+
+        lock (_startLock)
+        {
+            if (_thread != null)
+                return;
+
+            var t = new Thread(Run) { IsBackground = true, Name = _name };
+            Volatile.Write(ref _thread, t);
+            t.Start();
+        }
+    }
+
+    private void Run()
+    {
+        while (true)
+        {
+            while (_queue.TryDequeue(out Entry e))
+            {
+                try { e.Log.WriteNow(e.Type, e.Time, e.Line, e.Parts); }
+                catch { /* 로그 출력이 쓰기 스레드를 죽이지 않게 한다 */ }
+                Interlocked.Decrement(ref _count);
+            }
+            _signal.WaitOne();
+        }
+    }
+
+    /// <summary>두 큐가 빌 때까지(쓰기가 끝날 때까지) 기다린다. 전체 제한 시간은 timeoutMs.</summary>
+    public static void Flush(int timeoutMs = 5000)
+    {
+        long deadline = TimeUtil.MonotonicNowMillis() + timeoutMs;
+        File.WaitEmpty(deadline);
+        Console.WaitEmpty(deadline);
+    }
+
+    private void WaitEmpty(long deadline)
+    {
+        if (Volatile.Read(ref _thread) == null)
+            return;
+
+        while (Volatile.Read(ref _count) > 0 && TimeUtil.MonotonicNowMillis() < deadline)
+            Thread.Sleep(1);
     }
 }

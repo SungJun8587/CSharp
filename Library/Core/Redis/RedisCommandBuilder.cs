@@ -43,7 +43,7 @@ public static class RedisCommandBuilder
         long size = HeaderLen(args.Count);
         for (int i = 0; i < args.Count; ++i)
         {
-            int byteCount = Encoding.UTF8.GetByteCount(args[i]);
+            int byteCount = ArgByteCount(args, i);
             size += HeaderLen(byteCount) + byteCount + 2; // 헤더 + 데이터 + \r\n
 
             // 누적하면서 상한을 확인해, int로 되감겨 실제보다 작은 버퍼에 Encode()가 쓰는 일이 없게 한다.
@@ -62,15 +62,30 @@ public static class RedisCommandBuilder
 
         for (int i = 0; i < args.Count; ++i)
         {
-            string arg = args[i];
-            int byteCount = Encoding.UTF8.GetByteCount(arg);
+            int byteCount = ArgByteCount(args, i);
             p += WriteHeader(dest.Slice(p), (byte)'$', byteCount);
-            p += Encoding.UTF8.GetBytes(arg, dest.Slice(p));
+            byte[]? binary = (args as RedisBinaryArgs)?.BinaryAt(i);
+            if (binary != null)
+            {
+                binary.CopyTo(dest.Slice(p));
+                p += binary.Length;
+            }
+            else
+            {
+                p += Encoding.UTF8.GetBytes(args[i], dest.Slice(p));
+            }
             dest[p++] = (byte)'\r';
             dest[p++] = (byte)'\n';
         }
 
         return p;
+    }
+
+    // 인자 i 가 차지할 바이트 수(바이너리 인자는 원본 길이, 문자열은 UTF-8 길이).
+    private static int ArgByteCount(IReadOnlyList<string> args, int i)
+    {
+        byte[]? binary = (args as RedisBinaryArgs)?.BinaryAt(i);
+        return binary != null ? binary.Length : Encoding.UTF8.GetByteCount(args[i]);
     }
 
     private static int CountDigits(long value)

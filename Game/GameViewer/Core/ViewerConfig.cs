@@ -24,12 +24,12 @@ namespace GameViewer.Core
         public uint ZoneId = 1;
         public uint HeroId = 1;             // 0 = 서버 기본 영웅
         public string DataDir = "GameData"; // XlsxConverter 출력(Hero/Monster/Skill/Status/HeroSkill/Block/Spawn .json) 폴더
-        public bool Auto = false;           // 시작하자마자 자동 전투
+        public bool Auto = true;            // 입장하면 자동 전투(기본 켬. 끄려면 GameViewer.json 의 "Auto": false)
         public bool SkipHeroSelect = false; // true 면 시작 화면의 영웅 선택을 건너뛰고 HeroId 로 바로 접속한다
         public double PixelsPerUnit = 24;   // 화면 배율(월드 1 unit = N 픽셀)
         public double EntityScale = 1.15;   // 영웅/몬스터 그림 크기 배율(1 = sprites.json 의 height 그대로). 지형과 화면 배율은 그대로다
-        public int WindowWidth = 1440;
-        public int WindowHeight = 864;
+        public int WindowWidth = 1490;
+        public int WindowHeight = 814;
         public int ConnectTimeoutMs = 3000;
         public int MoveIntervalMs = 120;    // 이동 요청 최소 간격
         [JsonIgnore] public bool HostPortExplicit = false;   // 명령행으로 --host/--port 를 줬는가(그러면 마지막으로 고른 서버를 쓰지 않는다)
@@ -56,7 +56,8 @@ namespace GameViewer.Core
   --zone <id>           입장할 존 ID (기본 1)
   --hero <id>           영웅 ID, 0=서버 기본 영웅 (기본 1)
   --data <dir>          GameData JSON 폴더 (기본 GameData)
-  --auto                시작하자마자 자동 전투
+  --auto                입장하자마자 자동 전투(기본값)
+  --no-auto             자동 전투 없이 시작
   --skip-select         시작 화면의 영웅 선택을 건너뛰고 --hero 영웅으로 바로 시작
   --scale <n>           화면 배율 px/unit (기본 24)
   --width <n> --height <n>   창 크기
@@ -67,7 +68,7 @@ namespace GameViewer.Core
         {
             error = null; exitNow = false;
             ViewerConfig c = new ViewerConfig();
-            CommandLine cl = new CommandLine(args, new string[] { "auto", "skip-select", "single", "help", "h" });
+            CommandLine cl = new CommandLine(args, new string[] { "auto", "no-auto", "skip-select", "single", "help", "h" });
 
             if (cl.Has("help") || cl.Has("h") || System.Linq.Enumerable.Contains(cl.Positional, "/?")) { Console.WriteLine(Usage); exitNow = true; return c; }
             foreach (string p in cl.Positional) { error = "unknown option: " + p; return null; }
@@ -92,6 +93,7 @@ namespace GameViewer.Core
             try
             {
                 if (cl.GetBool("auto")) c.Auto = true;
+                if (cl.GetBool("no-auto")) c.Auto = false;
                 if (cl.GetBool("skip-select")) c.SkipHeroSelect = true;
                 if (cl.GetBool("single")) c.MultiInstance = false;
             }

@@ -17,6 +17,7 @@
     <ProjectReference Include="../GameCommon/ZoneCore/Game.ZoneCore.csproj" />
     <ProjectReference Include="../ZoneServer/Game.ZoneServer.csproj" />
     <ProjectReference Include="../GatewayServer/Game.GatewayServer.csproj" />
+    <ProjectReference Include="../Persistence/Game.Persistence.csproj" />
     <ProjectReference Include="../../Library/Core/Net/Core.Net.csproj" />
     <ProjectReference Include="../../Library/Core/Util/Core.Util.csproj" />
   </ItemGroup>

@@ -32,9 +32,13 @@ public sealed class MetricRegistry
 
     private object Get(string name, Kind kind, string help, Func<object> make)
     {
-        if (!IsValidName(name))
-            throw new ArgumentException("지표 이름은 [a-zA-Z_:][a-zA-Z0-9_:]* 이어야 한다: " + name, nameof(name));
-        Item item = _items.GetOrAdd(name, _ => new Item { Kind = kind, Help = help, Metric = make() });
+        // 이미 있는 지표는 이름 검증과 람다 할당 없이 찾는다(이름으로 매번 조회하는 핫패스).
+        if (!_items.TryGetValue(name ?? "", out Item? item))
+        {
+            if (!IsValidName(name!))
+                throw new ArgumentException("지표 이름은 [a-zA-Z_:][a-zA-Z0-9_:]* 이어야 한다: " + name, nameof(name));
+            item = _items.GetOrAdd(name!, _ => new Item { Kind = kind, Help = help, Metric = make() });
+        }
         if (item.Kind != kind)
             throw new InvalidOperationException("지표 '" + name + "'은 이미 다른 종류로 등록돼 있다");
         return item.Metric;

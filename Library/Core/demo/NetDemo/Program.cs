@@ -517,7 +517,7 @@ internal static class Program
             return 0;
         }
 
-        const int clientCount = 20;
+        const int clientCount = 40;
         const int packetCount = 200;
         int failures = 0;
 
@@ -1165,6 +1165,28 @@ internal static class Program
             var tlsJobSession = new TlsEchoSession();
             tlsJobSession.AttachJobQueue(q);
             Check("TLS: AttachJobQueue", ReferenceEquals(tlsJobSession.Jobs, q));
+        }
+
+        // TLS 방송: 세션이 40개(>32)면 송신 시작이 ThreadPool 로 나뉜다. 모두 받아야 한다.
+        {
+            X509Certificate2 bcert = MakeTestCert();
+            var bServer = new TlsServerService(new IPEndPoint(IPAddress.Loopback, 0), () => new TlsEchoSession(),
+                new TlsServiceOptions { ServerCertificate = bcert, MaxSessionCount = 100, HandshakeTimeoutMs = 10000 });
+            bServer.Start();
+            var bClient = new TlsClientService(bServer.LocalEndPoint!, () => new TlsCollectSession(),
+                new TlsServiceOptions { TargetHost = "localhost", RemoteCertificateValidation = (_, _, _, _) => true });
+            var bSessions = new List<TlsCollectSession>();
+            for (int i = 0; i < 40; i++)
+                bSessions.Add((TlsCollectSession)bClient.ConnectAsync().GetAwaiter().GetResult());
+            Check("TLS 방송: 서버 세션 40개", WaitFor(() => bServer.SessionCount == 40, 10000));
+
+            SendBuffer tbc = SendBufferManager.Open(PacketHeader.HeaderSize + 4);
+            PacketHeader.Write(tbc.Buffer, PacketHeader.HeaderSize + 4, 7);
+            BitConverter.TryWriteBytes(tbc.Buffer.Slice(PacketHeader.HeaderSize), 12345);
+            bServer.Broadcast(tbc.Close(PacketHeader.HeaderSize + 4));
+            Check("TLS 방송: 40개 세션 모두 수신", WaitFor(() => bSessions.All(x => x.Received.ContainsKey(12345)), 10000));
+            bClient.Close(3000);
+            bServer.Close(3000);
         }
 
         // 팩토리: UDP(델리게이트)·TLS 생성, UDP 통계 스냅샷

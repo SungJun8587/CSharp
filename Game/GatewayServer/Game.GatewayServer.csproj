@@ -9,12 +9,17 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+    <!-- MySQL 저장소(Dapper/MySqlConnector NuGet 필요)는 -p:SkipMySql=true 로 뺄 수 있다. 빼면 연결 문자열을 설정해도 시작하지 않는다. -->
+    <DefineConstants Condition="'$(SkipMySql)' != 'true'">$(DefineConstants);USE_MYSQL</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="../GameCommon/Generated/Game.Generated.csproj" />
     <ProjectReference Include="../GameCommon/ZoneCommon/Game.ZoneCommon.csproj" />
+    <ProjectReference Include="../Persistence/Game.Persistence.csproj" />
+    <ProjectReference Include="../Persistence.MySql/Game.Persistence.MySql.csproj" Condition="'$(SkipMySql)' != 'true'" />
     <ProjectReference Include="../../Library/Core/Net/Core.Net.csproj" />
+
     <ProjectReference Include="../../Library/Core/Util/Core.Util.csproj" />
   </ItemGroup>
 

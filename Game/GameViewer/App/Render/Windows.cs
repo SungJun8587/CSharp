@@ -309,8 +309,7 @@ namespace GameViewer.App.Render
 
         public static RectangleF LogPanel(ViewState v, int skillCount)
         {
-            float total = (Math.Min(9, skillCount) + 1) * 58f + Math.Min(9, skillCount) * 6f;
-            float dockLeft = (v.Width - total) / 2f - 14f;
+            float dockLeft = HudRenderer.DockLeft(v, skillCount);
             float w = Math.Max(260f, Math.Min(470f, dockLeft - 18f));
             float h = 198f;
             return new RectangleF(10f, v.Height - 10f - h, w, h);

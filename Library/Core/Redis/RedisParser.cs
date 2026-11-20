@@ -356,12 +356,12 @@ public sealed class RedisParser
                     break;
                 offset += 2;
 
-                value = new RedisValue
-                {
-                    Type = RedisType.BulkString,
-                    Int64Val = len,
-                    StrVal = dataLen == 0 ? string.Empty : Encoding.UTF8.GetString(buf.Slice(dataStart, dataLen))
-                };
+                string text = dataLen == 0 ? string.Empty : Encoding.UTF8.GetString(buf.Slice(dataStart, dataLen));
+                value = new RedisValue { Type = RedisType.BulkString, Int64Val = len, StrVal = text };
+
+                // 잘못된 UTF-8 은 U+FFFD 로 바뀌어 원본을 잃는다. 그런 값(바이너리)만 원본 바이트를 따로 보존한다(텍스트는 추가 비용 없음).
+                if (text.AsSpan().IndexOf('\uFFFD') >= 0)
+                    value.SetRawBytes(buf.Slice(dataStart, dataLen).ToArray());
                 return RedisParseResult.Success;
             }
 
@@ -379,9 +379,9 @@ public sealed class RedisParser
                     return RedisParseResult.Success; // Null Array
                 }
 
-                // 원소는 최소 4바이트(":0\r\n")이므로 남은 데이터로 가능한 개수까지만 미리 잡는다 —
+                // 원소는 최소 3바이트(빈 단순 문자열 "+\r\n")이므로 남은 데이터로 가능한 개수까지만 미리 잡는다 —
                 // 선언된 개수만큼 매 시도마다 할당하지 않게 한다.
-                int capacity = (int)Math.Min(count, (buf.Length - offset) / 4 + 1);
+                int capacity = (int)Math.Min(count, (buf.Length - offset) / 3 + 1);
                 RedisValue[] elems = capacity == 0 ? Array.Empty<RedisValue>() : new RedisValue[capacity];
                 for (long i = 0; i < count; ++i)
                 {

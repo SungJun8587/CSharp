@@ -24,6 +24,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Game.GatewayServer", "Gatew
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Game.Generated", "GameCommon\Generated\Game.Generated.csproj", "{C37C8706-B538-9077-13FF-F4FF13AEA185}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Game.Persistence", "Persistence\Game.Persistence.csproj", "{7A1F3C52-5B6D-4E0A-9C21-1D2E3F405161}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Game.Persistence.MySql", "Persistence.MySql\Game.Persistence.MySql.csproj", "{8B2A4D63-6C7E-4F1B-8D32-2E3F40516272}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -62,6 +66,14 @@ Global
 		{3B55E691-1A4E-41CA-A118-62B2AB02C0C6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3B55E691-1A4E-41CA-A118-62B2AB02C0C6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3B55E691-1A4E-41CA-A118-62B2AB02C0C6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7A1F3C52-5B6D-4E0A-9C21-1D2E3F405161}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A1F3C52-5B6D-4E0A-9C21-1D2E3F405161}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A1F3C52-5B6D-4E0A-9C21-1D2E3F405161}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A1F3C52-5B6D-4E0A-9C21-1D2E3F405161}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8B2A4D63-6C7E-4F1B-8D32-2E3F40516272}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8B2A4D63-6C7E-4F1B-8D32-2E3F40516272}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8B2A4D63-6C7E-4F1B-8D32-2E3F40516272}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8B2A4D63-6C7E-4F1B-8D32-2E3F40516272}.Release|Any CPU.Build.0 = Release|Any CPU
 		{C37C8706-B538-9077-13FF-F4FF13AEA185}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C37C8706-B538-9077-13FF-F4FF13AEA185}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C37C8706-B538-9077-13FF-F4FF13AEA185}.Release|Any CPU.ActiveCfg = Release|Any CPU

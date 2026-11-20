@@ -27,6 +27,71 @@ namespace GameViewer.Tests
             int n = 0; foreach (ViewEffect f in w.Effects) if (f.Kind == k) ++n; return n;
         }
 
+        public static void LevelUpEffect()
+        {
+            WorldModel w = NewWorld();
+            Apply(w, Pk.Exp(3, 59, 700, 19, false, false), 100);
+            T.Eq(0, CountFx(w, EffectKind.LevelUp), "plain gain has no level up effect");
+            Apply(w, Pk.Exp(4, 3, 900, 19, true, false), 300);
+            T.Eq(1, CountFx(w, EffectKind.LevelUp), "level up makes one effect");
+            ViewEffect fx = null; foreach (ViewEffect f in w.Effects) if (f.Kind == EffectKind.LevelUp) fx = f;
+            T.Check(fx != null && fx.EntityId == Self && fx.Value == 4 && fx.StartMs == 300 && fx.DurMs == WorldModel.LevelUpDurMs, "effect follows me with the new level");
+        }
+
+        public static void ExpAndLevel()
+        {
+            WorldModel w = NewWorld();
+            T.Eq(1u, w.MyLevel, "level starts at 1");
+            Apply(w, Pk.Exp(3, 40, 700, 0, false, false), 100);
+            T.Eq(3u, w.MyLevel, "level from enter packet");
+            T.Eq(40u, w.MyExp, "exp");
+            T.Eq(700u, w.MyExpToNext, "exp to next");
+            T.Check(!w.MyMaxLevel, "not max level");
+            int logs = w.Log.Count;
+            Apply(w, Pk.Exp(3, 59, 700, 19, false, false), 200);
+            T.Eq(logs + 1, w.Log.Count, "a gain is logged");
+            Apply(w, Pk.Exp(4, 3, 900, 19, true, false), 300);
+            T.Eq(4u, w.MyLevel, "level up applied");
+            T.Eq(300L, w.LevelUpMs, "level up time");
+            Apply(w, Pk.Exp(50, 0, 0, 0, false, true), 400);
+            T.Check(w.MyMaxLevel, "max level flag");
+            w.Clear();
+            T.Eq(1u, w.MyLevel, "clear resets level");
+            ZcExpNotify rt = ZcExpNotify.Parse(new ZcExpNotify { Level = 9, Exp = 5, ExpToNext = 50, Gained = 2, Flags = ZcExpNotify.FlagLevelUp }.ToBytes());
+            T.Check(rt.Level == 9 && rt.Exp == 5 && rt.ExpToNext == 50 && rt.Gained == 2 && rt.LevelUp, "packet round trip");
+        }
+
+        public static void TerrainCheat()
+        {
+            WorldModel w = NewWorld();
+            T.Eq(0u, w.ServerTerrain, "no terrain from the server at start");
+            Apply(w, new ZcTerrainNotify { Terrain = 5 }.ToBytes(), 100);
+            T.Eq(5u, w.ServerTerrain, "the server terrain is remembered");
+            w.Clear();
+            T.Eq(0u, w.ServerTerrain, "clear resets the server terrain");
+            byte[] req = ZcTerrainReq.ToBytes(7);
+            T.Check(req.Length == ZcTerrainReq.Size && (req[2] | (req[3] << 8)) == ZcTerrainReq.Type && BitConverter.ToUInt32(req, 4) == 7u, "request layout (size, type 2034, terrain)");
+            T.Eq(7u, ZcTerrainNotify.Parse(new ZcTerrainNotify { Terrain = 7 }.ToBytes()).Terrain, "notify round trip");
+        }
+
+        public static void Wallet()
+        {
+            WorldModel w = NewWorld();
+            T.Eq(0u, w.Gold, "no gold at start");
+            Apply(w, Pk.Currency(1, 500, 0), 100);
+            T.Eq(500u, w.Gold, "gold from enter packet");
+            int logs = w.Log.Count;
+            Apply(w, Pk.Currency(1, 530, 30), 200);
+            T.Eq(530u, w.Gold, "gold after gain");
+            T.Eq(logs + 1, w.Log.Count, "a gain is logged");
+            Apply(w, Pk.Currency(2, 7, 0), 300);
+            T.Eq(530u, w.Gold, "other currencies do not touch gold");
+            w.Clear();
+            T.Eq(0u, w.Gold, "clear resets the wallet");
+            ZcCurrencyNotify rt = ZcCurrencyNotify.Parse(new ZcCurrencyNotify { CurrencyId = 3, Amount = 9, Gained = 4 }.ToBytes());
+            T.Check(rt.CurrencyId == 3 && rt.Amount == 9 && rt.Gained == 4, "packet round trip");
+        }
+
         public static void MoveAndSpawn()
         {
             WorldModel w = NewWorld();

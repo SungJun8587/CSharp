@@ -1,19 +1,23 @@
-XlsxConverter stamp v4 exe=639306765068382256/639306765068382256
+XlsxConverter stamp v4 exe=639307600712862780/639307600712862780
 xlsx=K:\GitHub\CSharp\Game\GameData
 out=K:\GitHub\CSharp\Game\GameData
 cs=K:\GitHub\CSharp\Game\GameCommon\Generated
 ns=Game.Generated
 --
-src=Definitions.xlsx=639306754135240901/10084;Hero.xlsx=639306763444147056/13549;Monster.xlsx=639306763443970730/12494;Packet.xlsx=639306754135392774/22377;World.xlsx=639306764011667494/11253;
+src=Definitions.xlsx=639307524388477637/10084;Hero.xlsx=639307600138435785/17696;Monster.xlsx=639307594724316404/15135;Packet.xlsx=639307524388627651/22377;World.xlsx=639307524387262755/12314;
 K:\GitHub\CSharp\Game\GameData\Hero.json
 K:\GitHub\CSharp\Game\GameData\Skill.json
 K:\GitHub\CSharp\Game\GameData\Status.json
 K:\GitHub\CSharp\Game\GameData\HeroSkill.json
+K:\GitHub\CSharp\Game\GameData\Level.json
+K:\GitHub\CSharp\Game\GameData\Currency.json
 K:\GitHub\CSharp\Game\GameData\Monster.json
 K:\GitHub\CSharp\Game\GameData\Boss.json
 K:\GitHub\CSharp\Game\GameData\BossPhase.json
 K:\GitHub\CSharp\Game\GameData\BossAction.json
 K:\GitHub\CSharp\Game\GameData\Drop.json
+K:\GitHub\CSharp\Game\GameData\MonsterExp.json
+K:\GitHub\CSharp\Game\GameData\MonsterCurrency.json
 K:\GitHub\CSharp\Game\GameData\Spawn.json
 K:\GitHub\CSharp\Game\GameData\ZoneRule.json
 K:\GitHub\CSharp\Game\GameData\Block.json
@@ -23,11 +27,15 @@ K:\GitHub\CSharp\Game\GameCommon\Generated\Hero.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\Skill.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\Status.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\HeroSkill.gen.cs
+K:\GitHub\CSharp\Game\GameCommon\Generated\Level.gen.cs
+K:\GitHub\CSharp\Game\GameCommon\Generated\Currency.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\Monster.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\Boss.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\BossPhase.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\BossAction.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\Drop.gen.cs
+K:\GitHub\CSharp\Game\GameCommon\Generated\MonsterExp.gen.cs
+K:\GitHub\CSharp\Game\GameCommon\Generated\MonsterCurrency.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\Spawn.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\ZoneRule.gen.cs
 K:\GitHub\CSharp\Game\GameCommon\Generated\Block.gen.cs
