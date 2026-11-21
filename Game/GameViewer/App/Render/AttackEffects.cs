@@ -33,9 +33,9 @@ namespace GameViewer.App.Render
         private static float Clamp01(float v) { return GameViewer.Core.Logic.Mx.Clamp01(v); }
         private static int Mix(int a, int b, float t) { return GameViewer.Core.Logic.Mx.MixRgb(a, b, t); }
         private static float Rn(ViewEffect fx, int i) { return Noise.Hash01(i * 7 + (int)(fx.StartMs & 0x7FFF), (int)(fx.EntityId & 0xFF) + i * 3, 0x3Bu); }
-        private void Glow(Graphics g, int rgb, float cx, float cy, float r, float k) { _fx.Glow(g, Color.FromArgb(255, (rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255), cx, cy, r, r, k); }
+        private void Glow(IGfx g, int rgb, float cx, float cy, float r, float k) { _fx.Glow(g, Color.FromArgb(255, (rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255), cx, cy, r, r, k); }
 
-        private void Star(Graphics g, int rgb, int a, float cx, float cy, float r, float rot, float w)
+        private void Star(IGfx g, int rgb, int a, float cx, float cy, float r, float rot, float w)
         {
             float c = (float)Math.Cos(rot), s = (float)Math.Sin(rot);
             Pen p = Pn(rgb, a, w);
@@ -79,7 +79,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 근접
 
         /// <summary>근접 기본 공격. 무기에 맞는 그림이 있으면 그리고 true (false 면 기존 베기를 쓴다).</summary>
-        public bool MeleeSlash(Graphics g, WorldModel w, ViewEffect fx, ViewState v, long now)
+        public bool MeleeSlash(IGfx g, WorldModel w, ViewEffect fx, ViewState v, long now)
         {
             Entity c = w.Find(fx.EntityId);
             Weapon wp = WeaponOf(c);
@@ -98,7 +98,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>검: 시전자 앞을 가르는 겹친 초승달 궤적과 끝에 맺히는 빛.</summary>
-        private void DrawSword(Graphics g, ViewEffect fx, ViewState v, float p, float cx, float cy, int c1, int c2)
+        private void DrawSword(IGfx g, ViewEffect fx, ViewState v, float p, float cx, float cy, int c1, int c2)
         {
             float ang = (float)Math.Atan2(fx.Y - cy, fx.X - cx);
             float deg = ang * 57.29578f;
@@ -129,7 +129,7 @@ namespace GameViewer.App.Render
         /// 창: 손에서 대상 너머까지 꿰뚫는 찌르기. 뒤로 흩어지는 속도선과 창끝 번쩍임, 퍼지는 고리.
         /// power 1 은 기본 공격, 1.5 이상은 스킬(줄기가 굵고 고리와 방사선이 한 겹 더 붙는다).
         /// </summary>
-        public void Thrust(Graphics g, ViewEffect fx, ViewState v, float p, float cx, float cy, int c1, int c2, float power)
+        public void Thrust(IGfx g, ViewEffect fx, ViewState v, float p, float cx, float cy, int c1, int c2, float power)
         {
             float ax = v.ToScreenX(cx), ay = v.ToScreenY(cy) - v.Px(1.3f);
             float hx = v.ToScreenX(fx.X), hy = v.ToScreenY(fx.Y) - v.Px(1.1f);
@@ -187,7 +187,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>발톱: 대상 위에 비스듬한 세 줄이 차례로 그어진다.</summary>
-        private void DrawClaw(Graphics g, ViewEffect fx, ViewState v, float p, int c1, int c2)
+        private void DrawClaw(IGfx g, ViewEffect fx, ViewState v, float p, int c1, int c2)
         {
             float hx = v.ToScreenX(fx.X), hy = v.ToScreenY(fx.Y) - v.Px(1.0f);
             float len = v.Px(1.5f), fade = 1f - Clamp01((p - 0.35f) / 0.65f);
@@ -206,7 +206,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 원거리
 
         /// <summary>원거리 기본 공격. 활은 화살, 지팡이는 마력 구슬. 그 밖에는 false (기존 선을 쓴다).</summary>
-        public bool Tracer(Graphics g, WorldModel w, ViewEffect fx, ViewState v, long now)
+        public bool Tracer(IGfx g, WorldModel w, ViewEffect fx, ViewState v, long now)
         {
             Entity c = w.Find(fx.EntityId);
             Weapon wp = WeaponOf(c);
@@ -263,7 +263,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 타격 충격
 
         /// <summary>타격 충격. 모든 피해에 붙는다. Value = 피해량, Variant 1 = 큰 피해, TargetId = 공격자.</summary>
-        public void Hit(Graphics g, WorldModel w, ViewEffect fx, ViewState v, float p, float sx, float sy)
+        public void Hit(IGfx g, WorldModel w, ViewEffect fx, ViewState v, float p, float sx, float sy)
         {
             Entity atk = fx.TargetId != 0 ? w.Find(fx.TargetId) : null;
             Weapon wp = WeaponOf(atk);

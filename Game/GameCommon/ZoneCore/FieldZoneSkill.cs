@@ -692,8 +692,9 @@ public abstract partial class FieldZoneBase
     /// 합계는 MinStatPercent/MaxStatPercent로 묶고, 이동속도는 MaxSpeedBuffPercent로 묶는다.
     /// (AOI 시야 검증이 이 상한을 전제로 최고 속도를 계산한다.)
     /// </summary>
-    private static void RecomputeStatMods(ZoneEntity entity)
+    private void RecomputeStatMods(ZoneEntity entity)
     {
+        float oldSpeed = entity._speed;
         int attack = 0, defense = 0, speed = 0;
         for (int i = 0; i < entity._statuses.Count; ++i)
         {
@@ -709,6 +710,11 @@ public abstract partial class FieldZoneBase
         entity._defensePct = Math.Min(Math.Max(defense, SkillRules.MinStatPercent), SkillRules.MaxStatPercent);
         entity._speedPct = Math.Min(Math.Max(speed, SkillRules.MinStatPercent), SkillRules.MaxSpeedBuffPercent);
         entity._speed = entity._baseSpeed * (float)(100 + entity._speedPct) * 0.01f;
+
+        // 이동 중에 속도가 바뀌면(둔화/격노 등이 걸리거나 풀림) 주변과 본인에게 새 속도로 이동을 다시 알린다.
+        // 안 그러면 클라이언트는 옛 속도로 계속 보간해 서버와 위치가 벌어지고, 다음 이동 요청이 위치 불일치로 거부되어 되돌려진다(위치 보정).
+        if (entity._moving && entity._inZone && entity._speed != oldSpeed && !_updatingMovement)
+            HandleMoveStarted(entity);
     }
 
     /// <summary>존에서 제거되는 엔티티의 시전/상태 효과를 훅 없이 정리한다. 시전 타이머를 해제하고 보유 목록에서 뺀다.</summary>

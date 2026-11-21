@@ -319,7 +319,7 @@ public static class GameDataLoader
         if (cr == ReadResult.Ok)
         {
             foreach (CurrencyRow r in currencies!.Currency)
-                if (!data.AddCurrency(new CurrencyData.Currency { Id = r.Id, Name = r.Name, MaxAmount = r.MaxAmount }))
+                if (!data.AddCurrency(new CurrencyData.Currency { Id = r.Id, Name = r.Name, MaxAmount = r.MaxAmount, Paid = r.Paid }))
                 {
                     LogManager.Error("[GameData] Currency: id is zero or duplicated. id={0}", r.Id);
                     return null;

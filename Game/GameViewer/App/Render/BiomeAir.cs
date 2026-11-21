@@ -12,7 +12,7 @@ namespace GameViewer.App.Render
 {
     public sealed partial class Atmosphere
     {
-        private void DrawBiomeAir(Graphics g, ViewState v, long now, MapKind kind)
+        private void DrawBiomeAir(IGfx g, ViewState v, long now, MapKind kind)
         {
             if (kind == MapKind.Snow) DrawSnowAir(g, v, now);
             else if (kind == MapKind.Volcano) DrawVolcanoAir(g, v, now);
@@ -20,9 +20,9 @@ namespace GameViewer.App.Render
             else DrawAir2(g, v, now, kind);
         }
 
-        private void Band(Graphics g, float x, float y, float w, float h, Color c, int peak)
+        private void Band(IGfx g, float x, float y, float w, float h, Color c, int peak)
         {
-            using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(x, y, w, h + 1), Color.FromArgb(0, c), Color.FromArgb(0, c), LinearGradientMode.Vertical))
+            using (LinearGradientBrush b = GfxBrush.Linear(new RectangleF(x, y, w, h + 1), Color.FromArgb(0, c), Color.FromArgb(0, c), LinearGradientMode.Vertical))
             {
                 ColorBlend cb = new ColorBlend(3);
                 cb.Colors = new Color[] { Color.FromArgb(0, c), Color.FromArgb(peak, c), Color.FromArgb(0, c) };
@@ -33,12 +33,12 @@ namespace GameViewer.App.Render
         }
 
         // ---------------------------------------------------------------- 설원: 차가운 푸른 색조, 비스듬히 날리는 눈, 바람에 쓸리는 눈 안개
-        private void DrawSnowAir(Graphics g, ViewState v, long now)
+        private void DrawSnowAir(IGfx g, ViewState v, long now)
         {
             float W = v.Width, H = v.Height;
             double t = now / 1000.0;
             g.FillRectangle(_res.Brush(18, 150, 190, 255), 0, 0, W, H);
-            using (LinearGradientBrush tb = new LinearGradientBrush(new RectangleF(0, 0, W, H * 0.4f + 1), Color.FromArgb(40, 230, 244, 255), Color.FromArgb(0, 230, 244, 255), LinearGradientMode.Vertical))
+            using (LinearGradientBrush tb = GfxBrush.Linear(new RectangleF(0, 0, W, H * 0.4f + 1), Color.FromArgb(40, 230, 244, 255), Color.FromArgb(0, 230, 244, 255), LinearGradientMode.Vertical))
                 g.FillRectangle(tb, 0, 0, W, H * 0.4f);
             // 바람에 쓸려 가는 눈 안개
             for (int i = 0; i < 3; ++i)
@@ -73,13 +73,13 @@ namespace GameViewer.App.Render
         }
 
         // ---------------------------------------------------------------- 화산: 붉은 열기, 솟는 불씨, 떨어지는 재, 일렁이는 아지랑이
-        private void DrawVolcanoAir(Graphics g, ViewState v, long now)
+        private void DrawVolcanoAir(IGfx g, ViewState v, long now)
         {
             float W = v.Width, H = v.Height;
             double t = now / 1000.0;
             float pulse = 0.65f + 0.35f * (float)Math.Sin(t * 0.8);
             g.FillRectangle(_res.Brush((int)(22 + 10 * pulse), 255, 70, 20), 0, 0, W, H);
-            using (LinearGradientBrush bb = new LinearGradientBrush(new RectangleF(0, H * 0.55f, W, H * 0.45f + 1), Color.FromArgb(0, 255, 80, 20), Color.FromArgb((int)(52 * pulse + 10), 255, 80, 20), LinearGradientMode.Vertical))
+            using (LinearGradientBrush bb = GfxBrush.Linear(new RectangleF(0, H * 0.55f, W, H * 0.45f + 1), Color.FromArgb(0, 255, 80, 20), Color.FromArgb((int)(52 * pulse + 10), 255, 80, 20), LinearGradientMode.Vertical))
                 g.FillRectangle(bb, 0, H * 0.55f, W, H * 0.45f);
             // 아지랑이
             for (int i = 0; i < 4; ++i)
@@ -121,14 +121,14 @@ namespace GameViewer.App.Render
         }
 
         // ---------------------------------------------------------------- 늪: 탁한 녹색 색조, 흐르는 안개, 떠다니는 포자와 반딧불
-        private void DrawSwampAir(Graphics g, ViewState v, long now)
+        private void DrawSwampAir(IGfx g, ViewState v, long now)
         {
             float W = v.Width, H = v.Height;
             double t = now / 1000.0;
             g.FillRectangle(_res.Brush(26, 40, 90, 50), 0, 0, W, H);
-            using (LinearGradientBrush tb = new LinearGradientBrush(new RectangleF(0, 0, W, H * 0.5f + 1), Color.FromArgb(40, 170, 200, 120), Color.FromArgb(0, 170, 200, 120), LinearGradientMode.Vertical))
+            using (LinearGradientBrush tb = GfxBrush.Linear(new RectangleF(0, 0, W, H * 0.5f + 1), Color.FromArgb(40, 170, 200, 120), Color.FromArgb(0, 170, 200, 120), LinearGradientMode.Vertical))
                 g.FillRectangle(tb, 0, 0, W, H * 0.5f);
-            using (LinearGradientBrush bb = new LinearGradientBrush(new RectangleF(0, H * 0.6f, W, H * 0.4f + 1), Color.FromArgb(0, 190, 220, 190), Color.FromArgb(40, 190, 220, 190), LinearGradientMode.Vertical))
+            using (LinearGradientBrush bb = GfxBrush.Linear(new RectangleF(0, H * 0.6f, W, H * 0.4f + 1), Color.FromArgb(0, 190, 220, 190), Color.FromArgb(40, 190, 220, 190), LinearGradientMode.Vertical))
                 g.FillRectangle(bb, 0, H * 0.6f, W, H * 0.4f);
             // 안개 띠: 느리게 흐른다
             for (int i = 0; i < 5; ++i)

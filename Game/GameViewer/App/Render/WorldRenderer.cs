@@ -87,7 +87,7 @@ namespace GameViewer.App.Render
         private long _subT;
         private void Sub(int i) { long t = System.Diagnostics.Stopwatch.GetTimestamp(); SubMs[i] += (t - _subT) * 1000.0 / System.Diagnostics.Stopwatch.Frequency; _subT = t; }
 
-        public void DrawScene(Graphics g, ViewerSession s, ViewState v, long now)
+        public void DrawScene(IGfx g, ViewerSession s, ViewState v, long now)
         {
             _subT = System.Diagnostics.Stopwatch.GetTimestamp();
             WorldModel w = s.World;
@@ -161,7 +161,7 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 바위
 
-        private void DrawRock(Graphics g, ViewState v, BlockRow b, int index)
+        private void DrawRock(IGfx g, ViewState v, BlockRow b, int index)
         {
             float x0 = v.ToScreenX(b.X), y0 = v.ToScreenY(b.Y);
             float w = v.Px(b.W), h = v.Px(b.H);
@@ -190,7 +190,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 엔티티
 
         /// <summary>지면 아이템(드롭): 영웅/몬스터 몸 대신 바닥에서 살짝 떠서 반짝이는 보석 모양으로 그린다.</summary>
-        private void DrawGroundItem(Graphics g, Entity e, ViewState v, long now, float sx, float sy)
+        private void DrawGroundItem(IGfx g, Entity e, ViewState v, long now, float sx, float sy)
         {
             float r = v.Px(0.55f);
             float bob = (float)Math.Sin(now / 260.0 + (e.Id & 15)) * v.Px(0.12f);
@@ -203,7 +203,7 @@ namespace GameViewer.App.Render
             if (e.Id == v.SelectedId) g.DrawEllipse(_res.Pen(210, 255, 232, 130, 2f), sx - r * 1.3f, sy - r * 0.5f, r * 2.6f, r);
         }
 
-        private void DrawEntity(Graphics g, ViewerSession s, Entity e, ViewState v, long now)
+        private void DrawEntity(IGfx g, ViewerSession s, Entity e, ViewState v, long now)
         {
             float x, y; e.PosAt(now, out x, out y);
             float sx = v.ToScreenX(x), sy = v.ToScreenY(y);
@@ -274,7 +274,7 @@ namespace GameViewer.App.Render
                     by -= v.Px(BossFx.EntranceDrop(entP) * look.H);
                     _creatures.Alpha = BossFx.EntranceAlpha(entP);
                 }
-                System.Drawing.Drawing2D.GraphicsState gb = g.Save();
+                GfxState gb = g.Save();
                 g.TranslateTransform(bx, by);
                 if (Math.Abs(pose.Lean) > 0.05f) g.RotateTransform(pose.Lean);
                 g.ScaleTransform(pose.ScaleX * bossK, pose.ScaleY * bossK);
@@ -288,7 +288,7 @@ namespace GameViewer.App.Render
             else
             {
                 // 발 밑을 축으로 기울이고 눌러 늘인다 (그림은 캐시된 한 장이므로 변환만 바꾼다)
-                System.Drawing.Drawing2D.GraphicsState gs = g.Save();
+                GfxState gs = g.Save();
                 g.TranslateTransform(bx, by);
                 if (Math.Abs(pose.Lean) > 0.05f) g.RotateTransform(pose.Lean);
                 g.ScaleTransform(pose.ScaleX, pose.ScaleY);
@@ -298,7 +298,7 @@ namespace GameViewer.App.Render
             _creatures.Alpha = 1f;
             if (swipe >= 0f && !MonsterFx.Has(e)) DrawSwipe(g, e, v, look, sx, sy, swipe, false);
             _monFx.Draw(g, e, v, look, bx, sy + v.Px(pose.OffY) * 0.6f, now, true);
-            if (AssetSprites.Find(false, e.TemplateId) != null) HeroWeapons.Draw(g, e, v, look, bx, by, now);        // 이미지 영웅은 무기 동작 프레임이 없어 따로 그린다
+            { AssetSet hs = AssetSprites.Find(false, e.TemplateId); if (hs != null && hs.Frames != null) HeroWeapons.Draw(g, e, v, look, bx, by, now); }        // 이미지 영웅은 무기 동작 프레임이 없어 따로 그린다(3D 영웅은 무기가 모델에 붙어 있다)
             CastLight.DrawFront(g, _fx, e, v, look, bx, by, now);
             float shot = AttackPose.ShotProgress(e, now);
             if (shot >= 0f) DrawShotFlash(g, e, v, look, sx, sy, shot);
@@ -327,7 +327,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>보스 발 밑의 느리게 도는 마법진: 이중 타원 + 점선 고리. 페이즈가 오를수록 선명하다.</summary>
-        private void DrawBossRune(Graphics g, Entity e, ViewState v, Look look, float sx, float sy, long now)
+        private void DrawBossRune(IGfx g, Entity e, ViewState v, Look look, float sx, float sy, long now)
         {
             Color c = BossAccent(e, 0f);
             float rr = v.Px(Math.Max(1.6f, look.HalfW * 1.25f));
@@ -358,7 +358,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>착지 뒤 바닥 균열: 발 밑에서 바깥으로 뻗는 갈라진 선과 안쪽에서 새어 나오는 빛. 서서히 옅어진다.</summary>
-        private void DrawBossCracks(Graphics g, ViewState v, float sx, float sy, Look look, float p, Color c)
+        private void DrawBossCracks(IGfx g, ViewState v, float sx, float sy, Look look, float p, Color c)
         {
             float grow = Math.Min(1f, p * 4f), fade = p < 0.45f ? 1f : 1f - (p - 0.45f) / 0.55f;
             float R = v.Px(look.HalfW) * (1.1f + 1.6f * grow);
@@ -376,7 +376,7 @@ namespace GameViewer.App.Render
             _fx.Glow(g, c, sx, sy, R * 0.9f, R * 0.35f, 0.35f * fade);
         }
 
-        private void DrawBossPillar(Graphics g, ViewState v, float x, float footY, Look look, float p, Color accent)
+        private void DrawBossPillar(IGfx g, ViewState v, float x, float footY, Look look, float p, Color accent)
         {
             float h = v.Px(look.H * 2.6f), w = v.Px(look.HalfW) * (1.1f - 0.5f * p);
             float a = p < 0.7f ? 1f : 1f - (p - 0.7f) / 0.3f;
@@ -390,7 +390,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>보스 페이즈 변신: 붉은 섬광과 퍼지는 충격 고리(페이즈가 높을수록 겹이 늘어난다).</summary>
-        private void DrawBossPhaseBurst(Graphics g, ViewState v, float x, float footY, Look look, float p, int phase, Color accent)
+        private void DrawBossPhaseBurst(IGfx g, ViewState v, float x, float footY, Look look, float p, int phase, Color accent)
         {
             float t = BossFx.PhaseTint(p);
             _fx.Glow(g, accent, x, footY - v.Px(look.H * 0.5f), v.Px(look.HalfW) * 1.7f, v.Px(look.H) * 0.7f, 0.55f * t);
@@ -405,7 +405,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>밤 광원: 밤 색조를 깐 뒤에 덧그린다. 수정/용암 바위는 스스로 빛나고, 내 영웅 둘레는 따뜻하게 밝아져 어두워도 읽힌다.</summary>
-        public void DrawLights(Graphics g, ViewerSession s, ViewState v, long now, float night)
+        public void DrawLights(IGfx g, ViewerSession s, ViewState v, long now, float night)
         {
             if (night <= 0.02f) return;
             float wy0 = v.ToWorldY(-100) - 6f, wy1 = v.ToWorldY(v.Height + 200) + 6f, wx0 = v.ToWorldX(-100) - 6f, wx1 = v.ToWorldX(v.Width + 100) + 6f;
@@ -433,7 +433,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>발 밑 접지 그림자 + 키가 큰 몸이 빛 반대쪽(오른쪽 아래)으로 드리우는 긴 그림자. 스프라이트의 림 라이트(왼쪽 위)와 같은 방향이다.</summary>
-        private void DrawGroundShadow(Graphics g, float x, float y, float half, float lift, ViewState v, float height)
+        private void DrawGroundShadow(IGfx g, float x, float y, float half, float lift, ViewState v, float height)
         {
             float k = 1f / (1f + lift * 0.9f);               // 높이 뜰수록 작아짐
             float a = 0.55f + 0.45f * k;                      // 옅어짐
@@ -455,7 +455,7 @@ namespace GameViewer.App.Render
         /// <summary>
         /// 몬스터 근접 공격이 땅을 때리는 순간의 먼지와 충격 고리. 달려들기/뛰어내리기는 착지에, 내려찍기는 타격 순간에 터진다.
         /// </summary>
-        private void DrawAttackDust(Graphics g, Entity e, ViewState v, Look look, float x, float y, long now)
+        private void DrawAttackDust(IGfx g, Entity e, ViewState v, Look look, float x, float y, long now)
         {
             if (!e.IsMonster || e.Dead || e.AttackKind == 2) return;
             AttackStyle st = AttackPose.StyleOf(e);
@@ -489,7 +489,7 @@ namespace GameViewer.App.Render
         /// 근접 공격의 휘두름 궤적. 몸 뒤(back)에서 번지는 잔광과 몸 앞에서 번쩍이는 날로 나눠 그린다.
         /// 영웅은 직업별로 다르다: 전사는 크게 내려치는 검광, 창기사는 앞으로 뻗는 직선 찌르기. 이미지 영웅은 무기 프레임이 없어 이 궤적이 무기 동작을 대신한다.
         /// </summary>
-        private void DrawSwipe(Graphics g, Entity e, ViewState v, Look look, float sx, float sy, float prog, bool back)
+        private void DrawSwipe(IGfx g, Entity e, ViewState v, Look look, float sx, float sy, float prog, bool back)
         {
             float fl = (float)Math.Sqrt(e.FaceX * e.FaceX + e.FaceY * e.FaceY);
             float fx = fl > 0.001f ? e.FaceX / fl : 1f, fy = fl > 0.001f ? e.FaceY / fl : 0f;
@@ -512,7 +512,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>창 찌르기: 몸에서 ang 방향으로 곧게 뻗는 잔광 한 줄.</summary>
-        private void Thrust(Graphics g, float ex, float ey, float ang, float reach, float prog, Color c, float w, bool back)
+        private void Thrust(IGfx g, float ex, float ey, float ang, float reach, float prog, Color c, float w, bool back)
         {
             int a = (int)(230 * (1f - prog) * (1f - prog)) & ~15;
             if (a < 16) return;
@@ -529,7 +529,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>호 모양 베기 한 번. prog 0~1 동안 start 에서 sweep 도까지 뻗으며 사라진다.</summary>
-        private void ArcSlash(Graphics g, float ex, float ey, float reach, float start, float sweep, float prog, Color c, float w, bool back)
+        private void ArcSlash(IGfx g, float ex, float ey, float reach, float start, float sweep, float prog, Color c, float w, bool back)
         {
             float sweepEnd = sweep * AttackPose.EaseOut(prog * 1.6f);
             int a = (int)(230 * (1f - prog) * (1f - prog)) & ~15;
@@ -544,7 +544,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>영웅의 원거리 발사 섬광: 궁수는 시위를 놓는 별빛, 마법사는 지팡이 구슬이 터지는 빛.</summary>
-        private void DrawShotFlash(Graphics g, Entity e, ViewState v, Look look, float sx, float sy, float prog)
+        private void DrawShotFlash(IGfx g, Entity e, ViewState v, Look look, float sx, float sy, float prog)
         {
             float fl = (float)Math.Sqrt(e.FaceX * e.FaceX + e.FaceY * e.FaceY);
             float fx = fl > 0.001f ? e.FaceX / fl : 1f, fy = fl > 0.001f ? e.FaceY / fl : 0f;
@@ -573,7 +573,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void DrawSelectionRing(Graphics g, float sx, float sy, float rx, long now)
+        private void DrawSelectionRing(IGfx g, float sx, float sy, float rx, long now)
         {
             float pulse = 1f + 0.06f * (float)Math.Sin(now / 150.0);
             Pen p = _res.DashPen(Color.FromArgb(230, 255, 70, 70), 2.5f, (now / 60) % 10);
@@ -631,7 +631,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void DrawOverheads(Graphics g, ViewerSession s, ViewState v, long now)
+        private void DrawOverheads(IGfx g, ViewerSession s, ViewState v, long now)
         {
             WorldModel w = s.World;
             _plates.Clear();
@@ -703,7 +703,7 @@ namespace GameViewer.App.Render
                     float k = e.IsBoss ? 1.5f : 1f;
                     int a = 140 + (int)(115 * wp);
                     Color wc = Color.FromArgb(Math.Min(255, a), 255, (int)(210 - 150 * wp), (int)(80 - 40 * wp));
-                    GraphicsState ws = g.Save();
+                    GfxState ws = g.Save();
                     g.TranslateTransform(sx, iconY + 4f);
                     g.ScaleTransform(k * (0.8f + 0.5f * wp), k * (0.8f + 0.5f * wp));
                     _res.OutlinedText(g, "!", _res.Big, wc, 0f, 0f, _res.Center);
@@ -724,7 +724,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>보스 체력바 위에 페이즈 경계 눈금을 그린다.</summary>
-        public static void DrawPhaseTicks(Graphics g, Entity e, float x, float y, float w, float h)
+        public static void DrawPhaseTicks(IGfx g, Entity e, float x, float y, float w, float h)
         {
             if (e.Boss == null) return;
             using (Pen p = new Pen(Color.FromArgb(220, 255, 255, 255), 1f))
@@ -737,7 +737,7 @@ namespace GameViewer.App.Render
                 }
         }
 
-        private void DrawStatusIcons(Graphics g, ViewerSession s, Entity e, float sx, float iconY, long now)
+        private void DrawStatusIcons(IGfx g, ViewerSession s, Entity e, float sx, float iconY, long now)
         {
             int n = e.Statuses.Count;
             float ix = sx - (n * 17f) / 2f;

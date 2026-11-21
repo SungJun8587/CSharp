@@ -45,7 +45,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>바닥에 놓인 물체의 그림자: 밑동 타원 두 겹 + 오른쪽 아래로 길게 드리우는 두 겹. half 는 밑동 반폭, cast 는 드리우는 길이(둘 다 화면 픽셀), a 는 기본 알파.</summary>
-        public static void Object(Graphics g, Resources res, float x, float y, float half, float cast, float a)
+        public static void Object(IGfx g, Resources res, float x, float y, float half, float cast, float a)
         {
             int r, gg, b; float mul, lm; Lit(out r, out gg, out b, out mul, out lm);
             a *= mul; cast *= lm;

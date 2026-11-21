@@ -17,6 +17,7 @@ namespace Game.Generated
 		public uint Id { get; set; }
 		public string Name { get; set; } = string.Empty;
 		public uint MaxAmount { get; set; }
+		public bool Paid { get; set; }
 
 		/// <summary>헤더의 [min..max]를 벗어난 값을 errors에 덧붙인다.</summary>
 		public void Validate(string where, List<string> errors)

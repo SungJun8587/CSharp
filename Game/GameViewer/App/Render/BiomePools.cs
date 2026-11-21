@@ -16,7 +16,7 @@ namespace GameViewer.App.Render
         public BiomePools(Resources res) { _res = res; }
 
         /// <summary>물가 땅: 물 둘레로 젖어 어두워진 흙이 번져 나가며 바탕 풀/모래 색과 섞인다(바깥으로 갈수록 투명).</summary>
-        private void WetBank(Graphics g, MapKind kind, float cx, float cy, float rx, float ry, uint seed)
+        private void WetBank(IGfx g, MapKind kind, float cx, float cy, float rx, float ry, uint seed)
         {
             Color wet;
             switch (kind)
@@ -54,7 +54,7 @@ namespace GameViewer.App.Render
             return pts;
         }
 
-        public void Draw(Graphics g, ViewState v, MapKind kind, BlockRow b, int index, long now)
+        public void Draw(IGfx g, ViewState v, MapKind kind, BlockRow b, int index, long now)
         {
             float x0 = v.ToScreenX(b.X), y0 = v.ToScreenY(b.Y), w = v.Px(b.W), h = v.Px(b.H);
             if (x0 > v.Width + 60 || y0 > v.Height + 60 || x0 + w < -60 || y0 + h < -60) return;
@@ -69,7 +69,7 @@ namespace GameViewer.App.Render
         }
 
         // ------------------------------------------------------------ 얼음 호수
-        private void Ice(Graphics g, float cx, float cy, float rx, float ry, uint seed, int index, double t, float x0, float y0, float w, float h)
+        private void Ice(IGfx g, float cx, float cy, float rx, float ry, uint seed, int index, double t, float x0, float y0, float w, float h)
         {
             using (GraphicsPath bank = new GraphicsPath())
             {
@@ -92,10 +92,10 @@ namespace GameViewer.App.Render
                     pg.CenterPoint = new PointF(cx - rx * 0.12f, cy - ry * 0.15f);
                     g.FillPath(pg, ice);
                 }
-                GraphicsState gs = g.Save();
+                GfxState gs = g.Save();
                 g.SetClip(ice, CombineMode.Intersect);
                 // 하늘빛 반사 띠
-                using (LinearGradientBrush lb = new LinearGradientBrush(new RectangleF(x0, y0, w, h * 0.65f + 1), Color.FromArgb(120, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), LinearGradientMode.Vertical))
+                using (LinearGradientBrush lb = GfxBrush.Linear(new RectangleF(x0, y0, w, h * 0.65f + 1), Color.FromArgb(120, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), LinearGradientMode.Vertical))
                     g.FillRectangle(lb, x0, y0, w, h * 0.65f);
                 // 얼음 속 기포와 결
                 for (int k = 0; k < 14; ++k)
@@ -152,7 +152,7 @@ namespace GameViewer.App.Render
         }
 
         // ------------------------------------------------------------ 용암 웅덩이
-        private void Lava(Graphics g, float cx, float cy, float rx, float ry, uint seed, int index, double t, float x0, float y0, float w, float h)
+        private void Lava(IGfx g, float cx, float cy, float rx, float ry, uint seed, int index, double t, float x0, float y0, float w, float h)
         {
             float pulse = 0.6f + 0.4f * (float)Math.Sin(t * 1.6 + seed);
             // 바깥으로 번지는 열기(바닥을 붉게 물들임)
@@ -179,7 +179,7 @@ namespace GameViewer.App.Render
                     pg.CenterPoint = new PointF(cx + rx * 0.05f, cy);
                     g.FillPath(pg, lava);
                 }
-                GraphicsState gs = g.Save();
+                GfxState gs = g.Save();
                 g.SetClip(lava, CombineMode.Intersect);
                 // 천천히 떠다니는 검은 굳은 껍질 조각
                 for (int k = 0; k < 6; ++k)
@@ -187,7 +187,7 @@ namespace GameViewer.App.Render
                     double ph = t * (0.05 + k * 0.012) + Noise.Hash01(index, k, 281) * 6.28;
                     float px = cx + (float)Math.Cos(ph) * rx * (0.3f + Noise.Hash01(index, k, 283) * 0.45f), py = cy + (float)Math.Sin(ph * 1.3) * ry * (0.25f + Noise.Hash01(index, k, 285) * 0.4f);
                     float s = Math.Min(rx, ry) * (0.2f + Noise.Hash01(index, k, 287) * 0.25f);
-                    GraphicsState s2 = g.Save();
+                    GfxState s2 = g.Save();
                     g.TranslateTransform(px, py); g.RotateTransform((float)(ph * 20));
                     PointF[] plate = { new PointF(-s, -s * 0.2f), new PointF(-s * 0.3f, -s * 0.55f), new PointF(s * 0.6f, -s * 0.35f), new PointF(s, s * 0.1f), new PointF(s * 0.2f, s * 0.5f), new PointF(-s * 0.7f, s * 0.35f) };
                     g.FillPolygon(_res.Brush(235, 40, 28, 30), plate);
@@ -226,7 +226,7 @@ namespace GameViewer.App.Render
         }
 
         // ------------------------------------------------------------ 늪 웅덩이
-        private void Murk(Graphics g, float cx, float cy, float rx, float ry, uint seed, int index, double t, float x0, float y0, float w, float h)
+        private void Murk(IGfx g, float cx, float cy, float rx, float ry, uint seed, int index, double t, float x0, float y0, float w, float h)
         {
             using (GraphicsPath bank = new GraphicsPath())
             {
@@ -248,9 +248,9 @@ namespace GameViewer.App.Render
                     pg.CenterPoint = new PointF(cx + rx * 0.1f, cy + ry * 0.1f);
                     g.FillPath(pg, water);
                 }
-                GraphicsState gs = g.Save();
+                GfxState gs = g.Save();
                 g.SetClip(water, CombineMode.Intersect);
-                using (LinearGradientBrush lb = new LinearGradientBrush(new RectangleF(x0, y0, w, h * 0.6f + 1), Color.FromArgb(60, 190, 220, 200), Color.FromArgb(0, 190, 220, 200), LinearGradientMode.Vertical))
+                using (LinearGradientBrush lb = GfxBrush.Linear(new RectangleF(x0, y0, w, h * 0.6f + 1), Color.FromArgb(60, 190, 220, 200), Color.FromArgb(0, 190, 220, 200), LinearGradientMode.Vertical))
                     g.FillRectangle(lb, x0, y0, w, h * 0.6f);
                 // 녹조: 번져 있는 연두색 얼룩
                 for (int k = 0; k < 7; ++k)

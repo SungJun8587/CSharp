@@ -3,7 +3,7 @@
     {
       "Id": 1,
       "MonsterId": 122,
-      "Name": "거대 골렘",
+      "Name": "거대 오우거",
       "EnrageAfterMs": 180000,
       "EnrageStatusId": 5
     },
@@ -17,7 +17,7 @@
     {
       "Id": 3,
       "MonsterId": 108,
-      "Name": "거미 여왕",
+      "Name": "박쥐 여왕",
       "EnrageAfterMs": 0,
       "EnrageStatusId": 0
     },

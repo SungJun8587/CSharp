@@ -1,5 +1,5 @@
 ﻿// CurrencyRows.cs : Currency.json / MonsterCurrency.json 의 행 형식. 엑셀 변환기가 만드는 파일(Generated)이 아니라 손으로 쓴 파일이다.
-// 시트 헤더: Currency(Id:uint[1..], Name:string, MaxAmount:uint[1..]), MonsterCurrency(MonsterId:uint[1..], CurrencyId:uint[1..], MinAmount:uint[1..], MaxAmount:uint[1..], ChancePermille:uint[1..1000]).
+// 시트 헤더: Currency(Id:uint[1..], Name:string, MaxAmount:uint[1..], Paid:bool?), MonsterCurrency(MonsterId:uint[1..], CurrencyId:uint[1..], MinAmount:uint[1..], MaxAmount:uint[1..], ChancePermille:uint[1..1000]).
 using System.Collections.Generic;
 
 namespace Game.ZoneServer;
@@ -11,6 +11,7 @@ public sealed class CurrencyRow
     public uint Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public uint MaxAmount { get; set; }
+    public bool Paid { get; set; }          // 결제로만 얻는 유료 재화(블루 다이아 등). 없으면 false
 }
 
 public sealed class CurrencyTable

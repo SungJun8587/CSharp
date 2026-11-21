@@ -34,7 +34,7 @@ public static class RenderSnapshot
             int rows = heroes.Length + mons.Length;
             ViewState v = new ViewState(); v.Scale = scale;
             using (Bitmap bmp = new Bitmap(cellW * cols, cellH * rows, PixelFormat.Format32bppArgb))
-            using (Graphics g = Graphics.FromImage(bmp))
+            using (GdiGfx g = GdiGfx.FromImage(bmp))
             {
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
                 g.Clear(Color.FromArgb(74, 118, 56));
@@ -90,7 +90,7 @@ public static class RenderSnapshot
         string[] spots = (Environment.GetEnvironmentVariable("VIEWS") ?? "500,540;330,300;30,30").Split(';');
         using (SceneRenderer r = new SceneRenderer())
         using (Bitmap bmp = new Bitmap(1280, 800, PixelFormat.Format32bppArgb))
-        using (Graphics g = Graphics.FromImage(bmp))
+        using (GdiGfx g = GdiGfx.FromImage(bmp))
         {
             for (int i = 0; i < spots.Length; ++i)
             {
@@ -117,7 +117,7 @@ public static class RenderSnapshot
         Resources res = new Resources();
         int n = 28, cols = 7, cell = 96;
         using (Bitmap bmp = new Bitmap(cols * cell, ((n + cols - 1) / cols) * cell))
-        using (Graphics g = Graphics.FromImage(bmp))
+        using (GdiGfx g = GdiGfx.FromImage(bmp))
         {
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             g.Clear(Color.FromArgb(30, 36, 44));
@@ -127,7 +127,7 @@ public static class RenderSnapshot
                 using (System.Drawing.Drawing2D.GraphicsPath p = P.RoundPath(x, y, s, s, 8))
                 {
                     g.FillPath(new SolidBrush(Color.FromArgb(40, 46, 58)), p);
-                    System.Drawing.Drawing2D.GraphicsState gs = g.Save(); g.SetClip(p, System.Drawing.Drawing2D.CombineMode.Intersect);
+                    GfxState gs = g.Save(); g.SetClip(p, System.Drawing.Drawing2D.CombineMode.Intersect);
                     SkillRow sk = i == 0 ? null : data.Skill((uint)i);
                     Ui.SkillIcon(g, res, x + (s - s * 0.58f) / 2, y + 1, s * 0.58f, sk, i == 0 ? null : SkillFxTable.For(data, (uint)i), i == 0);
                     g.Restore(gs);
@@ -149,7 +149,7 @@ public static class RenderSnapshot
         using (Resources res = new Resources())
         using (EffectRenderer er = new EffectRenderer(res))
         using (Bitmap bmp = new Bitmap(cols * cw, names.Length * ch, PixelFormat.Format32bppArgb))
-        using (Graphics g = Graphics.FromImage(bmp))
+        using (GdiGfx g = GdiGfx.FromImage(bmp))
         {
             MaterialFx mf = new MaterialFx(res, er);
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
@@ -185,7 +185,7 @@ public static class RenderSnapshot
             long[] ts = { 0, 50, 90, 140, 200, 260, 340, 440 };
             int cellW = (int)(scale * 9), cellH = (int)(scale * 8);
             using (Bitmap bmp = new Bitmap(cellW * ts.Length, cellH * tpls.Length, PixelFormat.Format32bppArgb))
-            using (Graphics g = Graphics.FromImage(bmp))
+            using (GdiGfx g = GdiGfx.FromImage(bmp))
             using (Font f = new Font("Arial", 9f))
             {
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
@@ -206,7 +206,7 @@ public static class RenderSnapshot
                         g.FillEllipse(new SolidBrush(Color.FromArgb(70, 0, 0, 0)), sx - (float)scale * 1.2f, sy - (float)scale * 0.25f, (float)scale * 2.4f, (float)scale * 0.55f);
                         float bx = sx + (float)scale * pose.OffX, by = sy + (float)scale * pose.OffY * 0.6f - (float)scale * pose.Lift;
                         fxr.Draw(g, e, v, look, bx, by, now, false);
-                        System.Drawing.Drawing2D.GraphicsState gs = g.Save();
+                        GfxState gs = g.Save();
                         g.TranslateTransform(bx, by);
                         g.ScaleTransform(pose.ScaleX, pose.ScaleY);
                         cr.Draw(g, e, v, now, 0f, 0f, false);
@@ -234,7 +234,7 @@ public static class RenderSnapshot
             string[] cols = { "idle", "cast 45%", "cast 95%", "strike 0", "strike 70", "hold 110", "recover 200", "recover 300", "hit 20", "hit 120" };
             int cellW = (int)(scale * 8), cellH = (int)(scale * 7);
             using (Bitmap bmp = new Bitmap(cellW * cols.Length, cellH * rows.Length, PixelFormat.Format32bppArgb))
-            using (Graphics g = Graphics.FromImage(bmp))
+            using (GdiGfx g = GdiGfx.FromImage(bmp))
             using (Font f = new Font("Arial", 9f))
             {
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
@@ -255,7 +255,7 @@ public static class RenderSnapshot
                         float sx = c * cellW + cellW / 2f, sy = r * cellH + cellH - (float)scale * 1.0f;
                         g.FillEllipse(new SolidBrush(Color.FromArgb(70, 0, 0, 0)), sx - (float)scale * 1.2f, sy - (float)scale * 0.25f, (float)scale * 2.4f, (float)scale * 0.55f);
                         float bx = sx + (float)scale * pose.OffX, by = sy + (float)scale * pose.OffY * 0.6f - (float)scale * pose.Lift;
-                        System.Drawing.Drawing2D.GraphicsState gs = g.Save();
+                        GfxState gs = g.Save();
                         g.TranslateTransform(bx, by);
                         if (Math.Abs(pose.Lean) > 0.05f) g.RotateTransform(pose.Lean);
                         g.ScaleTransform(pose.ScaleX, pose.ScaleY);
@@ -279,7 +279,7 @@ public static class RenderSnapshot
             ViewState v = new ViewState(); v.Scale = scale;
             int cols = 6, cellW = (int)(scale * 5.2), cellH = (int)(scale * 4.6);
             using (Bitmap bmp = new Bitmap(cellW * cols, cellH * 4, PixelFormat.Format32bppArgb))
-            using (Graphics g = Graphics.FromImage(bmp))
+            using (GdiGfx g = GdiGfx.FromImage(bmp))
             {
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
                 g.Clear(Color.FromArgb(74, 118, 56));
@@ -323,7 +323,7 @@ public static class RenderSnapshot
         int cropW = 1280, cropH = 220;
         using (SceneRenderer r = new SceneRenderer())
         using (Bitmap bmp = new Bitmap(v.Width, v.Height, PixelFormat.Format32bppArgb))
-        using (Graphics g = Graphics.FromImage(bmp))
+        using (GdiGfx g = GdiGfx.FromImage(bmp))
         using (Bitmap outb = new Bitmap(cropW, cropH * times.Length, PixelFormat.Format32bppArgb))
         using (Graphics og = Graphics.FromImage(outb))
         {
@@ -364,7 +364,7 @@ public static class RenderSnapshot
         int cropW = 1280, cropH = 250;
         using (SceneRenderer r = new SceneRenderer())
         using (Bitmap bmp = new Bitmap(v.Width, v.Height, PixelFormat.Format32bppArgb))
-        using (Graphics g = Graphics.FromImage(bmp))
+        using (GdiGfx g = GdiGfx.FromImage(bmp))
         using (Bitmap outb = new Bitmap(cropW, cropH * rows.Length, PixelFormat.Format32bppArgb))
         using (Graphics og = Graphics.FromImage(outb))
         {
@@ -423,7 +423,7 @@ public static class RenderSnapshot
         int rows = 8, cropW = 1280, cropH = 230;
         using (SceneRenderer r = new SceneRenderer())
         using (Bitmap bmp = new Bitmap(v.Width, v.Height, PixelFormat.Format32bppArgb))
-        using (Graphics g = Graphics.FromImage(bmp))
+        using (GdiGfx g = GdiGfx.FromImage(bmp))
         using (Bitmap outb = new Bitmap(cropW, cropH * rows, PixelFormat.Format32bppArgb))
         using (Graphics og = Graphics.FromImage(outb))
         {
@@ -478,7 +478,7 @@ public static class RenderSnapshot
         ViewState v = new ViewState(); v.Width = 1280; v.Height = 800; v.Scale = 40; v.CamX = cx; v.CamY = cy;
         using (SceneRenderer r = new SceneRenderer())
         using (Bitmap bmp = new Bitmap(v.Width, v.Height, PixelFormat.Format32bppArgb))
-        using (Graphics g = Graphics.FromImage(bmp))
+        using (GdiGfx g = GdiGfx.FromImage(bmp))
         {
             // 박동 정점(주기 시작)에 맞춘 시각
             int period = Tension.HeartPeriodMs(Tension.Level(w.Self.Hp, w.Self.MaxHp));
@@ -560,7 +560,7 @@ public static class RenderSnapshot
                 }
                 Check(ok4, "start: 영웅 카드의 스킬 아이콘이 카드 안이고 판정이 맞음 (" + w + "x" + h + ")");
                 using (Bitmap bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb))
-                using (Graphics g = Graphics.FromImage(bmp))
+                using (GdiGfx g = GdiGfx.FromImage(bmp))
                 {
                     g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
                     try
@@ -588,14 +588,14 @@ public static class RenderSnapshot
             float[] ps = { 0.05f, 0.45f, 1f };
             foreach (float p in ps)
                 using (Bitmap bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb))
-                using (Graphics g = Graphics.FromImage(bmp))
+                using (GdiGfx g = GdiGfx.FromImage(bmp))
                 {
                     g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias; g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
                     ss.DrawLoading(g, w, h, p, p < 0.3f ? "warrior" : "demon", 900);
                     bmp.Save(Path.Combine(outDir, "load_" + (int)(p * 100) + ".png"), ImageFormat.Png);
                 }
             using (Bitmap bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb))
-            using (Graphics g = Graphics.FromImage(bmp))
+            using (GdiGfx g = GdiGfx.FromImage(bmp))
             {
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias; g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
                 ss.DrawSelect(g, w, h, data, 1, 2, "서버 127.0.0.1:7000   존 2", 560, 2);
@@ -616,7 +616,7 @@ public static class RenderSnapshot
             ss.Servers = sp; ss.HoverServer = 2; ss.HoverSkillCard = Math.Min(1, data.HeroIds().Count - 1); ss.HoverSkill = 1;
             foreach (int[] sz in new int[][] { new int[] { 1280, 800 }, new int[] { 900, 620 } })
                 using (Bitmap bmp = new Bitmap(sz[0], sz[1], PixelFormat.Format32bppArgb))
-                using (Graphics g = Graphics.FromImage(bmp))
+                using (GdiGfx g = GdiGfx.FromImage(bmp))
                 {
                     g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias; g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
                     ss.DrawSelect(g, sz[0], sz[1], data, 1, 1, "서버 127.0.0.1:" + okPort + "   존 1", 560, 1);
@@ -645,7 +645,7 @@ public static class RenderSnapshot
                         foreach (int state in new int[] { 0, 1, 2 })        // 0 일반, 1 피격, 2 사망
                         {
                             using (Bitmap bmp = new Bitmap(320, 240, PixelFormat.Format32bppArgb))
-                            using (Graphics g = Graphics.FromImage(bmp))
+                            using (GdiGfx g = GdiGfx.FromImage(bmp))
                             {
                                 g.Clear(bg);
                                 Entity e = new Entity();
@@ -685,7 +685,7 @@ public static class RenderSnapshot
                 try
                 {
                     using (Bitmap bmp = new Bitmap(v.Width, v.Height, PixelFormat.Format32bppArgb))
-                    using (Graphics g = Graphics.FromImage(bmp))
+                    using (GdiGfx g = GdiGfx.FromImage(bmp))
                     {
                         r.Draw(g, s, pilot, v, now);
                         Check(CountDiff(bmp, Color.FromArgb(18, 40, 24)) > 2000, "scene " + step + " has content");
@@ -701,7 +701,7 @@ public static class RenderSnapshot
             int before = r.GroundRebuilds;
             ViewState vv = new ViewState(); vv.Width = 1280; vv.Height = 800; vv.Scale = 20;
             using (Bitmap bmp = new Bitmap(1280, 800, PixelFormat.Format32bppArgb))
-            using (Graphics g = Graphics.FromImage(bmp))
+            using (GdiGfx g = GdiGfx.FromImage(bmp))
             {
                 vv.CamX = 900; vv.CamY = 900; r.Draw(g, s, pilot, vv, now);          // 앞 장면에서 미리 만들던 바닥이 남지 않게 멀리서 한 번 새로 그린다
                 vv.CamX = 500; vv.CamY = 500; r.Draw(g, s, pilot, vv, now);
@@ -813,7 +813,7 @@ public static class RenderSnapshot
                 if (i == 5) { }
                 ViewState v = new ViewState(); v.Width = 1280; v.Height = 800; v.Scale = 24;
                 using (Bitmap bmp = new Bitmap(v.Width, v.Height, PixelFormat.Format32bppArgb))
-                using (Graphics g = Graphics.FromImage(bmp))
+                using (GdiGfx g = GdiGfx.FromImage(bmp))
                 {
                     r.Draw(g, s, new AutoPilot(s), v, now + 600);
                     string path = Path.Combine(outDir, "conn_" + names[i] + ".png");
@@ -839,7 +839,7 @@ public static class RenderSnapshot
         ViewState v = new ViewState(); v.Width = 1280; v.Height = 800; v.Scale = cfg.PixelsPerUnit;
         using (SceneRenderer r = new SceneRenderer())
         using (Bitmap bmp = new Bitmap(v.Width, v.Height, PixelFormat.Format32bppArgb))
-        using (Graphics g = Graphics.FromImage(bmp))
+        using (GdiGfx g = GdiGfx.FromImage(bmp))
         {
             // 먼저 20초 진행(캐시 데우기 제외)
             for (int i = 0; i < 1250; ++i) { now += 16; s.Update(now); demo.Update(now); pilot.Update(now); }
@@ -887,7 +887,7 @@ public static class RenderSnapshot
         using (Graphics sg = Graphics.FromImage(sheet))
         using (SceneRenderer r = new SceneRenderer())
         using (Bitmap bmp = new Bitmap(1280, 800, PixelFormat.Format32bppArgb))
-        using (Graphics g = Graphics.FromImage(bmp))
+        using (GdiGfx g = GdiGfx.FromImage(bmp))
         {
             for (int k = 0; k < 9; ++k)
             {
@@ -932,7 +932,7 @@ public static class RenderSnapshot
         GateTravel gate = new GateTravel(); AutoPilot pilot = new AutoPilot(s);
         using (SceneRenderer r = new SceneRenderer())
         using (Bitmap bmp = new Bitmap(1280, 800, PixelFormat.Format32bppArgb))
-        using (Graphics g = Graphics.FromImage(bmp))
+        using (GdiGfx g = GdiGfx.FromImage(bmp))
         {
             ViewState v = new ViewState(); v.Width = 1280; v.Height = 800; v.Scale = cfg.PixelsPerUnit * 1.3f; v.CamX = me.X - 6f; v.CamY = me.Y;
             for (int k = 0; k < 4; ++k) r.Draw(g, s, pilot, v, now + k * 16);
@@ -977,7 +977,7 @@ public static class RenderSnapshot
         ViewState v = new ViewState(); v.Width = 1280; v.Height = 800; v.Scale = cfg.PixelsPerUnit;
         using (SceneRenderer r = new SceneRenderer())
         using (Bitmap bmp = new Bitmap(v.Width, v.Height, PixelFormat.Format32bppArgb))
-        using (Graphics g = Graphics.FromImage(bmp))
+        using (GdiGfx g = GdiGfx.FromImage(bmp))
         {
             Console.WriteLine("renderer created rss=" + RssMb().ToString("0") + "MB");
             int[] marks = { 1, 60, 600, 3000, 9000 }; int mi = 0;
@@ -1019,7 +1019,7 @@ public static class RenderSnapshot
         System.Collections.Generic.List<double> rss = new System.Collections.Generic.List<double>(), man = new System.Collections.Generic.List<double>();
         using (SceneRenderer r = new SceneRenderer())
         using (Bitmap bmp = new Bitmap(v.Width, v.Height, PixelFormat.Format32bppArgb))
-        using (Graphics g = Graphics.FromImage(bmp))
+        using (GdiGfx g = GdiGfx.FromImage(bmp))
         {
             while (wall.Elapsed.TotalMinutes < minutes)
             {
@@ -1082,7 +1082,7 @@ public static class RenderSnapshot
             for (int i = 0; i < 8; ++i)
                 using (Bitmap b = new Bitmap(64, 64, PixelFormat.Format32bppArgb))
                 {
-                    using (Graphics g = Graphics.FromImage(b)) { g.Clear(Color.Transparent); using (Brush br = new SolidBrush(cols[i])) g.FillRectangle(br, 16, 8, 32, 48); }
+                    using (GdiGfx g = GdiGfx.FromImage(b)) { g.Clear(Color.Transparent); using (Brush br = new SolidBrush(cols[i])) g.FillRectangle(br, 16, 8, 32, 48); }
                     b.Save(Path.Combine(dir, "t", (i * 45).ToString("000") + ".png"), ImageFormat.Png);
                 }
             using (Bitmap odd = new Bitmap(32, 32)) odd.Save(Path.Combine(dir, "t", "odd.png"), ImageFormat.Png);
@@ -1121,7 +1121,7 @@ public static class RenderSnapshot
                     {
                         Entity e = new Entity(); e.Type = (byte)EntityType.Monster; e.TemplateId = 99; e.Id = 1; e.FaceX = dirs[k][0]; e.FaceY = dirs[k][1];
                         using (Bitmap bmp = new Bitmap(200, 200, PixelFormat.Format32bppArgb))
-                        using (Graphics g = Graphics.FromImage(bmp))
+                        using (GdiGfx g = GdiGfx.FromImage(bmp))
                         {
                             g.Clear(Color.Black);
                             cr.Draw(g, e, v, 100000, 100, 150, false);
@@ -1141,7 +1141,7 @@ public static class RenderSnapshot
             for (int k = 0; k < 2; ++k)
                 using (Bitmap b = new Bitmap(64, 64, PixelFormat.Format32bppArgb))
                 {
-                    using (Graphics g = Graphics.FromImage(b)) { g.Clear(Color.Transparent); using (Brush br = new SolidBrush(Color.Gray)) g.FillRectangle(br, 20 + k * 4, 8, 24, 48); }
+                    using (GdiGfx g = GdiGfx.FromImage(b)) { g.Clear(Color.Transparent); using (Brush br = new SolidBrush(Color.Gray)) g.FillRectangle(br, 20 + k * 4, 8, 24, 48); }
                     b.Save(Path.Combine(dir, "t", "w_" + k + ".png"), ImageFormat.Png);
                 }
             for (int k = 0; k < 2; ++k) using (Bitmap big = new Bitmap(80, 80, PixelFormat.Format32bppArgb)) big.Save(Path.Combine(dir, "t", "wbig_" + k + ".png"), ImageFormat.Png);
@@ -1181,7 +1181,7 @@ public static class RenderSnapshot
                     {
                         res.TextCacheOn = mode == 0;
                         using (Bitmap bmp = new Bitmap(320, 160, PixelFormat.Format32bppArgb))
-                        using (Graphics g = Graphics.FromImage(bmp))
+                        using (GdiGfx g = GdiGfx.FromImage(bmp))
                         {
                             g.Clear(Color.FromArgb(60, 90, 50));
                             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
@@ -1206,14 +1206,14 @@ public static class RenderSnapshot
             // 회전 변환은 직접 그리기로 빠져도 예외 없이 그려진다
             res.TextCacheOn = true;
             using (Bitmap bmp = new Bitmap(200, 100, PixelFormat.Format32bppArgb))
-            using (Graphics g = Graphics.FromImage(bmp))
+            using (GdiGfx g = GdiGfx.FromImage(bmp))
             {
                 g.TranslateTransform(100, 50); g.RotateTransform(20f);
                 res.OutlinedText(g, "rot", res.Bold, Color.White, 0f, 0f, res.Center);
             }
             // 캐시는 상한을 넘지 않는다
             using (Bitmap bmp = new Bitmap(100, 40, PixelFormat.Format32bppArgb))
-            using (Graphics g = Graphics.FromImage(bmp))
+            using (GdiGfx g = GdiGfx.FromImage(bmp))
                 for (int i = 0; i < 1500; ++i) { res.TextFrame(); res.OutlinedText(g, "n" + i, res.Small, Color.White, 5f, 5f, null); }
             Check(res.TextCacheCount <= 700, "text cache stays bounded (" + res.TextCacheCount + ")");
         }
@@ -1255,12 +1255,12 @@ public static class RenderSnapshot
             Check(!Backdrop.Load(dir, warn) && !Backdrop.Loaded && warn.Count == 0, "backdrop: 파일이 없으면 false, 경고 없음");
             using (Bitmap bg = new Bitmap(200, 100, PixelFormat.Format32bppArgb))      // 왼쪽 빨강 / 오른쪽 파랑
             {
-                using (Graphics g = Graphics.FromImage(bg)) { g.Clear(Color.Red); using (Brush b = new SolidBrush(Color.Blue)) g.FillRectangle(b, 100, 0, 100, 100); }
+                using (GdiGfx g = GdiGfx.FromImage(bg)) { g.Clear(Color.Red); using (Brush b = new SolidBrush(Color.Blue)) g.FillRectangle(b, 100, 0, 100, 100); }
                 bg.Save(Path.Combine(dir, "backdrop.png"), ImageFormat.Png);
             }
             Check(Backdrop.Load(dir, warn) && Backdrop.Loaded && Backdrop.SourceWidth == 200, "backdrop: png 를 읽음");
             using (Bitmap t = new Bitmap(100, 100, PixelFormat.Format32bppArgb))      // 정사각형 화면: 가운데를 덮게 잘라 양쪽 색이 다 남아야 한다
-            using (Graphics g = Graphics.FromImage(t))
+            using (GdiGfx g = GdiGfx.FromImage(t))
             {
                 Check(Backdrop.Draw(g, 100, 100), "backdrop: 그림");
                 Color l = t.GetPixel(10, 50), r = t.GetPixel(90, 50);
@@ -1268,7 +1268,7 @@ public static class RenderSnapshot
             }
             File.WriteAllText(Path.Combine(dir, "backdrop.png"), "not an image");
             Check(!Backdrop.Load(dir, warn) && !Backdrop.Loaded && warn.Count == 1, "backdrop: 깨진 파일은 false + 경고 1개");
-            using (Bitmap t = new Bitmap(10, 10)) using (Graphics g = Graphics.FromImage(t)) Check(!Backdrop.Draw(g, 10, 10), "backdrop: 없으면 그리지 않음");
+            using (Bitmap t = new Bitmap(10, 10)) using (GdiGfx g = GdiGfx.FromImage(t)) Check(!Backdrop.Draw(g, 10, 10), "backdrop: 없으면 그리지 않음");
         }
         finally { Backdrop.Clear(); try { Directory.Delete(dir, true); } catch (Exception) { } }
     }
@@ -1324,7 +1324,7 @@ public static class RenderSnapshot
         }
         using (SceneRenderer r = new SceneRenderer())
         using (Bitmap bmp = new Bitmap(v.Width, v.Height, PixelFormat.Format32bppArgb))
-        using (Graphics g = Graphics.FromImage(bmp))
+        using (GdiGfx g = GdiGfx.FromImage(bmp))
         {
             AutoPilot pilot = new AutoPilot(s);
             r.Draw(g, s, pilot, v, now);
@@ -1377,7 +1377,7 @@ public static class RenderSnapshot
             }
         using (SceneRenderer rd = new SceneRenderer())
         using (Bitmap bmp = new Bitmap(v.Width, v.Height, PixelFormat.Format32bppArgb))
-        using (Graphics g = Graphics.FromImage(bmp))
+        using (GdiGfx g = GdiGfx.FromImage(bmp))
         {
             AutoPilot pilot = new AutoPilot(s);
             rd.Draw(g, s, pilot, v, now);
@@ -1452,7 +1452,7 @@ public static class RenderSnapshot
                 if (now - start >= (long)(shots[next] * 1000))
                 {
                     using (Bitmap bmp = new Bitmap(v.Width, v.Height, PixelFormat.Format32bppArgb))
-                    using (Graphics g = Graphics.FromImage(bmp))
+                    using (GdiGfx g = GdiGfx.FromImage(bmp))
                     {
                         r.Draw(g, s, pilot, v, now);
                         string path = Path.Combine(args[1], "shot_" + shots[next].ToString("00.0") + "s.png");

@@ -32,13 +32,13 @@ namespace GameViewer.App.Render
             _skill = new SkillEffects(res, this);
             _attack = new AttackEffects(res, this);
             _mat = new MaterialFx(res, this);
-            _glowPaint = delegate (Graphics g) { P.Glow(g, 0, 0, _gs / 2f - 1, _gc, _ga); };
+            _glowPaint = delegate (IGfx g) { P.Glow(g, 0, 0, _gs / 2f - 1, _gc, _ga); };
         }
 
         public void Dispose() { _glows.Dispose(); _hatch.Dispose(); }
 
         /// <summary>미리 그려 둔 광원 번짐을 찍는다. 색/세기는 몇 단계로 묶어 비트맵 종류를 제한한다.</summary>
-        public void Glow(Graphics g, Color c, float cx, float cy, float rx, float ry, float strength)
+        public void Glow(IGfx g, Color c, float cx, float cy, float rx, float ry, float strength)
         {
             int level = (int)Math.Max(0, Math.Min(7, Math.Round(strength * 7)));
             if (level == 0 || rx < 1 || ry < 1) return;
@@ -54,7 +54,7 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 바닥
 
-        public void DrawGround(Graphics g, WorldModel w, ViewState v, long now)
+        public void DrawGround(IGfx g, WorldModel w, ViewState v, long now)
         {
             for (int i = 0; i < w.Effects.Count; ++i)
             {
@@ -102,7 +102,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>반짝임 한 점: 십자 빛살과 중심 광점.</summary>
-        private void Spark(Graphics g, float x, float y, float r, int a, int cr, int cg, int cb)
+        private void Spark(IGfx g, float x, float y, float r, int a, int cr, int cg, int cb)
         {
             if (a <= 0 || r < 0.5f) return;
             g.DrawLine(_res.Pen(a, cr, cg, cb, Math.Max(1f, r * 0.22f)), x - r * 1.6f, y, x + r * 1.6f, y);
@@ -112,7 +112,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>바닥: 충격파, 금빛 고리 셋, 돌아가는 룬 원이 퍼지고 발밑이 환하게 빛난다.</summary>
-        private void DrawLevelUpGround(Graphics g, WorldModel w, ViewEffect fx, ViewState v, long now)
+        private void DrawLevelUpGround(IGfx g, WorldModel w, ViewEffect fx, ViewState v, long now)
         {
             float sx, sy; LevelUpAnchor(w, fx, v, now, out sx, out sy);
             float p = fx.Progress(now);
@@ -152,7 +152,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>공중: 하늘로 솟는 빛기둥과 위로 떠오르는 반짝임.</summary>
-        private void DrawLevelUpAir(Graphics g, WorldModel w, ViewEffect fx, ViewState v, long now, float p)
+        private void DrawLevelUpAir(IGfx g, WorldModel w, ViewEffect fx, ViewState v, long now, float p)
         {
             float sx, sy; LevelUpAnchor(w, fx, v, now, out sx, out sy);
             float rise = p < 0.12f ? p / 0.12f : 1f;                  // 기둥이 솟는 구간
@@ -193,7 +193,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void DrawTelegraph(Graphics g, WorldModel w, ViewEffect fx, ViewState v, long now, float sx, float sy)
+        private void DrawTelegraph(IGfx g, WorldModel w, ViewEffect fx, ViewState v, long now, float sx, float sy)
         {
             float r = v.Px(fx.Radius);
             if (sx + r < 0 || sy + r < 0 || sx - r > v.Width || sy - r > v.Height) return;
@@ -203,7 +203,7 @@ namespace GameViewer.App.Render
             float ry = r * 0.8f;
             float pulse = 0.5f + 0.5f * (float)Math.Sin(now / (170.0 - 90.0 * p));
             g.FillEllipse(_res.Brush((int)(34 + 34 * p + 18 * pulse), 200, 24, 20), sx - r, sy - ry, r * 2, ry * 2);
-            GraphicsState st = g.Save();
+            GfxState st = g.Save();
             using (GraphicsPath clip = new GraphicsPath()) { clip.AddEllipse(sx - r, sy - ry, r * 2, ry * 2); g.SetClip(clip, CombineMode.Intersect); }
             g.TranslateTransform(sx, sy);
             g.FillRectangle(_hatch, -r, -ry, r * 2, ry * 2);
@@ -223,9 +223,9 @@ namespace GameViewer.App.Render
             }
         }
 
-        internal void DrawBurstGroundOnly(Graphics g, ViewEffect fx, ViewState v, long now, float sx, float sy) { DrawBurstGround(g, fx, v, now, sx, sy); }
+        internal void DrawBurstGroundOnly(IGfx g, ViewEffect fx, ViewState v, long now, float sx, float sy) { DrawBurstGround(g, fx, v, now, sx, sy); }
 
-        private void DrawBurstGround(Graphics g, ViewEffect fx, ViewState v, long now, float sx, float sy)
+        private void DrawBurstGround(IGfx g, ViewEffect fx, ViewState v, long now, float sx, float sy)
         {
             float p = fx.Progress(now);
             float eased = 1f - (1f - p) * (1f - p);
@@ -256,7 +256,7 @@ namespace GameViewer.App.Render
         public readonly double[] KindMs = new double[24];
         private static double Ms() { return System.Diagnostics.Stopwatch.GetTimestamp() * 1000.0 / System.Diagnostics.Stopwatch.Frequency; }
 
-        public void DrawAir(Graphics g, ViewerSession s, ViewState v, long now)
+        public void DrawAir(IGfx g, ViewerSession s, ViewState v, long now)
         {
             WorldModel w = s.World;
             for (int i = 0; i < w.Effects.Count; ++i)
@@ -321,7 +321,7 @@ namespace GameViewer.App.Render
             KindMs[23] += Ms() - tt;
         }
 
-        private void DrawSlash(Graphics g, WorldModel w, ViewEffect fx, ViewState v, long now, float p, float sx, float sy)
+        private void DrawSlash(IGfx g, WorldModel w, ViewEffect fx, ViewState v, long now, float p, float sx, float sy)
         {
             Entity c = w.Find(fx.EntityId);
             float cx = fx.X, cy = fx.Y;
@@ -344,7 +344,7 @@ namespace GameViewer.App.Render
             if (skill) Glow(g, Color.FromArgb(255, 220, 120), ox + (float)Math.Cos(head * Math.PI / 180.0) * rr, oy + (float)Math.Sin(head * Math.PI / 180.0) * rr, rr * 0.45f, rr * 0.45f, 0.8f * fade);
         }
 
-        internal void DrawBurstDust(Graphics g, ViewEffect fx, ViewState v, float p, float sx, float sy)
+        internal void DrawBurstDust(IGfx g, ViewEffect fx, ViewState v, float p, float sx, float sy)
         {
             float full = v.Px(fx.Radius);
             int n = fx.Radius >= 3f ? 16 : 8;
@@ -359,7 +359,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>세로 빛기둥: 가운데가 밝고 양옆으로 사라지며, 위로 갈수록 옅어진다. 보스 연출에서만 쓰므로 브러시를 그때그때 만든다.</summary>
-        public void Beam(Graphics g, Color c, float x, float bottomY, float topY, float halfW, float alpha)
+        public void Beam(IGfx g, Color c, float x, float bottomY, float topY, float halfW, float alpha)
         {
             if (alpha <= 0.01f || halfW < 1f) return;
             alpha = Math.Min(1f, alpha);
@@ -369,7 +369,7 @@ namespace GameViewer.App.Render
                 BeamSeg(g, c, x, topY + (Segs - 1 - i) * segH, segH + 1f, halfW, alpha * (1f - (float)i / Segs));      // 위로 갈수록 옅게
         }
 
-        private static void BeamSeg(Graphics g, Color c, float x, float top, float h, float halfW, float alpha)
+        private static void BeamSeg(IGfx g, Color c, float x, float top, float h, float halfW, float alpha)
         {
             RectangleF r = new RectangleF(x - halfW, top, halfW * 2, h);
             using (System.Drawing.Drawing2D.LinearGradientBrush b = new System.Drawing.Drawing2D.LinearGradientBrush(r, Color.Transparent, Color.Transparent, 0f))
@@ -383,7 +383,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>보스 사망: 몸이 터지는 섬광, 하늘로 솟는 빛기둥, 사방으로 퍼지는 충격 고리와 불씨.</summary>
-        private void DrawBossDeath(Graphics g, WorldModel w, ViewEffect fx, ViewState v, float p, float sx, float sy)
+        private void DrawBossDeath(IGfx g, WorldModel w, ViewEffect fx, ViewState v, float p, float sx, float sy)
         {
             Entity e = w.Find(fx.EntityId);
             float hh = e != null ? CreatureRenderer.LookOf(e).H : 3f, hw = e != null ? CreatureRenderer.LookOf(e).HalfW : 1.5f;
@@ -415,7 +415,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void DrawDeath(Graphics g, WorldModel w, ViewEffect fx, ViewState v, float p, float sx, float sy)
+        private void DrawDeath(IGfx g, WorldModel w, ViewEffect fx, ViewState v, float p, float sx, float sy)
         {
             Entity de = w.Find(fx.EntityId);
             if (de != null && de.IsMonster) _mat.Burst(g, GameViewer.Core.Logic.HitMaterial.Of(de.TemplateId, true), MaterialFx.Seed(fx), sx, sy, p, v, de.IsBoss ? 3.5f : 2.2f);
@@ -434,7 +434,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void DrawHealSparkles(Graphics g, ViewEffect fx, ViewState v, WorldModel w, long now, float p)
+        private void DrawHealSparkles(IGfx g, ViewEffect fx, ViewState v, WorldModel w, long now, float p)
         {
             float x = fx.X, y = fx.Y;
             Entity e = w.Find(fx.EntityId);
@@ -453,7 +453,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void DrawProjectile(Graphics g, ViewerSession s, ViewEffect fx, ViewState v, long now)
+        private void DrawProjectile(IGfx g, ViewerSession s, ViewEffect fx, ViewState v, long now)
         {
             float flight = Math.Max(1, fx.Value);
             float t = Math.Max(0f, Math.Min(1f, (now - fx.StartMs) / flight));
@@ -499,7 +499,7 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 글자
 
-        private void DrawFloatingText(Graphics g, WorldModel w, ViewEffect fx, ViewState v, float p, float sx, float sy, long now)
+        private void DrawFloatingText(IGfx g, WorldModel w, ViewEffect fx, ViewState v, float p, float sx, float sy, long now)
         {
             if (sx < -60 || sx > v.Width + 60 || sy < -60 || sy > v.Height + 140) return;
             if (fx.Kind == EffectKind.Damage && !v.Settings.ShowDamageNumbers) return;
@@ -538,7 +538,7 @@ namespace GameViewer.App.Render
             if (fx.Kind == EffectKind.Heal)
             {
                 float hs = DamageStyle.HealScale(fx.Value, tgt != null ? tgt.MaxHp : 0) * (1f + 0.3f * Math.Max(0f, 1f - p * 6f));
-                GraphicsState gh = g.Save();
+                GfxState gh = g.Save();
                 g.TranslateTransform(px, py - v.Px(0.3f) * (float)Math.Sin(p * Math.PI));
                 g.ScaleTransform(hs, hs);
                 _res.OutlinedText(g, text, font, Color.FromArgb(Resources.Clamp(a), color), 0f, 0f, _res.Center);
@@ -553,7 +553,7 @@ namespace GameViewer.App.Render
                 px += DamageStyle.Shake(dtier, p) * (fx.Variant == 2 ? 1.3f : 1f);
                 if (fx.Variant == 1) scale *= 0.85f;                                         // 지속 피해는 조금 작게
                 scale *= 1f + 0.45f * Math.Max(0f, 1f - p * 7f);
-                GraphicsState gs = g.Save();
+                GfxState gs = g.Save();
                 g.TranslateTransform(px, py);
                 g.ScaleTransform(scale, scale);
                 if (heavyTag) _res.OutlinedText(g, DamageStyle.Tag(dtier), _res.Small, Color.FromArgb(Resources.Clamp(a), 255, 190, 90), 0f, -15f, _res.Center);
@@ -567,7 +567,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 상태 오라
 
         /// <summary>엔티티 발 밑/몸 주변의 상태 표현(지속 피해 불씨, 버프 링, 약화 소용돌이, 보스 격노). 몸보다 먼저 그린다.</summary>
-        public void DrawAura(Graphics g, ViewerSession s, Entity e, ViewState v, long now, float sx, float sy)
+        public void DrawAura(IGfx g, ViewerSession s, Entity e, ViewState v, long now, float sx, float sy)
         {
             Look look = CreatureRenderer.LookOf(e);
             float hw = v.Px(look.HalfW * 0.55f);

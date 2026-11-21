@@ -42,7 +42,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>입체감 있는 타원: 왼쪽 위에서 빛을 받는 방사형 셰이딩 + 얇은 외곽선.</summary>
-        public static void Ball(Graphics g, float cx, float cy, float rx, float ry, Color light, Color dark, Color outline, float lw)
+        public static void Ball(IGfx g, float cx, float cy, float rx, float ry, Color light, Color dark, Color outline, float lw)
         {
             using (GraphicsPath p = EllipsePath(cx, cy, rx, ry))
             {
@@ -57,12 +57,12 @@ namespace GameViewer.App.Render
             }
         }
 
-        public static void Poly(Graphics g, PointF[] pts, Color top, Color bottom, Color outline, float lw)
+        public static void Poly(IGfx g, PointF[] pts, Color top, Color bottom, Color outline, float lw)
         {
             float minY = float.MaxValue, maxY = float.MinValue, minX = float.MaxValue;
             for (int i = 0; i < pts.Length; ++i) { minY = Math.Min(minY, pts[i].Y); maxY = Math.Max(maxY, pts[i].Y); minX = Math.Min(minX, pts[i].X); }
             if (maxY - minY < 0.001f) maxY = minY + 0.01f;
-            using (LinearGradientBrush b = new LinearGradientBrush(new PointF(minX, minY), new PointF(minX, maxY), top, bottom))
+            using (LinearGradientBrush b = GfxBrush.Linear(new PointF(minX, minY), new PointF(minX, maxY), top, bottom))
                 g.FillPolygon(b, pts);
             if (lw > 0) using (Pen pen = new Pen(outline, lw) { LineJoin = LineJoin.Round }) g.DrawPolygon(pen, pts);
         }
@@ -81,18 +81,18 @@ namespace GameViewer.App.Render
             return p;
         }
 
-        public static void Round(Graphics g, float x, float y, float w, float h, float r, Color top, Color bottom, Color outline, float lw)
+        public static void Round(IGfx g, float x, float y, float w, float h, float r, Color top, Color bottom, Color outline, float lw)
         {
             using (GraphicsPath p = RoundPath(x, y, w, h, r))
             {
-                using (LinearGradientBrush b = new LinearGradientBrush(new PointF(x, y), new PointF(x, y + h + 0.001f), top, bottom))
+                using (LinearGradientBrush b = GfxBrush.Linear(new PointF(x, y), new PointF(x, y + h + 0.001f), top, bottom))
                     g.FillPath(b, p);
                 if (lw > 0) using (Pen pen = new Pen(outline, lw)) g.DrawPath(pen, p);
             }
         }
 
         /// <summary>굵은 선(팔다리/무기 자루). 어두운 외곽선 위에 본색을 덧그린다.</summary>
-        public static void Limb(Graphics g, float x0, float y0, float x1, float y1, float w, Color c, Color outline)
+        public static void Limb(IGfx g, float x0, float y0, float x1, float y1, float w, Color c, Color outline)
         {
             using (Pen o = new Pen(outline, w + 0.1f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
                 g.DrawLine(o, x0, y0, x1, y1);
@@ -100,19 +100,19 @@ namespace GameViewer.App.Render
                 g.DrawLine(p, x0, y0, x1, y1);
         }
 
-        public static void Line(Graphics g, float x0, float y0, float x1, float y1, float w, Color c)
+        public static void Line(IGfx g, float x0, float y0, float x1, float y1, float w, Color c)
         {
             using (Pen p = new Pen(c, w) { StartCap = LineCap.Round, EndCap = LineCap.Round })
                 g.DrawLine(p, x0, y0, x1, y1);
         }
 
-        public static void Fill(Graphics g, float cx, float cy, float rx, float ry, Color c)
+        public static void Fill(IGfx g, float cx, float cy, float rx, float ry, Color c)
         {
             using (SolidBrush b = new SolidBrush(c)) g.FillEllipse(b, cx - rx, cy - ry, rx * 2, ry * 2);
         }
 
         /// <summary>눈: 흰자 + 동공. look 은 -1..1 (바라보는 쪽).</summary>
-        public static void Eye(Graphics g, float cx, float cy, float r, float look, Color pupil)
+        public static void Eye(IGfx g, float cx, float cy, float r, float look, Color pupil)
         {
             Fill(g, cx, cy, r, r * 1.1f, Color.FromArgb(250, 250, 245));
             Fill(g, cx + look * r * 0.35f, cy + r * 0.05f, r * 0.55f, r * 0.62f, pupil);
@@ -120,7 +120,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>중심이 밝고 가장자리가 투명한 광원 번짐.</summary>
-        public static void Glow(Graphics g, float cx, float cy, float r, Color c, int centerAlpha)
+        public static void Glow(IGfx g, float cx, float cy, float r, Color c, int centerAlpha)
         {
             using (GraphicsPath p = EllipsePath(cx, cy, r, r))
             using (PathGradientBrush b = new PathGradientBrush(p))
@@ -139,7 +139,7 @@ namespace GameViewer.App.Render
     public sealed class SpriteCache : IDisposable
     {
         public sealed class Entry { public Bitmap Bmp; public float Ax, Ay; public long Used; }
-        public delegate void PaintFn(Graphics g);
+        public delegate void PaintFn(IGfx g);
 
         private readonly Dictionary<long, Entry> _map = new Dictionary<long, Entry>();
         private readonly int _cap;
@@ -158,7 +158,7 @@ namespace GameViewer.App.Render
             w = Math.Max(2, Math.Min(2048, w)); h = Math.Max(2, Math.Min(2048, h));
             e = new Entry(); e.Ax = ax; e.Ay = ay; e.Used = ++_tick;
             e.Bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
-            using (Graphics g = Graphics.FromImage(e.Bmp))
+            using (GdiGfx g = GdiGfx.FromImage(e.Bmp))
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 g.PixelOffsetMode = PixelOffsetMode.HighQuality;

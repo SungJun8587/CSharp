@@ -30,15 +30,18 @@ namespace GameViewer.App.Render
         private const float ExpBarX = 10f, ExpBarY = 10f, ExpBarH = 26f;
         /// <summary>경험치바와 그 아래 알림창(정보 패널)이 같이 쓰는 폭.</summary>
         public const float InfoW = 400f;
-        /// <summary>오른쪽 위 재화 표시가 차지하는 폭(보스 체력바가 이 앞까지만 쓴다).</summary>
-        public const float WalletReserve = 170f;
-        private const float WalletRowH = ExpBarH, WalletRowGap = 6f;      // 골드 알약 높이는 경험치바와 같다
+        private const float WalletRowH = ExpBarH, WalletColGap = 8f;      // 골드 알약 높이는 경험치바와 같다
+        /// <summary>맨 윗줄: 왼쪽에 경험치바, 그 바로 오른쪽에 재화 알약(가로 한 줄)과 도움말 칩, 오른쪽 끝에 창 열기 단추 줄(UiDock).</summary>
+        public const float DockTop = ExpBarY, WalletTop = ExpBarY, WalletX = ExpBarX + InfoW + 14f;
+        /// <summary>보스 체력바를 맨 윗줄(경험치바/재화 줄)보다 이만큼 아래에 둔다.</summary>
+        public const float BossDrop = 44f;
+        private float _walletEndX = WalletX;                              // 마지막으로 그린 재화 알약의 오른쪽 끝(도움말 칩이 그 옆에 붙는다)
 
         /// <summary>보스 체력바가 놓일 가로 구간: 화면 가로 중앙을 중심으로, 왼쪽 경험치바/정보 창과 오른쪽 재화 표시에 닿지 않는 만큼.</summary>
         public static void BossArea(ViewState v, out float left, out float right)
         {
             float cx = v.Width / 2f;
-            float half = Math.Max(150f, Math.Min(cx - (10f + InfoW + 24f), v.Width - 12f - WalletReserve - 10f - cx));
+            float half = Math.Max(150f, Math.Min(cx - (10f + InfoW + 24f), v.Width - 36f - cx));      // 재화는 윗줄로 올라가 보스바와 y 가 겹치지 않는다
             left = cx - half; right = cx + half;
         }
         private const float Slot = 56f, SlotGap = 6f, BasicGap = 12f, OrbR = 44f;
@@ -57,7 +60,7 @@ namespace GameViewer.App.Render
         public static float DockLeft(ViewState v, int skillCount) { return SkillSlotRect(v, skillCount, 0).Left - 12f - 2f * OrbR + 16f - 6f; }
 
         /// <summary>사각형 네 모서리에 금빛 꺾쇠 장식을 그린다.</summary>
-        public static void Corners(Graphics g, Resources res, RectangleF r, float len, Color c)
+        public static void Corners(IGfx g, Resources res, RectangleF r, float len, Color c)
         {
             Pen p = res.Pen(c, 2f);
             g.DrawLines(p, new PointF[] { new PointF(r.X, r.Y + len), new PointF(r.X, r.Y), new PointF(r.X + len, r.Y) });
@@ -75,7 +78,7 @@ namespace GameViewer.App.Render
             return new RectangleF(v.Width - size - 12, v.Height - wh * k - 12, ww * k, wh * k);
         }
 
-        public void Draw(Graphics g, ViewerSession s, AutoPilot pilot, ViewState v, long now)
+        public void Draw(IGfx g, ViewerSession s, AutoPilot pilot, ViewState v, long now)
         {
             DrawInfoPanel(g, s, pilot, v, now);
             DrawMiniMap(g, s, v, now);
@@ -150,7 +153,7 @@ namespace GameViewer.App.Render
             return new RectangleF(x + 12, y + 48 + i * ZoneRowH, ZonePanelW - 24, ZoneRowH - 4);
         }
 
-        private void DrawZoneSelect(Graphics g, ViewerSession s, ViewState v)
+        private void DrawZoneSelect(IGfx g, ViewerSession s, ViewState v)
         {
             uint[] zones = v.ZoneTerrainPick ? ZoneTheme.TerrainZones : ZoneTheme.Zones;
             g.FillRectangle(_res.Brush(150, 0, 0, 0), 0, 0, v.Width, v.Height);
@@ -172,7 +175,7 @@ namespace GameViewer.App.Render
             g.DrawString("↑↓ / 1~9 선택     Enter 또는 클릭: " + (v.ZoneTerrainPick ? "그 지형으로 시험장 입장" : "그 존으로 이동") + "     " + KeyBindings.KeyName(v.Settings.Keys.Get(BindAction.ZoneSelect)) + " / Esc: 닫기", _res.Small, _res.Brush(Color.FromArgb(200, 210, 200)), x + 16, y + h - 24);
         }
 
-        private void DrawHeroSelect(Graphics g, ViewerSession s, ViewState v)
+        private void DrawHeroSelect(IGfx g, ViewerSession s, ViewState v)
         {
             List<uint> ids = s.Data.HeroIds();
             // 배경 우선순위: 3D 숲(영웅이 서 있다) > 사용자가 둔 Assets/backdrop 이미지 > 어둡게만
@@ -211,13 +214,13 @@ namespace GameViewer.App.Render
             g.DrawString("↑↓ / 1~9 선택     Enter 또는 클릭: 이 영웅으로 다시 접속     H / Esc: 닫기", _res.Small, _res.Brush(Color.FromArgb(200, 210, 200)), x + 16, y + h - 24);
         }
 
-        private void Panel(Graphics g, float x, float y, float w, float h)
+        private void Panel(IGfx g, float x, float y, float w, float h)
         {
             g.FillRectangle(_res.Brush(150, 10, 16, 12), x, y, w, h);
             g.DrawRectangle(_res.Pen(120, 200, 220, 190, 1f), x, y, w, h);
         }
 
-        private void DrawInfoPanel(Graphics g, ViewerSession s, AutoPilot pilot, ViewState v, long now)
+        private void DrawInfoPanel(IGfx g, ViewerSession s, AutoPilot pilot, ViewState v, long now)
         {
             if (!v.ShowInfo) return;
             WorldModel w = s.World;
@@ -227,7 +230,7 @@ namespace GameViewer.App.Render
                 if (kv.Value.IsMonster) ++monsters; else ++players;
                 if (kv.Value.Dead) ++dead;
             }
-            float x = 10, y = ExpBarY + ExpBarH + 8;
+            float x = 10, y = ExpBarY + ExpBarH + 13;          // 경험치바에서 13px 아래
             List<string> lines = new List<string>();
             lines.Add(s.StatusText);
             if (w.Self != null)
@@ -253,7 +256,7 @@ namespace GameViewer.App.Render
             RectangleF pr = new RectangleF(x, y, wd, h);
             using (GraphicsPath pp = P.RoundPath(x, y, wd, h, 8))
             {
-                using (LinearGradientBrush bg = new LinearGradientBrush(new RectangleF(x, y - 1, wd, h + 2), Color.FromArgb(215, 22, 30, 48), Color.FromArgb(215, 8, 11, 20), 90f))
+                using (LinearGradientBrush bg = GfxBrush.Linear(new RectangleF(x, y - 1, wd, h + 2), Color.FromArgb(215, 22, 30, 48), Color.FromArgb(215, 8, 11, 20), 90f))
                     g.FillPath(bg, pp);
                 g.DrawPath(_res.Pen(170, 214, 186, 110, 1.2f), pp);
             }
@@ -269,7 +272,7 @@ namespace GameViewer.App.Render
                 if (i == 0)
                 {
                     g.FillPolygon(_res.Brush(240, 255, 226, 130), new PointF[] { new PointF(x + 8, ty + 8), new PointF(x + 12, ty + 4), new PointF(x + 16 - 0.5f, ty + 8), new PointF(x + 12, ty + 12) });
-                    using (LinearGradientBrush dv = new LinearGradientBrush(new RectangleF(x + 10, ty + 19, wd - 20, 2f), Color.FromArgb(200, 240, 206, 120), Color.FromArgb(0, 240, 206, 120), 0f))
+                    using (LinearGradientBrush dv = GfxBrush.Linear(new RectangleF(x + 10, ty + 19, wd - 20, 2f), Color.FromArgb(200, 240, 206, 120), Color.FromArgb(0, 240, 206, 120), 0f))
                         g.FillRectangle(dv, x + 10, ty + 20, wd - 20, 1.5f);
                     ty += 4;
                 }
@@ -284,7 +287,7 @@ namespace GameViewer.App.Render
         private int _mp;
 
         /// <summary>하단 독의 양옆 구슬(체력/MP), 시전 막대, 상태 효과 줄, 사망 안내.</summary>
-        private void DrawSelfBar(Graphics g, ViewerSession s, ViewState v, long now)
+        private void DrawSelfBar(IGfx g, ViewerSession s, ViewState v, long now)
         {
             Entity e = s.World.Self;
             WorldModel wm = s.World;
@@ -320,7 +323,7 @@ namespace GameViewer.App.Render
         /// 라이브 게임식 구슬: 금속 테두리 안에 액체가 비율만큼 차 있고 윗면이 출렁인다. ghost(> ratio)는 방금 줄어든 만큼을 희게 잠깐 보여 준다.
         /// danger 면 바깥 테두리가 붉게 맥동한다.
         /// </summary>
-        private void DrawOrb(Graphics g, float cx, float cy, float r, float ratio, float ghost, Color top, Color bot, string tag, string value, bool danger, long now)
+        private void DrawOrb(IGfx g, float cx, float cy, float r, float ratio, float ghost, Color top, Color bot, string tag, string value, bool danger, long now)
         {
             float ri = r - 5f;
             if (danger)
@@ -329,10 +332,10 @@ namespace GameViewer.App.Render
                 g.DrawEllipse(_res.Pen(a, 255, 60, 50, 6f), cx - r - 3, cy - r - 3, (r + 3) * 2, (r + 3) * 2);
             }
             RectangleF box = new RectangleF(cx - r, cy - r, r * 2, r * 2);
-            using (LinearGradientBrush rb = new LinearGradientBrush(new RectangleF(box.X, box.Y, box.Width, box.Height + 1), Color.FromArgb(240, 232, 202, 126), Color.FromArgb(240, 92, 66, 30), 90f))
+            using (LinearGradientBrush rb = GfxBrush.Linear(new RectangleF(box.X, box.Y, box.Width, box.Height + 1), Color.FromArgb(240, 232, 202, 126), Color.FromArgb(240, 92, 66, 30), 90f))
                 g.FillEllipse(rb, box);
             g.FillEllipse(_res.Brush(255, 8, 10, 16), cx - ri, cy - ri, ri * 2, ri * 2);
-            GraphicsState st = g.Save();
+            GfxState st = g.Save();
             using (GraphicsPath clip = new GraphicsPath())
             {
                 clip.AddEllipse(cx - ri, cy - ri, ri * 2, ri * 2);
@@ -348,7 +351,7 @@ namespace GameViewer.App.Render
             {
                 float ly = bottom - hh * ratio;
                 RectangleF lr = new RectangleF(cx - ri, ly - 3f, ri * 2, bottom - ly + 3f);
-                using (LinearGradientBrush lb = new LinearGradientBrush(new RectangleF(lr.X, lr.Y, lr.Width, lr.Height + 1f), top, bot, 90f))
+                using (LinearGradientBrush lb = GfxBrush.Linear(new RectangleF(lr.X, lr.Y, lr.Width, lr.Height + 1f), top, bot, 90f))
                     g.FillRectangle(lb, lr);
                 PointF[] wave = new PointF[13];
                 for (int i = 0; i < wave.Length; ++i)
@@ -368,7 +371,7 @@ namespace GameViewer.App.Render
         /// 왼쪽에 레벨, 가운데에 현재/필요 경험치와 퍼센트(10% 눈금). 최대 레벨이면 금색 MAX, 레벨 표가 없는 서버(MyExpToNext 0)면 비워 둔다.
         /// 레벨 업 직후에는 막대가 잠깐 번쩍인다.
         /// </summary>
-        private void DrawExpBar(Graphics g, ViewerSession s, ViewState v, long now)
+        private void DrawExpBar(IGfx g, ViewerSession s, ViewState v, long now)
         {
             WorldModel wm = s.World;
             float x = ExpBarX, y = ExpBarY, w = InfoW, h = ExpBarH;
@@ -384,21 +387,21 @@ namespace GameViewer.App.Render
                 g.FillPath(_res.Brush(90, 0, 0, 0), shadow);
             using (GraphicsPath frame = P.RoundPath(bx, y, bw, h, 8))
             {
-                using (LinearGradientBrush bg = new LinearGradientBrush(new RectangleF(bx, y - 1, bw, h + 2), Color.FromArgb(238, 8, 10, 18), Color.FromArgb(238, 28, 32, 46), 90f))
+                using (LinearGradientBrush bg = GfxBrush.Linear(new RectangleF(bx, y - 1, bw, h + 2), Color.FromArgb(238, 8, 10, 18), Color.FromArgb(238, 28, 32, 46), 90f))
                     g.FillPath(bg, frame);
-                GraphicsState st = g.Save();
+                GfxState st = g.Save();
                 g.SetClip(frame, CombineMode.Intersect);
                 if (er > 0f)
                 {
                     Color ct = max ? Color.FromArgb(255, 244, 160) : Color.FromArgb(150, 226, 255), cb = max ? Color.FromArgb(226, 150, 30) : Color.FromArgb(28, 104, 226);
                     RectangleF fill = new RectangleF(bx, y, bw * er, h);
-                    using (LinearGradientBrush gb = new LinearGradientBrush(new RectangleF(fill.X, fill.Y - 1, Math.Max(1f, fill.Width), fill.Height + 2), ct, cb, 90f))
+                    using (LinearGradientBrush gb = GfxBrush.Linear(new RectangleF(fill.X, fill.Y - 1, Math.Max(1f, fill.Width), fill.Height + 2), ct, cb, 90f))
                         g.FillRectangle(gb, fill);
                     g.FillRectangle(_res.Brush(85, 255, 255, 255), fill.X, fill.Y + 1, fill.Width, h * 0.38f);          // 윗면 광택
                     g.FillRectangle(_res.Brush(50, 0, 0, 0), fill.X, fill.Y + h * 0.78f, fill.Width, h * 0.22f);         // 아랫면 그늘
                     // 지나가는 반짝임 띠(2.4초 주기)
                     float sx = fill.X - 60f + (float)((now % 2400) / 2400.0) * (fill.Width + 120f);
-                    using (LinearGradientBrush sh = new LinearGradientBrush(new RectangleF(sx - 30f, y, 60f, h), Color.FromArgb(0, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), 0f))
+                    using (LinearGradientBrush sh = GfxBrush.Linear(new RectangleF(sx - 30f, y, 60f, h), Color.FromArgb(0, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), 0f))
                     {
                         System.Drawing.Drawing2D.ColorBlend cbld = new System.Drawing.Drawing2D.ColorBlend(3);
                         cbld.Colors = new Color[] { Color.FromArgb(0, 255, 255, 255), Color.FromArgb(110, 255, 255, 255), Color.FromArgb(0, 255, 255, 255) };
@@ -427,9 +430,9 @@ namespace GameViewer.App.Render
             // 레벨 원판: 금속 테두리 + 어두운 속 + 레벨 숫자 (레벨 업 때 잠깐 빛난다)
             float bxc = x + Badge / 2f, r = Badge / 2f;
             if (flash) g.FillEllipse(_res.Brush((int)(150 * (1f - since / 1400f)), 255, 230, 120), bxc - r - 8, cy - r - 8, 2 * r + 16, 2 * r + 16);
-            using (LinearGradientBrush rim = new LinearGradientBrush(new RectangleF(bxc - r, cy - r, 2 * r, 2 * r), Color.FromArgb(255, 246, 214, 130), Color.FromArgb(255, 150, 106, 40), 60f))
+            using (LinearGradientBrush rim = GfxBrush.Linear(new RectangleF(bxc - r, cy - r, 2 * r, 2 * r), Color.FromArgb(255, 246, 214, 130), Color.FromArgb(255, 150, 106, 40), 60f))
                 g.FillEllipse(rim, bxc - r, cy - r, 2 * r, 2 * r);
-            using (LinearGradientBrush core = new LinearGradientBrush(new RectangleF(bxc - r + 4, cy - r + 4, 2 * r - 8, 2 * r - 8), Color.FromArgb(255, 54, 62, 92), Color.FromArgb(255, 14, 16, 30), 90f))
+            using (LinearGradientBrush core = GfxBrush.Linear(new RectangleF(bxc - r + 4, cy - r + 4, 2 * r - 8, 2 * r - 8), Color.FromArgb(255, 54, 62, 92), Color.FromArgb(255, 14, 16, 30), 90f))
                 g.FillEllipse(core, bxc - r + 4, cy - r + 4, 2 * r - 8, 2 * r - 8);
             g.DrawEllipse(_res.Pen(200, 255, 236, 170, 1.2f), bxc - r + 4, cy - r + 4, 2 * r - 8, 2 * r - 8);
             _res.OutlinedText(g, "LV", _res.Small, Color.FromArgb(255, 214, 160), bxc, cy - 11f, _res.Center);
@@ -437,38 +440,71 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>재화: 화면 오른쪽 위 끝에 알약 한 줄씩 아래로 쌓는다. 골드가 맨 오른쪽이고 항상 보인다. 다른 재화는 가진 것만 ID 순.</summary>
-        private void DrawWallet(Graphics g, ViewerSession s, ViewState v)
+        /// <summary>블루 다이아 아이콘: 위가 평평한 보석 모양. 윗면/아랫면을 밝은 청색과 짙은 청색으로 나누고 면을 선으로 가른다.</summary>
+        private void DrawGem(IGfx g, float x, float y, float d)
         {
-            List<uint> ids = new List<uint> { ZcCurrencyNotify.Gold };
+            float w = d, h = d * 0.92f, t = h * 0.34f, ox = x, oy = y + (d - h) / 2f;
+            PointF[] outline = { new PointF(ox + w * 0.22f, oy), new PointF(ox + w * 0.78f, oy), new PointF(ox + w, oy + t), new PointF(ox + w * 0.5f, oy + h), new PointF(ox, oy + t) };
+            using (LinearGradientBrush bg = GfxBrush.Linear(new RectangleF(ox, oy, w, h + 1), Color.FromArgb(255, 150, 226, 255), Color.FromArgb(255, 28, 92, 214), 90f))
+                g.FillPolygon(bg, outline);
+            g.FillPolygon(_res.Brush(110, 255, 255, 255), new PointF[] { new PointF(ox + w * 0.22f, oy), new PointF(ox + w * 0.78f, oy), new PointF(ox + w * 0.62f, oy + t), new PointF(ox + w * 0.38f, oy + t) });
+            g.FillPolygon(_res.Brush(70, 0, 30, 110), new PointF[] { new PointF(ox + w * 0.5f, oy + h), new PointF(ox + w, oy + t), new PointF(ox + w * 0.62f, oy + t) });
+            Pen fp = _res.Pen(170, 235, 250, 255, 1f);
+            g.DrawLine(fp, ox, oy + t, ox + w, oy + t);
+            g.DrawLine(fp, ox + w * 0.38f, oy + t, ox + w * 0.5f, oy + h);
+            g.DrawLine(fp, ox + w * 0.62f, oy + t, ox + w * 0.5f, oy + h);
+            g.DrawLine(fp, ox + w * 0.22f, oy, ox + w * 0.38f, oy + t);
+            g.DrawLine(fp, ox + w * 0.78f, oy, ox + w * 0.62f, oy + t);
+            g.DrawPolygon(_res.Pen(230, 10, 40, 120, 1.4f), outline);
+            g.FillEllipse(_res.Brush(200, 255, 255, 255), ox + w * 0.28f, oy + h * 0.06f, w * 0.14f, h * 0.1f);
+        }
+
+        private void DrawWallet(IGfx g, ViewerSession s, ViewState v)
+        {
+            List<uint> ids = new List<uint> { ZcCurrencyNotify.Gold, ZcCurrencyNotify.BlueDiamond };       // 골드와 블루 다이아는 0이어도 항상 표시
             List<uint> others = new List<uint>();
-            foreach (uint id in s.World.Wallet.Keys) if (id != ZcCurrencyNotify.Gold) others.Add(id);
+            foreach (uint id in s.World.Wallet.Keys) if (id != ZcCurrencyNotify.Gold && id != ZcCurrencyNotify.BlueDiamond) others.Add(id);
             others.Sort();
             ids.AddRange(others);
-            float y = ExpBarY, hh = WalletRowH;
+            float y = WalletTop, hh = WalletRowH, wx = WalletX + 3f, limit = v.Width - 280f;          // limit: 오른쪽 UiDock 앞까지만
+            _walletEndX = WalletX;
             foreach (uint id in ids)
             {
                 uint amt; s.World.Wallet.TryGetValue(id, out amt);
-                bool gold = id == ZcCurrencyNotify.Gold;
-                string txt = (gold ? "" : "#" + id + "  ") + amt.ToString("N0");
-                float pw = Math.Min(WalletReserve, Math.Max(108f, 40f + g.MeasureString(txt, _res.Bold).Width));
-                float x = v.Width - 12f - pw;
+                bool gold = id == ZcCurrencyNotify.Gold, gem = id == ZcCurrencyNotify.BlueDiamond;
+                string txt = (gold || gem ? "" : "#" + id + "  ") + amt.ToString("N0");
+                float pw = Math.Min(200f, Math.Max(96f, 40f + g.MeasureString(txt, _res.Bold).Width));
+                float x = wx;
+                if (x + pw > limit) break;                                              // 자리가 모자라면 나머지 재화는 접는다
+                wx += pw + WalletColGap; _walletEndX = x + pw;
                 using (GraphicsPath pill = P.RoundPath(x, y, pw, hh, hh / 2f))
                 {
-                    using (LinearGradientBrush pb = new LinearGradientBrush(new RectangleF(x, y, pw, hh + 1), Color.FromArgb(235, 62, 52, 34), Color.FromArgb(235, 16, 13, 9), 90f))
+                    using (LinearGradientBrush pb = GfxBrush.Linear(new RectangleF(x, y, pw, hh + 1), Color.FromArgb(235, 62, 52, 34), Color.FromArgb(235, 16, 13, 9), 90f))
                         g.FillPath(pb, pill);
-                    using (LinearGradientBrush gl = new LinearGradientBrush(new RectangleF(x, y, pw, hh * 0.5f + 1), Color.FromArgb(60, 255, 240, 190), Color.FromArgb(0, 255, 240, 190), 90f))
+                    using (LinearGradientBrush gl = GfxBrush.Linear(new RectangleF(x, y, pw, hh * 0.5f + 1), Color.FromArgb(60, 255, 240, 190), Color.FromArgb(0, 255, 240, 190), 90f))
                         g.FillRectangle(gl, x + 6, y + 2, pw - 12, hh * 0.45f);
                     g.DrawPath(_res.Pen(240, 222, 188, 112, 2f), pill);
                 }
                 Color coin = gold ? Color.FromArgb(255, 205, 70) : Color.FromArgb(150, 210, 255);
                 float cd = hh - 4f, cx0 = x + 4f, cy0 = y + (hh - cd) / 2f;
+                Bitmap icon = CurrencyIcons.Get(id);
+                if (icon != null)                                                       // 이미지 아이콘: 알약보다 살짝 크게 그려 튀어나오게 한다
+                {
+                    System.Drawing.Drawing2D.InterpolationMode im = g.InterpolationMode;
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    float isz = hh + 6f;
+                    g.DrawImage(icon, new RectangleF(x - 3f, y - 3f, isz, isz));
+                    g.InterpolationMode = im;
+                }
+                else if (gem) DrawGem(g, cx0, cy0, cd);
+                else {
                 g.FillEllipse(_res.Brush(255, 120, 80, 20), cx0, cy0, cd, cd);
-                using (LinearGradientBrush cb = new LinearGradientBrush(new RectangleF(cx0 + 2, cy0 + 2, cd - 4, cd - 3), Col.Light(coin, 0.35f), Col.Dark(coin, 0.25f), 90f))
+                using (LinearGradientBrush cb = GfxBrush.Linear(new RectangleF(cx0 + 2, cy0 + 2, cd - 4, cd - 3), Col.Light(coin, 0.35f), Col.Dark(coin, 0.25f), 90f))
                     g.FillEllipse(cb, cx0 + 2, cy0 + 2, cd - 4, cd - 4);
                 g.DrawEllipse(_res.Pen(150, 255, 245, 200, 1f), cx0 + 5, cy0 + 5, cd - 10, cd - 10);
                 g.FillEllipse(_res.Brush(120, 255, 255, 255), cx0 + 7, cy0 + 5, 8, 6);
-                _res.OutlinedText(g, txt, _res.Bold, gold ? Color.FromArgb(255, 230, 130) : Color.FromArgb(205, 232, 255), x + pw - 12f, y + hh / 2f, _rightMid);
-                y += hh + WalletRowGap;
+                }
+                _res.OutlinedText(g, txt, _res.Bold, gold ? Color.FromArgb(255, 230, 130) : gem ? Color.FromArgb(150, 214, 255) : Color.FromArgb(205, 232, 255), x + pw - 12f, y + hh / 2f, _rightMid);
             }
         }
 
@@ -478,7 +514,7 @@ namespace GameViewer.App.Render
         private readonly StringFormat _leftMid = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
         private readonly StringFormat _rightMid = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center };
 
-        private void DrawSkillBar(Graphics g, ViewerSession s, ViewState v, long now)
+        private void DrawSkillBar(IGfx g, ViewerSession s, ViewState v, long now)
         {
             List<uint> skills = s.MySkills;
             int n = Math.Min(9, skills.Count);
@@ -492,7 +528,7 @@ namespace GameViewer.App.Render
             {
                 if (_dock != null) _dock.Dispose();
                 _dock = new Bitmap(dw, dh, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
-                using (Graphics dg = Graphics.FromImage(_dock)) { dg.SmoothingMode = SmoothingMode.AntiAlias; Ui.Frame(dg, _res, 4, 4, total + 24, slot + 16, 12, Color.FromArgb(206, 176, 108)); }
+                using (GdiGfx dg = GdiGfx.FromImage(_dock)) { dg.SmoothingMode = SmoothingMode.AntiAlias; Ui.Frame(dg, _res, 4, 4, total + 24, slot + 16, 12, Color.FromArgb(206, 176, 108)); }
             }
             g.DrawImageUnscaled(_dock, (int)(x0 - 12) - 4, (int)(y - 8) - 4);
 
@@ -524,12 +560,12 @@ namespace GameViewer.App.Render
                 new float[] { 0.55f, 0, 0, 0, 0 }, new float[] { 0, 0.55f, 0, 0, 0 }, new float[] { 0, 0, 0.55f, 0, 0 }, new float[] { 0, 0, 0, 0.4f, 0 }, new float[] { 0, 0, 0, 0, 1 }
             });
             System.Drawing.Imaging.ImageAttributes ia = new System.Drawing.Imaging.ImageAttributes();
-            ia.SetColorMatrix(cm);
+            GfxAttr.SetColorMatrix(ia, cm);
             return ia;
         }
 
         /// <summary>스킬바의 닫힌 칸(레벨 부족: 그 칸에 들어갈 스킬을 흐리게 + 자물쇠 + 필요 레벨)과 열렸지만 빈 상점 칸("+" 상점).</summary>
-        private void DrawEmptySlot(Graphics g, ViewerSession s, int slot, float x, float y, string key)
+        private void DrawEmptySlot(IGfx g, ViewerSession s, int slot, float x, float y, string key)
         {
             float size = Slot;
             uint lockLv = s.SlotLockLevel(slot), des = s.DesignatedSkill(slot);
@@ -539,7 +575,7 @@ namespace GameViewer.App.Render
                 Bitmap bmp = des != 0 ? SkillIcons.Get(des) : null;
                 if (bmp != null)
                 {
-                    GraphicsState st = g.Save();
+                    GfxState st = g.Save();
                     g.SetClip(p, CombineMode.Intersect);
                     g.DrawImage(bmp, new Rectangle((int)x + 3, (int)y + 3, (int)size - 6, (int)size - 6), 0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel, DimIcon);
                     g.Restore(st);
@@ -570,7 +606,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>칸을 끌고 있을 때: 원래 칸은 점선, 놓을 칸은 금색 테두리, 마우스 옆에는 스킬 이름표.</summary>
-        private void DrawSlotDrag(Graphics g, ViewerSession s, ViewState v)
+        private void DrawSlotDrag(IGfx g, ViewerSession s, ViewState v)
         {
             if (v.DragSlot <= 0 || !v.HasMouse) return;
             int count = s.MySkills.Count, n = Math.Min(9, count);
@@ -599,7 +635,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>마우스가 올라간 스킬 칸의 설명(이름/모양/사거리/재사용/피해/효과)을 칸 위에 띄운다. 다른 창이 열려 있으면 띄우지 않는다.</summary>
-        private void DrawSkillTip(Graphics g, ViewerSession s, ViewState v, long now)
+        private void DrawSkillTip(IGfx g, ViewerSession s, ViewState v, long now)
         {
             if (!v.HasMouse || v.SettingsOpen || v.KeysOpen || v.MapOpen || v.HeroSelectOpen || v.ZoneSelectOpen || v.SkillBookOpen || v.ChatActive) return;
             int count = s.MySkills.Count, n = Math.Min(9, count);
@@ -656,7 +692,7 @@ namespace GameViewer.App.Render
                 new float[] { 0, 0, 0, 1, 0 }, new float[] { o, o, o, 0, 1 },
             });
             System.Drawing.Imaging.ImageAttributes ia = new System.Drawing.Imaging.ImageAttributes();
-            ia.SetColorMatrix(cm);
+            GfxAttr.SetColorMatrix(ia, cm);
             return ia;
         }
         private const int SlotPad = 6;
@@ -672,16 +708,16 @@ namespace GameViewer.App.Render
             bool cooling = (variant & 1) != 0, outOfRange = (variant & 2) != 0;
             int n = (int)Math.Ceiling(size) + SlotPad * 2;
             bmp = new Bitmap(n, n, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
-            using (Graphics g = Graphics.FromImage(bmp))
+            using (GdiGfx g = GdiGfx.FromImage(bmp))
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
                 float x = SlotPad, y = SlotPad;
                 using (GraphicsPath p = P.RoundPath(x, y, size, size, 8))
                 {
-                using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(x, y, size, size + 1), Color.FromArgb(240, 128, 140, 166), Color.FromArgb(240, 64, 72, 98), LinearGradientMode.Vertical))
+                using (LinearGradientBrush b = GfxBrush.Linear(new RectangleF(x, y, size, size + 1), Color.FromArgb(240, 128, 140, 166), Color.FromArgb(240, 64, 72, 98), LinearGradientMode.Vertical))
                     g.FillPath(b, p);
-                GraphicsState gs = g.Save();
+                GfxState gs = g.Save();
                 g.SetClip(p, CombineMode.Intersect);
                 Bitmap art = SkillIcons.Get(idx == 0 ? 0u : (sk != null ? sk.Id : 0u));
                 if (art != null)
@@ -706,7 +742,7 @@ namespace GameViewer.App.Render
             return bmp;
         }
 
-        private void DrawSlot(Graphics g, float x, float y, float size, int idx, string key, string name, SkillRow sk, SkillFxInfo fx, long leftMs, long cdMs, string sub, bool active, bool outOfRange, long now)
+        private void DrawSlot(IGfx g, float x, float y, float size, int idx, string key, string name, SkillRow sk, SkillFxInfo fx, long leftMs, long cdMs, string sub, bool active, bool outOfRange, long now)
         {
             // 쿨다운이 막 끝난 순간을 잡아 번쩍임
             long prev;
@@ -729,7 +765,7 @@ namespace GameViewer.App.Render
                 if (cooling)
                 {
                     float frac = Math.Min(1f, leftMs / (float)cdMs);
-                    GraphicsState g2 = g.Save();
+                    GfxState g2 = g.Save();
                     g.SetClip(p, CombineMode.Intersect);
                     g.FillPie(_res.Brush(120, 0, 0, 0), x - size * 0.2f, y - size * 0.2f, size * 1.4f, size * 1.4f, -90, 360 * frac);
                     // 쓸고 가는 경계선
@@ -741,7 +777,7 @@ namespace GameViewer.App.Render
                 bool noMp = _hasMp && sk != null && sk.MpCost > (uint)Math.Max(0, _mp);
                 if (noMp)
                 {
-                    GraphicsState g4 = g.Save();
+                    GfxState g4 = g.Save();
                     g.SetClip(p, CombineMode.Intersect);
                     g.FillPath(_res.Brush(130, 10, 22, 90), p);
                     g.Restore(g4);
@@ -750,7 +786,7 @@ namespace GameViewer.App.Render
                     _res.OutlinedText(g, sk.MpCost.ToString(), _res.Small, noMp ? Color.FromArgb(255, 130, 120) : Color.FromArgb(150, 200, 255), x + size - 4f, y + size - 11f, _rightMid);
                 if (flash > 0f)
                 {
-                    GraphicsState g3 = g.Save();
+                    GfxState g3 = g.Save();
                     g.SetClip(p, CombineMode.Intersect);
                     g.FillPath(_res.Brush((int)(110 * flash), 255, 246, 200), p);
                     g.Restore(g3);
@@ -768,7 +804,7 @@ namespace GameViewer.App.Render
             g.DrawString(key, _res.Bold, _res.Brush(Color.FromArgb(255, 232, 140)), new RectangleF(x - 3, y - 4, kw, kh + 1), _res.Center);
         }
 
-        private void DrawMiniMap(Graphics g, ViewerSession s, ViewState v, long now)
+        private void DrawMiniMap(IGfx g, ViewerSession s, ViewState v, long now)
         {
             GameData d = s.Data;
             RectangleF mr = MiniMapRect(d, v);
@@ -837,7 +873,7 @@ namespace GameViewer.App.Render
             if (v.BgmLabel != null) _res.OutlinedText(g, "♪ " + v.BgmLabel, _res.Small, Color.FromArgb(200, 215, 235, 255), x + ww * k - 4, y + wh * k - 17, _fmtRight);
         }
 
-        private void DrawLog(Graphics g, ViewerSession s, ViewState v, long now)
+        private void DrawLog(IGfx g, ViewerSession s, ViewState v, long now)
         {
             List<LogLine> log = s.World.Log;
             int shown = 0;
@@ -857,14 +893,13 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>오른쪽 위의 작은 안내 칩: 도움말 단축키(기본 F1)를 알려 준다. 도움말이 열려 있으면 "닫기"로 바뀐다.</summary>
-        private void DrawHelpHint(Graphics g, ViewerSession s, ViewState v)
+        private void DrawHelpHint(IGfx g, ViewerSession s, ViewState v)
         {
             string key = KeyBindings.KeyName(v.Settings.Keys.Get(BindAction.ToggleHelp));
-            string label = v.ShowHelp ? "도움말 닫기" : "도움말";
+            string label = v.ShowHelp ? "닫기" : "?";
             float kw = Math.Max(24f, g.MeasureString(key, _res.Bold).Width + 8f), lw = g.MeasureString(label, _res.Small).Width;
             bool wallet = s.State == SessionState.InZone && s.World.Self != null;
-            int rows = 1; foreach (uint id in s.World.Wallet.Keys) if (id != ZcCurrencyNotify.Gold) ++rows;
-            float h = 22f, w = kw + lw + 20f, x = v.Width - 12f - w, y = wallet ? ExpBarY + rows * (WalletRowH + WalletRowGap) : ExpBarY;       // 오른쪽 위 재화 표시 바로 아래
+            float h = 22f, w = kw + lw + 20f, x = (wallet ? _walletEndX : WalletX) + 10f, y = ExpBarY + (ExpBarH - h) / 2f;       // 재화 줄 맨 끝(경험치바와 같은 줄)
             _helpHintBottom = y + h;
             using (GraphicsPath chip = P.RoundPath(x, y, w, h, 11f))
             {
@@ -873,7 +908,7 @@ namespace GameViewer.App.Render
             }
             using (GraphicsPath kb = P.RoundPath(x + 3f, y + 3f, kw, h - 6f, 6f))
             {
-                using (LinearGradientBrush kg = new LinearGradientBrush(new RectangleF(x + 3f, y + 2f, kw, h - 4f), Color.FromArgb(255, 246, 214, 130), Color.FromArgb(255, 176, 128, 44), 90f))
+                using (LinearGradientBrush kg = GfxBrush.Linear(new RectangleF(x + 3f, y + 2f, kw, h - 4f), Color.FromArgb(255, 246, 214, 130), Color.FromArgb(255, 176, 128, 44), 90f))
                     g.FillPath(kg, kb);
                 g.DrawPath(_res.Pen(220, 255, 240, 190, 1f), kb);
             }
@@ -881,7 +916,7 @@ namespace GameViewer.App.Render
             g.DrawString(label, _res.Small, _res.Brush(Color.FromArgb(220, 228, 220)), x + kw + 10f, y + 4f);
         }
 
-        private void DrawHelp(Graphics g, ViewState v)
+        private void DrawHelp(IGfx g, ViewState v)
         {
             KeyBindings kb = v.Settings.Keys;
             Func<BindAction, string> K = delegate (BindAction a) { return KeyBindings.KeyName(kb.Get(a)); };
@@ -894,7 +929,7 @@ namespace GameViewer.App.Render
             float w = 0;
             for (int i = 0; i < help.Length; ++i) w = Math.Max(w, g.MeasureString(help[i], _res.Small).Width);
             float x = v.Width - w - 28;
-            float top = _helpHintBottom + 8f;
+            float top = Math.Max(_helpHintBottom, ExpBarY + GameViewer.Core.Ui.UiDock.Size) + 8f;          // 오른쪽 위 UiDock 아래
             Panel(g, x, top, w + 16, help.Length * 15 + 8);
             for (int i = 0; i < help.Length; ++i)
                 g.DrawString(help[i], _res.Small, _res.Brush(Color.FromArgb(215, 225, 215)), x + 8, top + 4 + i * 15);

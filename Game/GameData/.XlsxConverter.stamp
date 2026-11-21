@@ -1,10 +1,10 @@
-XlsxConverter stamp v4 exe=639307600712862780/639307600712862780
+XlsxConverter stamp v4 exe=639308492567000136/639308492567000136
 xlsx=K:\GitHub\CSharp\Game\GameData
 out=K:\GitHub\CSharp\Game\GameData
 cs=K:\GitHub\CSharp\Game\GameCommon\Generated
 ns=Game.Generated
 --
-src=Definitions.xlsx=639307524388477637/10084;Hero.xlsx=639307600138435785/17696;Monster.xlsx=639307594724316404/15135;Packet.xlsx=639307524388627651/22377;World.xlsx=639307524387262755/12314;
+src=Definitions.xlsx=639307524388477637/10084;Hero.xlsx=639308492356632582/17883;Monster.xlsx=639308520068236724/15183;Packet.xlsx=639307524388627651/22377;World.xlsx=639307524387262755/12314;
 K:\GitHub\CSharp\Game\GameData\Hero.json
 K:\GitHub\CSharp\Game\GameData\Skill.json
 K:\GitHub\CSharp\Game\GameData\Status.json

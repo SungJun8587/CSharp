@@ -32,7 +32,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        public void Draw(Graphics g, GameData d, ViewState v, long now)
+        public void Draw(IGfx g, GameData d, ViewState v, long now)
         {
             if (d.Gates.Count == 0) return;
             for (int i = 0; i < d.Gates.Count; ++i)

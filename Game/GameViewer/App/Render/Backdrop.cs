@@ -41,7 +41,7 @@ namespace GameViewer.App.Render
                     {
                         if (img.Width > 8192 || img.Height > 8192) { warnings.Add(path + ": 이미지가 너무 큽니다(8192 초과)"); return false; }
                         Bitmap b = new Bitmap(img.Width, img.Height, PixelFormat.Format32bppArgb);
-                        using (Graphics g = Graphics.FromImage(b)) g.DrawImage(img, 0, 0, img.Width, img.Height);
+                        using (GdiGfx g = GdiGfx.FromImage(b)) g.DrawImage(img, 0, 0, img.Width, img.Height);
                         _src = b;
                     }
                     return true;
@@ -52,7 +52,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>화면 전체를 배경으로 덮는다. 그린 경우 true.</summary>
-        public static bool Draw(Graphics g, int width, int height)
+        public static bool Draw(IGfx g, int width, int height)
         {
             if (_src == null || width <= 0 || height <= 0) return false;
             if (_fit == null || _fit.Width != width || _fit.Height != height)
@@ -62,7 +62,7 @@ namespace GameViewer.App.Render
                 double k = Math.Max(width / (double)_src.Width, height / (double)_src.Height);       // 덮기
                 float sw = (float)(width / k), sh = (float)(height / k);
                 RectangleF srcRect = new RectangleF((_src.Width - sw) / 2f, (_src.Height - sh) / 2f, sw, sh);
-                using (Graphics fg = Graphics.FromImage(_fit))
+                using (GdiGfx fg = GdiGfx.FromImage(_fit))
                 {
                     fg.InterpolationMode = InterpolationMode.HighQualityBicubic;
                     fg.PixelOffsetMode = PixelOffsetMode.Half;

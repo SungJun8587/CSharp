@@ -19,7 +19,7 @@ namespace GameViewer.App.Render
         private readonly StringFormat _center = new StringFormat { Alignment = StringAlignment.Center };
         public TensionHud(Resources res) { _res = res; }
 
-        public void Draw(Graphics g, ViewerSession s, ViewState v, long now)
+        public void Draw(IGfx g, ViewerSession s, ViewState v, long now)
         {
             if (s.State != SessionState.InZone) return;
             WorldModel w = s.World;
@@ -36,7 +36,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 저체력
 
         /// <summary>체력이 낮을수록 화면 가장자리가 더 넓고 진하게 붉어지고, 심장 박동에 맞춰 맥동한다.</summary>
-        private void DrawLowHp(Graphics g, Entity self, ViewState v, long now)
+        private void DrawLowHp(IGfx g, Entity self, ViewState v, long now)
         {
             float level = Tension.Level(self.Hp, self.MaxHp);
             if (level <= 0f) return;
@@ -46,13 +46,13 @@ namespace GameViewer.App.Render
             if (a > 235) a = 235;
             int e = (int)(Math.Min(v.Width, v.Height) * (0.11f + 0.09f * level + 0.04f * pulse));
             Color edge = Color.FromArgb(a, 190, 8, 12), clear = Color.FromArgb(0, 190, 8, 12);
-            using (LinearGradientBrush t = new LinearGradientBrush(new Rectangle(0, 0, v.Width, e + 1), edge, clear, LinearGradientMode.Vertical))
+            using (LinearGradientBrush t = GfxBrush.Linear(new Rectangle(0, 0, v.Width, e + 1), edge, clear, LinearGradientMode.Vertical))
                 g.FillRectangle(t, 0, 0, v.Width, e);
-            using (LinearGradientBrush b = new LinearGradientBrush(new Rectangle(0, v.Height - e - 1, v.Width, e + 1), clear, edge, LinearGradientMode.Vertical))
+            using (LinearGradientBrush b = GfxBrush.Linear(new Rectangle(0, v.Height - e - 1, v.Width, e + 1), clear, edge, LinearGradientMode.Vertical))
                 g.FillRectangle(b, 0, v.Height - e, v.Width, e);
-            using (LinearGradientBrush l = new LinearGradientBrush(new Rectangle(0, 0, e + 1, v.Height), edge, clear, LinearGradientMode.Horizontal))
+            using (LinearGradientBrush l = GfxBrush.Linear(new Rectangle(0, 0, e + 1, v.Height), edge, clear, LinearGradientMode.Horizontal))
                 g.FillRectangle(l, 0, 0, e, v.Height);
-            using (LinearGradientBrush r = new LinearGradientBrush(new Rectangle(v.Width - e - 1, 0, e + 1, v.Height), clear, edge, LinearGradientMode.Horizontal))
+            using (LinearGradientBrush r = GfxBrush.Linear(new Rectangle(v.Width - e - 1, 0, e + 1, v.Height), clear, edge, LinearGradientMode.Horizontal))
                 g.FillRectangle(r, v.Width - e, 0, e, v.Height);
             if (level > 0.55f)
             {
@@ -66,7 +66,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 피격 번쩍임
 
         /// <summary>내가 맞은 순간 화면 가장자리가 붉게 번쩍인다. 센 타격일수록 진하고 오래 가며, 때린 쪽 가장자리가 더 붉다.</summary>
-        private void DrawHitFlash(Graphics g, WorldModel w, ViewState v, long now)
+        private void DrawHitFlash(IGfx g, WorldModel w, ViewState v, long now)
         {
             long age = now - w.SelfHitMs;
             int life = 180 + (int)(260 * Math.Min(1f, w.SelfHitRatio * 4f));
@@ -97,7 +97,7 @@ namespace GameViewer.App.Render
                     case 2: r = new Rectangle(0, 0, e + 1, v.Height); mode = LinearGradientMode.Horizontal; c0 = edge; c1 = clear; break;
                     default: r = new Rectangle(v.Width - e - 1, 0, e + 1, v.Height); mode = LinearGradientMode.Horizontal; c0 = clear; c1 = edge; break;
                 }
-                using (LinearGradientBrush b = new LinearGradientBrush(r, c0, c1, mode))
+                using (LinearGradientBrush b = GfxBrush.Linear(r, c0, c1, mode))
                     g.FillRectangle(b, r.X, r.Y, side < 2 ? r.Width : e, side < 2 ? e : r.Height);
             }
             if (w.SelfHitRatio >= 0.12f && fb > 0f) g.FillRectangle(_res.Brush((int)(26f * k * fb), 230, 20, 20), 0, 0, v.Width, v.Height);     // 큰 타격: 화면 전체가 살짝 붉게
@@ -106,7 +106,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 화면 밖 위협
 
         /// <summary>화면 밖에서 나를 향해 달려오는 적의 방향을 가장자리 화살표로 알린다. 가까울수록 크고 진하다.</summary>
-        private void DrawThreats(Graphics g, ViewerSession s, ViewState v, long now)
+        private void DrawThreats(IGfx g, ViewerSession s, ViewState v, long now)
         {
             WorldModel w = s.World;
             float sx, sy;
@@ -139,7 +139,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 레벨 업
 
         /// <summary>화면 위쪽 가운데에 커졌다 가라앉는 "LEVEL UP!"과 새 레벨. 효과가 끝나기 전에 서서히 사라진다.</summary>
-        private void DrawLevelUp(Graphics g, WorldModel w, ViewState v, long now)
+        private void DrawLevelUp(IGfx g, WorldModel w, ViewState v, long now)
         {
             for (int i = 0; i < w.Effects.Count; ++i)
             {
@@ -165,7 +165,7 @@ namespace GameViewer.App.Render
                         g.FillRectangle(lb, cx - fw, cy - 1f, fw * 2f, 2f);
                     }
                 }
-                System.Drawing.Drawing2D.GraphicsState gs = g.Save();
+                GfxState gs = g.Save();
                 g.TranslateTransform(cx, cy);
                 g.ScaleTransform(pop, pop);
                 int ta = Resources.Clamp((int)(255 * a));
@@ -186,7 +186,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 연속 처치
 
         /// <summary>연속 처치 칭호(커졌다 줄어드는 알림)와, 이어지는 동안 남은 시간 막대.</summary>
-        private void DrawStreak(Graphics g, WorldModel w, ViewState v, long now)
+        private void DrawStreak(IGfx g, WorldModel w, ViewState v, long now)
         {
             float cx = v.Width / 2f, y0 = v.Height * 0.17f;
             for (int i = 0; i < w.Effects.Count; ++i)
@@ -199,7 +199,7 @@ namespace GameViewer.App.Render
                 float a = p > 0.7f ? (1f - p) / 0.3f : 1f;
                 Color c = tier == 0 ? Color.FromArgb(255, 236, 160) : (tier == 1 ? Color.FromArgb(255, 190, 90) : (tier == 2 ? Color.FromArgb(255, 120, 70) : Color.FromArgb(255, 80, 200)));
                 float rise = p * 14f;
-                System.Drawing.Drawing2D.GraphicsState gs = g.Save();
+                GfxState gs = g.Save();
                 g.TranslateTransform(cx, y0 - rise);
                 g.ScaleTransform(pop, pop);
                 _res.OutlinedText(g, fx.Text ?? "", _res.Huge, Color.FromArgb(Resources.Clamp((int)(255 * a)), c), 0f, 0f, _center);

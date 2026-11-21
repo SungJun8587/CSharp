@@ -14,6 +14,17 @@
     <ProjectReference Include="..\Core\GameViewer.Core.csproj" />
   </ItemGroup>
 
+  <!-- SkiaSharp 그리기 구현(선택). 기본 빌드는 GDI+ 만 쓴다. 켜려면: dotnet build -p:UseSkia=true (NuGet 복원 필요) 후 실행 때 -renderer skia -->
+  <PropertyGroup Condition="'$(UseSkia)' == 'true'">
+    <DefineConstants>$(DefineConstants);SKIA</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(UseSkia)' == 'true'">
+    <PackageReference Include="SkiaSharp" Version="2.88.8" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseSkia)' != 'true'">
+    <Compile Remove="Render\Skia\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Include="..\GameViewer.json" Link="GameViewer.json" CopyToOutputDirectory="PreserveNewest" />
     <!-- 이미지 에셋(선택). Assets\sprites.json 에 적은 종류만 이미지로 그린다 -->

@@ -27,7 +27,8 @@ namespace GameViewer.Core
         public bool Auto = true;            // 입장하면 자동 전투(기본 켬. 끄려면 GameViewer.json 의 "Auto": false)
         public bool SkipHeroSelect = false; // true 면 시작 화면의 영웅 선택을 건너뛰고 HeroId 로 바로 접속한다
         public double PixelsPerUnit = 24;   // 화면 배율(월드 1 unit = N 픽셀)
-        public double EntityScale = 1.15;   // 영웅/몬스터 그림 크기 배율(1 = sprites.json 의 height 그대로). 지형과 화면 배율은 그대로다
+        public string Renderer = "gdi";     // 그리기 구현: "gdi"(GDI+, 기본) 또는 "skia"(SkiaSharp. 앱을 -p:UseSkia=true 로 빌드했을 때만 쓸 수 있다)
+        public double EntityScale = 1.45;   // 영웅/몬스터 그림 크기 배율(1 = sprites.json 의 height 그대로). 지형과 화면 배율은 그대로다
         public int WindowWidth = 1490;
         public int WindowHeight = 814;
         public int ConnectTimeoutMs = 3000;
@@ -60,6 +61,7 @@ namespace GameViewer.Core
   --no-auto             자동 전투 없이 시작
   --skip-select         시작 화면의 영웅 선택을 건너뛰고 --hero 영웅으로 바로 시작
   --scale <n>           화면 배율 px/unit (기본 24)
+  --renderer <gdi|skia> 그리기 구현 (기본 gdi, skia 는 UseSkia 빌드에서만)
   --width <n> --height <n>   창 크기
   --help                도움말";
 
@@ -116,6 +118,14 @@ namespace GameViewer.Core
                 c.PixelsPerUnit = d;
             }
 
+            if (cl.Has("renderer"))
+            {
+                if (!Text(cl, "renderer", out v, ref error)) return null;
+                v = v.ToLowerInvariant();
+                if (v != "gdi" && v != "skia") { error = "--renderer must be gdi or skia"; return null; }
+                c.Renderer = v;
+            }
+
             foreach (string u in cl.Unknown()) { error = "unknown option: " + (u.Length == 1 ? "-" : "--") + u; return null; }
             return c;
         }
@@ -154,6 +164,7 @@ namespace GameViewer.Core
 
                 Host = f.Host; Port = f.Port; CharId = f.CharId; MultiInstance = f.MultiInstance;
                 ZoneId = f.ZoneId; HeroId = f.HeroId; DataDir = f.DataDir ?? DataDir; Auto = f.Auto; SkipHeroSelect = f.SkipHeroSelect;
+                Renderer = string.Equals(f.Renderer, "skia", StringComparison.OrdinalIgnoreCase) ? "skia" : "gdi";
                 PixelsPerUnit = f.PixelsPerUnit; EntityScale = f.EntityScale; WindowWidth = f.WindowWidth; WindowHeight = f.WindowHeight;
                 ConnectTimeoutMs = f.ConnectTimeoutMs; MoveIntervalMs = f.MoveIntervalMs; Servers = servers;
                 return null;

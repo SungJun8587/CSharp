@@ -24,7 +24,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>(bx, by) = 발 밑 화면 좌표. 몸 그림보다 먼저(바닥 위에) 그린다.</summary>
-        public static void Draw(Graphics g, Resources res, Entity e, ViewState v, float bx, float by, long now)
+        public static void Draw(IGfx g, Resources res, Entity e, ViewState v, float bx, float by, long now)
         {
             if (e.IsMonster || e.Dead || e.TemplateId < 1 || e.TemplateId > 4) return;
             float k = StrikeProgress(e, now);
@@ -33,7 +33,7 @@ namespace GameViewer.App.Render
             float fl = (float)Math.Sqrt(e.FaceX * e.FaceX + e.FaceY * e.FaceY);
             float fx = fl > 0.001f ? e.FaceX / fl : 1f, fy = fl > 0.001f ? e.FaceY / fl : 0f;
             float u = v.Px(1.0f);
-            System.Drawing.Drawing2D.GraphicsState gs = g.Save();
+            GfxState gs = g.Save();
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             switch (e.TemplateId)
             {
@@ -49,14 +49,14 @@ namespace GameViewer.App.Render
         private static int A(float v) { return v < 0f ? 0 : (v > 255f ? 255 : (int)v); }
         private static float H(Entity e, int i) { return Noise.Hash01(i * 13 + (int)(e.AttackAnimMs & 0x7FFF), (int)(e.Id & 0xFF) + i, 0x3Bu); }
 
-        private static void Ring(Graphics g, Resources res, float cx, float cy, float r, float alpha, int rr, int gg, int bb, float w)
+        private static void Ring(IGfx g, Resources res, float cx, float cy, float r, float alpha, int rr, int gg, int bb, float w)
         {
             if (alpha <= 1f || r < 1f) return;
             g.DrawEllipse(res.Pen(A(alpha), rr, gg, bb, w), cx - r, cy - r * 0.45f, r * 2f, r * 0.9f);
         }
 
         // ------------------------------------------------------------------ 전사: 갈라지는 땅
-        private static void Warrior(Graphics g, Resources res, Entity e, float bx, float by, float u, float fx, float fy, float k, float c)
+        private static void Warrior(IGfx g, Resources res, Entity e, float bx, float by, float u, float fx, float fy, float k, float c)
         {
             if (c >= 0f) { Ring(g, res, bx, by, u * (2.2f - 1.4f * c), 90 + 120 * c, 255, 170, 60, 2f); return; }
             float p = Out(k), fade = 1f - k;
@@ -89,7 +89,7 @@ namespace GameViewer.App.Render
         }
 
         // ------------------------------------------------------------------ 궁수: 바람 줄기
-        private static void Archer(Graphics g, Resources res, Entity e, float bx, float by, float u, float fx, float fy, float k, float c)
+        private static void Archer(IGfx g, Resources res, Entity e, float bx, float by, float u, float fx, float fy, float k, float c)
         {
             if (c >= 0f) { Ring(g, res, bx, by, u * (1.9f - 1.0f * c), 80 + 120 * c, 150, 240, 170, 2f); return; }
             float p = Out(k), fade = 1f - k;
@@ -116,7 +116,7 @@ namespace GameViewer.App.Render
         }
 
         // ------------------------------------------------------------------ 마법사: 룬 서클
-        private static void Mage(Graphics g, Resources res, Entity e, float bx, float by, float u, float fx, float fy, float k, float c, long now)
+        private static void Mage(IGfx g, Resources res, Entity e, float bx, float by, float u, float fx, float fy, float k, float c, long now)
         {
             float grow, al;
             if (c >= 0f) { grow = 0.5f + 0.9f * Out(c); al = 70f + 150f * c; }
@@ -154,7 +154,7 @@ namespace GameViewer.App.Render
         }
 
         // ------------------------------------------------------------------ 창병: 속도선
-        private static void Lancer(Graphics g, Resources res, Entity e, float bx, float by, float u, float fx, float fy, float k, float c)
+        private static void Lancer(IGfx g, Resources res, Entity e, float bx, float by, float u, float fx, float fy, float k, float c)
         {
             if (c >= 0f) { Ring(g, res, bx, by, u * (1.8f - 1.0f * c), 80 + 120 * c, 120, 200, 255, 2f); return; }
             float p = Out(k), fade = 1f - k;

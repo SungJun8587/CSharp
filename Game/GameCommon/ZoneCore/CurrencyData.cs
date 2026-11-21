@@ -16,6 +16,7 @@ public sealed class CurrencyData
         public uint Id;
         public string Name = string.Empty;
         public uint MaxAmount;              // 보유 상한. 넘치는 만큼은 버려진다
+        public bool Paid;                   // 결제로만 얻는 유료 재화. 몬스터 보상이 될 수 없고 존 서버가 쓰지(차감하지) 않는다
     }
 
     public sealed class Reward
@@ -56,6 +57,9 @@ public sealed class CurrencyData
 
     public bool Has(uint currencyId) => _currencies.ContainsKey(currencyId);
 
+    /// <summary>유료 재화인가. 정의되지 않은 재화는 false.</summary>
+    public bool IsPaid(uint currencyId) => _currencies.TryGetValue(currencyId, out Currency? c) && c.Paid;
+
     /// <summary>보유 상한. 정의되지 않은 재화는 0.</summary>
     public uint MaxOf(uint currencyId) => _currencies.TryGetValue(currencyId, out Currency? c) ? c.MaxAmount : 0;
 
@@ -64,7 +68,7 @@ public sealed class CurrencyData
 
     /// <summary>
     /// 값 범위를 검사한다. 첫 번째 오류만 설명으로 돌려준다.
-    /// 검사 항목: 보상의 재화가 정의돼 있다, 수량은 1 이상이고 최소 &lt;= 최대 &lt;= 그 재화의 상한, 확률은 1..1000, 같은 몬스터가 같은 재화를 두 줄 갖지 않는다, 상한은 1 이상.
+    /// 검사 항목: 보상의 재화가 정의돼 있다, 수량은 1 이상이고 최소 &lt;= 최대 &lt;= 그 재화의 상한, 확률은 1..1000, 같은 몬스터가 같은 재화를 두 줄 갖지 않는다, 유료 재화(Paid)는 몬스터 보상이 될 수 없다, 상한은 1 이상.
     /// </summary>
     public bool Validate(out string error)
     {
@@ -77,6 +81,7 @@ public sealed class CurrencyData
             foreach (Reward r in kv.Value)
             {
                 if (!_currencies.TryGetValue(r.CurrencyId, out Currency? c)) { error = $"monster {r.MonsterId}: unknown currency {r.CurrencyId}"; return false; }
+                if (c.Paid) { error = $"monster {r.MonsterId}: paid currency {r.CurrencyId} cannot be a monster reward"; return false; }
                 if (!seen.Add(r.CurrencyId)) { error = $"monster {r.MonsterId}: currency {r.CurrencyId} appears twice"; return false; }
                 if (r.MinAmount < 1 || r.MinAmount > r.MaxAmount || r.MaxAmount > c.MaxAmount) { error = $"monster {r.MonsterId}: amount range must satisfy 1 <= min <= max <= {c.MaxAmount}"; return false; }
                 if (r.ChancePermille < 1 || r.ChancePermille > 1000) { error = $"monster {r.MonsterId}: chancePermille must be 1..1000"; return false; }

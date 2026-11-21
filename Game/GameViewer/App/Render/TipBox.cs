@@ -28,7 +28,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>(ax, ay) 를 기준으로 상자를 놓는다. above 면 ay 위쪽에, 아니면 아래쪽에 놓고 화면 안으로 밀어 넣는다.</summary>
-        public void Draw(Graphics g, List<TipLine> lines, float ax, float ay, int sw, int sh, bool above)
+        public void Draw(IGfx g, List<TipLine> lines, float ax, float ay, int sw, int sh, bool above)
         {
             if (lines == null || lines.Count == 0) return;
             float w = 0;

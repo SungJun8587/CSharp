@@ -141,7 +141,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 장식
         private const float Cell = 1.5f;
 
-        public static void Details(MapKind kind, Graphics g, ViewState v, int y0, int y1, float minX, float minY, float maxX, float maxY)
+        public static void Details(MapKind kind, IGfx g, ViewState v, int y0, int y1, float minX, float minY, float maxX, float maxY)
         {
             float scale = (float)v.Scale;
             if (scale < 5) return;
@@ -165,13 +165,13 @@ namespace GameViewer.App.Render
                 }
         }
 
-        private static void Sh(Graphics g, float x, float y, float rx, float ry, int a, int cr, int cg, int cb)
+        private static void Sh(IGfx g, float x, float y, float rx, float ry, int a, int cr, int cg, int cb)
         {
             using (SolidBrush br = new SolidBrush(System.Drawing.Color.FromArgb(a, cr, cg, cb))) g.FillEllipse(br, x - rx, y - ry, rx * 2, ry * 2);
         }
 
         // ---- 설원
-        private static void SnowDetail(Graphics g, float x, float y, float scale, uint h, uint k, float dirtT)
+        private static void SnowDetail(IGfx g, float x, float y, float scale, uint h, uint k, float dirtT)
         {
             if (k < 8) { if (dirtT < 0.5f) SnowTuft(g, x, y, scale, h); }
             else if (k < 13) IceRock(g, x, y, scale, h);
@@ -183,7 +183,7 @@ namespace GameViewer.App.Render
             else if (k < 42) { if (scale >= 8) Twig(g, x, y, scale, h); }
         }
 
-        private static void SnowTuft(Graphics g, float x, float y, float scale, uint h)
+        private static void SnowTuft(IGfx g, float x, float y, float scale, uint h)
         {
             float len = scale * (0.3f + Rnd(h, 2) * 0.25f);
             Sh(g, x, y + len * 0.05f, len * 0.5f, len * 0.13f, 40, 80, 100, 150);
@@ -200,7 +200,7 @@ namespace GameViewer.App.Render
             Sh(g, x - len * 0.1f, y - len * 0.09f, len * 0.3f, len * 0.07f, 255, 255, 255, 255);
         }
 
-        private static void IceRock(Graphics g, float x, float y, float scale, uint h)
+        private static void IceRock(IGfx g, float x, float y, float scale, uint h)
         {
             int n = 1 + (int)(h % 3);
             for (int i = 0; i < n; ++i)
@@ -216,7 +216,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Mound(Graphics g, float x, float y, float scale, uint h)
+        private static void Mound(IGfx g, float x, float y, float scale, uint h)
         {
             float rx = scale * (0.55f + Rnd(h, 2) * 0.5f), ry = rx * 0.32f;
             Sh(g, x + rx * 0.12f, y + ry * 0.3f, rx, ry, 60, 112, 140, 190);
@@ -224,7 +224,7 @@ namespace GameViewer.App.Render
             Sh(g, x - rx * 0.18f, y - ry * 0.22f, rx * 0.6f, ry * 0.5f, 200, 255, 255, 255);
         }
 
-        private static void IceShards(Graphics g, float x, float y, float scale, uint h)
+        private static void IceShards(IGfx g, float x, float y, float scale, uint h)
         {
             int n = 2 + (int)(h % 3);
             Sh(g, x, y + scale * 0.02f, scale * 0.3f, scale * 0.08f, 50, 60, 90, 140);
@@ -238,7 +238,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Footprints(Graphics g, float x, float y, float scale, uint h)
+        private static void Footprints(IGfx g, float x, float y, float scale, uint h)
         {
             float a = Rnd(h, 3) * 6.28f; int n = 4;
             for (int i = 0; i < n; ++i)
@@ -251,14 +251,14 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Sparkle(Graphics g, float x, float y, float scale, uint h)
+        private static void Sparkle(IGfx g, float x, float y, float scale, uint h)
         {
             float s = scale * (0.05f + Rnd(h, 3) * 0.05f);
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(150 + (int)(Rnd(h, 6) * 100), 255, 255, 255), 1f))
             { g.DrawLine(p, x - s, y, x + s, y); g.DrawLine(p, x, y - s, x, y + s); }
         }
 
-        private static void FrostCracks(Graphics g, float x, float y, float scale, uint h)
+        private static void FrostCracks(IGfx g, float x, float y, float scale, uint h)
         {
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(130, 255, 255, 255), 1f))
             {
@@ -272,7 +272,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Twig(Graphics g, float x, float y, float scale, uint h)
+        private static void Twig(IGfx g, float x, float y, float scale, uint h)
         {
             float a = (Rnd(h, 3) - 0.5f) * 1.2f, l = scale * 0.5f;
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(220, 84, 66, 50), Math.Max(1.4f, scale * 0.04f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
@@ -282,7 +282,7 @@ namespace GameViewer.App.Render
         }
 
         // ---- 화산
-        private static void VolcanoDetail(Graphics g, float x, float y, float scale, uint h, uint k, float dirtT)
+        private static void VolcanoDetail(IGfx g, float x, float y, float scale, uint h, uint k, float dirtT)
         {
             if (dirtT > 0.5f) { if (k < 20) EmberSpot(g, x, y, scale, h); return; }
             if (k < 9) BasaltRock(g, x, y, scale, h);
@@ -294,7 +294,7 @@ namespace GameViewer.App.Render
             else if (k < 42) { if (scale >= 8 && (h & 3) == 0) Bones(g, x, y, scale, h); }
         }
 
-        private static void BasaltRock(Graphics g, float x, float y, float scale, uint h)
+        private static void BasaltRock(IGfx g, float x, float y, float scale, uint h)
         {
             int n = 1 + (int)(h % 3);
             for (int i = 0; i < n; ++i)
@@ -310,14 +310,14 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void AshPile(Graphics g, float x, float y, float scale, uint h)
+        private static void AshPile(IGfx g, float x, float y, float scale, uint h)
         {
             float rx = scale * (0.4f + Rnd(h, 2) * 0.35f), ry = rx * 0.3f;
             Sh(g, x, y, rx, ry, 150, 120, 108, 104);
             Sh(g, x - rx * 0.1f, y - ry * 0.2f, rx * 0.7f, ry * 0.6f, 150, 160, 148, 142);
         }
 
-        private static void ObsidianShard(Graphics g, float x, float y, float scale, uint h)
+        private static void ObsidianShard(IGfx g, float x, float y, float scale, uint h)
         {
             int n = 2 + (int)(h % 2);
             Sh(g, x, y + 1, scale * 0.3f, scale * 0.08f, 90, 0, 0, 0);
@@ -330,7 +330,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void EmberSpot(Graphics g, float x, float y, float scale, uint h)
+        private static void EmberSpot(IGfx g, float x, float y, float scale, uint h)
         {
             float s = scale * (0.07f + Rnd(h, 3) * 0.07f);
             Sh(g, x, y, s * 3.2f, s * 1.8f, 28, 255, 100, 30);
@@ -338,7 +338,7 @@ namespace GameViewer.App.Render
             Sh(g, x, y, s * 0.7f, s * 0.42f, 230, 255, 220, 120);
         }
 
-        private static void Scorched(Graphics g, float x, float y, float scale, uint h)
+        private static void Scorched(IGfx g, float x, float y, float scale, uint h)
         {
             Sh(g, x, y, scale * 0.6f, scale * 0.2f, 90, 20, 12, 12);
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(220, 28, 22, 24), Math.Max(2f, scale * 0.07f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
@@ -350,7 +350,7 @@ namespace GameViewer.App.Render
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(150, 255, 120, 40), Math.Max(1f, scale * 0.02f))) g.DrawLine(p, x - scale * 0.2f, y, x + scale * 0.25f, y + 1);
         }
 
-        private static void Pebbles(Graphics g, float x, float y, float scale, uint h)
+        private static void Pebbles(IGfx g, float x, float y, float scale, uint h)
         {
             int n = 2 + (int)(h % 3);
             for (int i = 0; i < n; ++i)
@@ -363,10 +363,10 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Bones(Graphics g, float x, float y, float scale, uint h)
+        private static void Bones(IGfx g, float x, float y, float scale, uint h)
         {
             float s = scale * 0.45f;
-            GraphicsState st = g.Save(); g.TranslateTransform(x, y); g.RotateTransform((Rnd(h, 3) - 0.5f) * 60f);
+            GfxState st = g.Save(); g.TranslateTransform(x, y); g.RotateTransform((Rnd(h, 3) - 0.5f) * 60f);
             Color bone = System.Drawing.Color.FromArgb(196, 186, 168), edge = System.Drawing.Color.FromArgb(160, 40, 30, 28);
             using (Pen p = new Pen(edge, Math.Max(1.6f, s * 0.1f)) { StartCap = LineCap.Round, EndCap = LineCap.Round }) g.DrawLine(p, -s * 0.5f, 0, s * 0.5f, 0);
             using (Pen p = new Pen(bone, Math.Max(1f, s * 0.07f)) { StartCap = LineCap.Round, EndCap = LineCap.Round }) g.DrawLine(p, -s * 0.5f, 0, s * 0.5f, 0);
@@ -376,7 +376,7 @@ namespace GameViewer.App.Render
         }
 
         // ---- 늪
-        private static void SwampDetail(Graphics g, float x, float y, float scale, uint h, uint k, float dirtT)
+        private static void SwampDetail(IGfx g, float x, float y, float scale, uint h, uint k, float dirtT)
         {
             if (dirtT > 0.5f) { if (k < 22) PuddleRing(g, x, y, scale, h); else if (k < 28 && scale >= 6) Duckweed(g, x, y, scale, h); return; }
             if (k < 12) ReedTuft(g, x, y, scale, h);
@@ -388,7 +388,7 @@ namespace GameViewer.App.Render
             else if (k < 44) { if (scale >= 6) BogFlower(g, x, y, scale, h); }
         }
 
-        private static void ReedTuft(Graphics g, float x, float y, float scale, uint h)
+        private static void ReedTuft(IGfx g, float x, float y, float scale, uint h)
         {
             float len = scale * (0.5f + Rnd(h, 2) * 0.4f);
             Sh(g, x, y + len * 0.04f, len * 0.4f, len * 0.1f, 70, 10, 24, 14);
@@ -404,7 +404,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Hummock(Graphics g, float x, float y, float scale, uint h)
+        private static void Hummock(IGfx g, float x, float y, float scale, uint h)
         {
             float rx = scale * (0.4f + Rnd(h, 2) * 0.35f), ry = rx * 0.42f;
             Sh(g, x + rx * 0.1f, y + ry * 0.3f, rx, ry, 70, 8, 20, 12);
@@ -413,7 +413,7 @@ namespace GameViewer.App.Render
             Sh(g, x - rx * 0.25f, y - ry * 0.4f, rx * 0.35f, ry * 0.25f, 180, 150, 184, 92);
         }
 
-        private static void BogMushroom(Graphics g, float x, float y, float scale, uint h)
+        private static void BogMushroom(IGfx g, float x, float y, float scale, uint h)
         {
             bool glow = (h & 1) == 0;
             int n = 1 + (int)(h % 3);
@@ -427,10 +427,10 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void RotLog(Graphics g, float x, float y, float scale, uint h)
+        private static void RotLog(IGfx g, float x, float y, float scale, uint h)
         {
             float len = scale * (1.2f + Rnd(h, 2) * 1f), rad = scale * (0.18f + Rnd(h, 5) * 0.07f);
-            GraphicsState st = g.Save(); g.TranslateTransform(x, y); g.RotateTransform((Rnd(h, 11) - 0.5f) * 50f);
+            GfxState st = g.Save(); g.TranslateTransform(x, y); g.RotateTransform((Rnd(h, 11) - 0.5f) * 50f);
             Sh(g, 0, rad * 0.8f, len * 0.55f, rad * 0.8f, 80, 6, 14, 8);
             P.Round(g, -len * 0.5f, -rad, len, rad * 2f, rad * 0.9f, System.Drawing.Color.FromArgb(94, 82, 60), System.Drawing.Color.FromArgb(44, 38, 28), System.Drawing.Color.FromArgb(170, 14, 12, 8), Math.Max(1f, rad * 0.12f));
             Sh(g, -len * 0.12f, -rad * 0.8f, len * 0.36f, rad * 0.5f, 220, 64, 108, 46);
@@ -438,14 +438,14 @@ namespace GameViewer.App.Render
             g.Restore(st);
         }
 
-        private static void MudBlot(Graphics g, float x, float y, float scale, uint h)
+        private static void MudBlot(IGfx g, float x, float y, float scale, uint h)
         {
             float rx = scale * (0.25f + Rnd(h, 2) * 0.3f);
             Sh(g, x, y, rx, rx * 0.35f, 90, 54, 44, 28);
             Sh(g, x - rx * 0.2f, y - rx * 0.06f, rx * 0.5f, rx * 0.12f, 80, 150, 130, 90);
         }
 
-        private static void Duckweed(Graphics g, float x, float y, float scale, uint h)
+        private static void Duckweed(IGfx g, float x, float y, float scale, uint h)
         {
             for (int i = 0; i < 4; ++i)
             {
@@ -455,13 +455,13 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void PuddleRing(Graphics g, float x, float y, float scale, uint h)
+        private static void PuddleRing(IGfx g, float x, float y, float scale, uint h)
         {
             float s = scale * (0.18f + Rnd(h, 3) * 0.15f);
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(90, 190, 220, 200), 1f)) { g.DrawEllipse(p, x - s, y - s * 0.4f, s * 2, s * 0.8f); g.DrawEllipse(p, x - s * 0.55f, y - s * 0.22f, s * 1.1f, s * 0.44f); }
         }
 
-        private static void BogFlower(Graphics g, float x, float y, float scale, uint h)
+        private static void BogFlower(IGfx g, float x, float y, float scale, uint h)
         {
             Color pc = (h & 1) == 0 ? System.Drawing.Color.FromArgb(236, 214, 120) : System.Drawing.Color.FromArgb(214, 150, 214);
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(230, 52, 84, 40), Math.Max(1f, scale * 0.03f))) g.DrawLine(p, x, y, x, y - scale * 0.25f);

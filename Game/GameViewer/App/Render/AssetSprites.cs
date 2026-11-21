@@ -161,6 +161,7 @@ namespace GameViewer.App.Render
             if (_atlasPages != null) foreach (AtlasPage pg in _atlasPages) pg.Release();
             _atlas = null; _atlasPages = null;
             MonsterTraits.Clear();
+            GameViewer.Core.Model3D.MonsterModels.Clear();
             if (m == null) return;
             foreach (AssetSet s in m.Values) Dispose(s);
         }
@@ -254,6 +255,29 @@ namespace GameViewer.App.Render
             if (s.Hit != null) foreach (Bitmap b in s.Hit) if (b != null) b.Dispose();
         }
 
+        private static AssetSet LoadModelOnly(string dir, Dictionary<string, object> o, bool monster, uint tpl, out long key, out string why)
+        {
+            key = 0; why = null;
+            double height = MiniJson.Num(o, "height", 0);
+            if (!(height >= 0.5 && height <= 12.0)) { why = "height 는 0.5..12 (단위)"; return null; }
+            height *= SizeFactor;
+            AttackStyle style = AttackStyle.Lunge;
+            string styleName = MiniJson.Str(o, "attack", "");
+            if (styleName.Length > 0 && !MonsterTraits.TryParseStyle(styleName, out style)) { why = "attack 은 lunge, hop, slam 중 하나"; return null; }
+            string fxName = MiniJson.Str(o, "fx", "");
+            AssetSet s = new AssetSet();
+            s.Scale = 1f; s.Fx = fxName.Length > 0 ? fxName : null;
+            float half = (float)MiniJson.Num(o, "halfW", 0.42 * height);
+            s.Look = new Look(half, (float)height); s.Extent = new Look(half, (float)height);
+            if (monster) MonsterTraits.Set(tpl, style, MiniJson.Bool(o, "flying", false), MiniJson.Bool(o, "idleAnim", false));
+            GameViewer.Core.Model3D.ModelSpec ms = new GameViewer.Core.Model3D.ModelSpec();
+            ms.Path = System.IO.Path.Combine(dir, MiniJson.Str(o, "model3d", "").Replace('/', System.IO.Path.DirectorySeparatorChar));
+            ms.WalkStride = (float)MiniJson.Num(o, "walkStride", 1.6);
+            GameViewer.Core.Model3D.MonsterModels.Set(monster, tpl, ms);
+            key = Key(monster, tpl);
+            return s;
+        }
+
         private static AssetSet LoadOne(string dir, Dictionary<string, object> o, out long key, out string why)
         {
             key = 0; why = null;
@@ -263,6 +287,9 @@ namespace GameViewer.App.Render
             if (kind != "monster" && kind != "hero" && !tree) { why = "kind 는 monster, hero, tree 중 하나"; return null; }
             double tpl = tree ? 0 : MiniJson.Num(o, "template", -1);
             if (tpl < 0 || tpl > uint.MaxValue || tpl != Math.Floor(tpl)) { why = "template 이 없거나 잘못됨"; return null; }
+            // 3D 전용 몬스터/영웅: 이미지 시트 없이 "model3d" 와 크기/성질만 적는다(pattern 이 없을 때). 이 경우 AssetSet 은 크기(Look)와 타격 연출 이름만 쥔다.
+            if (!tree && (kind == "monster" || kind == "hero") && MiniJson.Str(o, "pattern", "").Length == 0 && MiniJson.Str(o, "model3d", "").Length > 0)
+                return LoadModelOnly(dir, o, kind == "monster", (uint)tpl, out key, out why);
             int n = (int)MiniJson.Num(o, "angles", 0);
             if (n < 1 || n > 72) { why = "angles 는 1..72"; return null; }
             double height = MiniJson.Num(o, "height", 0);
@@ -368,6 +395,15 @@ namespace GameViewer.App.Render
 
                 s.Fx = fxName.Length > 0 ? fxName : null;
                 if (kind == "monster") MonsterTraits.Set((uint)tpl, style, MiniJson.Bool(o, "flying", false), MiniJson.Bool(o, "idleAnim", false));
+                // 선택: "model3d":"models/Big_Yeti.gltf" (몬스터/영웅) 이면 이 종류는 OpenGL 로 실시간 3D 로 그린다(위 이미지 시트는 GL 을 못 쓸 때 대신 쓴다). "walkStride" = 걷기 클립 한 바퀴에 걷는 거리.
+                string model3d = MiniJson.Str(o, "model3d", "");
+                if ((kind == "monster" || kind == "hero") && model3d.Length > 0)
+                {
+                    GameViewer.Core.Model3D.ModelSpec ms = new GameViewer.Core.Model3D.ModelSpec();
+                    ms.Path = System.IO.Path.Combine(dir, model3d.Replace('/', System.IO.Path.DirectorySeparatorChar));
+                    ms.WalkStride = (float)MiniJson.Num(o, "walkStride", 1.6);
+                    GameViewer.Core.Model3D.MonsterModels.Set(kind == "monster", (uint)tpl, ms);
+                }
                 s.Cx = w / 2f; s.Foot = (float)footRow;
                 float half = Math.Max(s.Cx - x0, x1 + 1 - s.Cx) * s.Scale;
                 s.Look = new Look(half, (float)height);
@@ -662,7 +698,7 @@ namespace GameViewer.App.Render
                 {
                     if (src.Width > 4096 || src.Height > 4096) { why = "이미지가 너무 큽니다(4096 초과): " + Path.GetFileName(path); return null; }
                     Bitmap dst = new Bitmap(src.Width, src.Height, PixelFormat.Format32bppArgb);
-                    using (Graphics g = Graphics.FromImage(dst))
+                    using (GdiGfx g = GdiGfx.FromImage(dst))
                     {
                         g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
                         g.DrawImage(src, 0, 0, src.Width, src.Height);

@@ -27,7 +27,7 @@ namespace GameViewer.App.Render
             return pts;
         }
 
-        public void Draw(Graphics g, ViewState v, BlockRow b, int index, long now)
+        public void Draw(IGfx g, ViewState v, BlockRow b, int index, long now)
         {
             float x0 = v.ToScreenX(b.X), y0 = v.ToScreenY(b.Y), w = v.Px(b.W), h = v.Px(b.H);
             if (x0 > v.Width + 40 || y0 > v.Height + 40 || x0 + w < -40 || y0 + h < -40) return;
@@ -56,10 +56,10 @@ namespace GameViewer.App.Render
                     pg.CenterPoint = new PointF(cx + rx * 0.08f, cy + ry * 0.1f);
                     g.FillPath(pg, water);
                 }
-                GraphicsState gs = g.Save();
+                GfxState gs = g.Save();
                 g.SetClip(water, CombineMode.Intersect);
                 // 하늘 반사: 위쪽에 밝은 띠
-                using (LinearGradientBrush lb = new LinearGradientBrush(new RectangleF(x0, y0, w, h * 0.7f + 1), Color.FromArgb(86, 220, 244, 250), Color.FromArgb(0, 220, 244, 250), LinearGradientMode.Vertical))
+                using (LinearGradientBrush lb = GfxBrush.Linear(new RectangleF(x0, y0, w, h * 0.7f + 1), Color.FromArgb(86, 220, 244, 250), Color.FromArgb(0, 220, 244, 250), LinearGradientMode.Vertical))
                     g.FillRectangle(lb, x0, y0, w, h * 0.7f);
                 // 퍼지는 물결
                 for (int k = 0; k < 3; ++k)

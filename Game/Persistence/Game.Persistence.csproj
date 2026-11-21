@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -9,6 +9,11 @@
     <LangVersion>latest</LangVersion>
     <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
   </PropertyGroup>
+
+  <!-- 스키마 스크립트를 어셈블리에 넣어 실행 파일만 배포해도 마이그레이션을 할 수 있게 한다(리소스 이름: Game.Persistence.Schema.NNN_이름.sql). -->
+  <ItemGroup>
+    <EmbeddedResource Include="Schema/*.sql" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../GameCommon/ZoneCommon/Game.ZoneCommon.csproj" />

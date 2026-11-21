@@ -7,7 +7,9 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using GameViewer.App.Forest;
 using GameViewer.Core.Logic;
+using GameViewer.Core.Model3D;
 using GameViewer.Core.World;
 
 namespace GameViewer.App.Render
@@ -62,7 +64,7 @@ namespace GameViewer.App.Render
         public float Alpha = 1f;
         private readonly Dictionary<int, System.Drawing.Imaging.ImageAttributes> _alphaAttr = new Dictionary<int, System.Drawing.Imaging.ImageAttributes>();
 
-        private void Blit(Graphics g, Bitmap bmp, float x, float y, float w, float h)
+        private void Blit(IGfx g, Bitmap bmp, float x, float y, float w, float h)
         {
             if (Alpha >= 0.99f) { g.DrawImage(bmp, x, y, w, h); return; }
             int q = Math.Max(1, (int)(Alpha * 16f));
@@ -70,7 +72,7 @@ namespace GameViewer.App.Render
             if (!_alphaAttr.TryGetValue(q, out ia))
             {
                 ia = new System.Drawing.Imaging.ImageAttributes();
-                ia.SetColorMatrix(new System.Drawing.Imaging.ColorMatrix(new float[][] {
+                GfxAttr.SetColorMatrix(ia, new System.Drawing.Imaging.ColorMatrix(new float[][] {
                     new float[] { 1, 0, 0, 0, 0 }, new float[] { 0, 1, 0, 0, 0 }, new float[] { 0, 0, 1, 0, 0 }, new float[] { 0, 0, 0, q / 16f, 0 }, new float[] { 0, 0, 0, 0, 1 } }));
                 _alphaAttr[q] = ia;
             }
@@ -80,12 +82,18 @@ namespace GameViewer.App.Render
         /// <summary>
         /// (sx, sy) 는 발 밑 화면 좌표. 번쩍임(hurt)과 시체(dead)는 파생 그림을 쓴다.
         /// </summary>
-        public void Draw(Graphics g, Entity e, ViewState v, long now, float sx, float sy, bool hurt)
+        public void Draw(IGfx g, Entity e, ViewState v, long now, float sx, float sy, bool hurt)
         {
             bool monster = e.IsMonster;
             uint tpl = e.TemplateId;
             Look look = LookOf(monster, tpl);
             AssetSet asset = AssetSprites.Find(monster, tpl);
+
+            // 3D 모델이 등록된 몬스터/영웅은 OpenGL 로 실시간 렌더한다. 모델을 아직 읽는 중이거나 GL 을 쓸 수 없으면 아래 이미지 시트/코드 그림으로 그린다.
+            {
+                ModelSpec spec = MonsterModels.Get(monster, tpl);
+                if (spec != null && Draw3D(g, e, spec, look, v, now, sx, sy, hurt)) return;
+            }
 
             float walked;
             bool walking = e.WalkingAt(now, out walked);
@@ -167,7 +175,7 @@ namespace GameViewer.App.Render
                 float dh = h * k * sq, dy = sy - ay * k * sq - hop * (float)v.Scale;
                 if (asset.Weapon != null && !monster && !baked)
                 {
-                    GraphicsState gs = g.Save();
+                    GfxState gs = g.Save();
                     g.TranslateTransform(sx, sy - hop * (float)v.Scale);
                     g.ScaleTransform(1f, sq);
                     g.InterpolationMode = InterpolationMode.HighQualityBilinear;
@@ -187,6 +195,17 @@ namespace GameViewer.App.Render
             }
             float breathe = (!walking && !monster) ? (float)Math.Sin(now / 420.0 + (e.Id & 15)) * 0.025f * (float)v.Scale : 0f;
             Blit(g, en.Bmp, sx - ax * k, sy - ay * k + breathe, w * k, h * k);
+        }
+
+        /// <summary>실시간 3D 몬스터/영웅을 정사각형 칸 그림으로 받아 발 밑에 맞춰 찍는다. 못 그리면 false.</summary>
+        private bool Draw3D(IGfx g, Entity e, ModelSpec spec, Look look, ViewState v, long now, float sx, float sy, bool hurt)
+        {
+            Bitmap bmp = MonsterGl.Frame(e, spec, look.H, v.Scale, now, hurt);
+            if (bmp == null) return false;
+            float cw = MonsterCamera.CellWorld(look.H) * (float)v.Scale;
+            float hop = e.Dead ? 0f : HoverOf(e, now, false, 0f);          // 걷는 동작은 뼈대 애니메이션이 하므로 통통거림은 빼고 날아다니는 부유만
+            Blit(g, bmp, sx - cw / 2f, sy - cw * MonsterCamera.FootRowFrac - hop * (float)v.Scale, cw, cw);
+            return true;
         }
 
         /// <summary>
@@ -216,7 +235,7 @@ namespace GameViewer.App.Render
         /// 몸과 따로 그린 무기 한 겹(back = 몸에 가려지는 부분, 아니면 앞으로 나온 부분)을 발 밑 원점(0,0) 기준으로 찍는다. s = 원본 픽셀 하나의 화면 크기.
         /// 걷기 프레임(walkFrame >= 0)이면 그 프레임의 손 위치로 대기 자세 무기를 옮긴다.
         /// </summary>
-        private static void DrawWeapon(Graphics g, AssetSet a, int dir, int pose, int walkFrame, int idleFrame, float s, bool back)
+        private static void DrawWeapon(IGfx g, AssetSet a, int dir, int pose, int walkFrame, int idleFrame, float s, bool back)
         {
             WeaponLayers w = a.Weapon;
             float ox = 0f, oy = 0f;
@@ -243,7 +262,7 @@ namespace GameViewer.App.Render
             return q < 4f ? 4f : q;
         }
 
-        private void PaintCurrent(Graphics g)
+        private void PaintCurrent(IGfx g)
         {
             g.ScaleTransform(_ppu, _ppu);
             if (_pAsset != null)
@@ -273,7 +292,7 @@ namespace GameViewer.App.Render
         private static readonly Color Leather = Color.FromArgb(132, 90, 52), LeatherD = Color.FromArgb(70, 44, 26);
         private static readonly Color Gold = Color.FromArgb(246, 206, 90), GoldD = Color.FromArgb(170, 120, 36);
 
-        public static void Paint(Graphics g, uint tpl, int frame)
+        public static void Paint(IGfx g, uint tpl, int frame)
         {
             float phase = frame < CreatureRenderer.FrameIdle ? frame / 8f * 6.2832f : 0f;
             float sn = frame < CreatureRenderer.FrameIdle ? (float)Math.Sin(phase) : 0f;
@@ -290,7 +309,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Legs(Graphics g, float sn, float cs, float bob, Color cloth, Color boot)
+        private static void Legs(IGfx g, float sn, float cs, float bob, Color cloth, Color boot)
         {
             float lx = -0.24f + sn * 0.2f, rx = 0.24f - sn * 0.2f;
             float ly = -0.1f - Math.Max(0f, cs) * 0.14f, ry = -0.1f - Math.Max(0f, -cs) * 0.14f;
@@ -300,7 +319,7 @@ namespace GameViewer.App.Render
             P.Ball(g, rx + 0.03f, ry, 0.24f, 0.13f, Col.Light(boot, 0.25f), boot, Ol, 0.05f);
         }
 
-        private static void Head(Graphics g, float bob, float cx = 0f)
+        private static void Head(IGfx g, float bob, float cx = 0f)
         {
             P.Ball(g, cx, -2.1f + bob, 0.36f, 0.38f, Skin, SkinD, Ol, 0.05f);
             P.Fill(g, cx - 0.13f, -2.08f + bob, 0.045f, 0.06f, Color.FromArgb(40, 30, 30));
@@ -308,7 +327,7 @@ namespace GameViewer.App.Render
             P.Fill(g, cx, -1.93f + bob, 0.08f, 0.025f, Color.FromArgb(150, 90, 80));
         }
 
-        private static void Warrior(Graphics g, float sn, float cs, float bob, float atk)
+        private static void Warrior(IGfx g, float sn, float cs, float bob, float atk)
         {
             Color tunic = Color.FromArgb(206, 66, 58), tunicD = Color.FromArgb(118, 28, 34);
             // 망토
@@ -351,14 +370,14 @@ namespace GameViewer.App.Render
             {
                 dome.AddArc(-0.41f, -2.52f + bob, 0.82f, 0.8f, 180, 180);
                 dome.CloseFigure();
-                using (LinearGradientBrush b = new LinearGradientBrush(new PointF(0, -2.52f + bob), new PointF(0, -2.12f + bob), Steel, SteelD)) g.FillPath(b, dome);
+                using (LinearGradientBrush b = GfxBrush.Linear(new PointF(0, -2.52f + bob), new PointF(0, -2.12f + bob), Steel, SteelD)) g.FillPath(b, dome);
                 using (Pen p = new Pen(Ol, 0.05f)) g.DrawPath(p, dome);
             }
             P.Line(g, 0f, -2.2f + bob, 0f, -1.98f + bob, 0.07f, SteelD);
             P.Poly(g, new PointF[] { new PointF(-0.07f, -2.5f + bob), new PointF(0.07f, -2.5f + bob), new PointF(0.3f, -2.92f + bob - sn * 0.05f), new PointF(-0.05f, -2.7f + bob) }, Color.FromArgb(230, 70, 60), Color.FromArgb(150, 30, 36), Ol, 0.03f);
         }
 
-        private static void Archer(Graphics g, float sn, float cs, float bob, float atk)
+        private static void Archer(IGfx g, float sn, float cs, float bob, float atk)
         {
             Color cloak = Color.FromArgb(70, 152, 90), cloakD = Color.FromArgb(28, 80, 50);
             Color tunic = Color.FromArgb(104, 178, 100), tunicD = Color.FromArgb(48, 110, 62);
@@ -394,13 +413,13 @@ namespace GameViewer.App.Render
             using (GraphicsPath hood = new GraphicsPath())
             {
                 hood.AddArc(-0.4f, -2.62f + bob, 0.8f, 0.66f, 180, 180); hood.CloseFigure();
-                using (LinearGradientBrush b = new LinearGradientBrush(new PointF(0, -2.62f + bob), new PointF(0, -2.2f + bob), Col.Light(cloak, 0.2f), cloakD)) g.FillPath(b, hood);
+                using (LinearGradientBrush b = GfxBrush.Linear(new PointF(0, -2.62f + bob), new PointF(0, -2.2f + bob), Col.Light(cloak, 0.2f), cloakD)) g.FillPath(b, hood);
                 using (Pen p = new Pen(Ol, 0.05f)) g.DrawPath(p, hood);
             }
             P.Poly(g, new PointF[] { new PointF(-0.12f, -2.58f + bob), new PointF(0.1f, -2.58f + bob), new PointF(0.42f, -2.82f + bob), new PointF(0.12f, -2.5f + bob) }, Color.FromArgb(230, 90, 70), Color.FromArgb(170, 50, 50), Ol, 0.03f);
         }
 
-        private static void Mage(Graphics g, float sn, float cs, float bob, float atk)
+        private static void Mage(IGfx g, float sn, float cs, float bob, float atk)
         {
             Color robe = Color.FromArgb(94, 112, 232), robeD = Color.FromArgb(34, 42, 130);
             // 신발은 로브 밑으로 번갈아 보인다
@@ -435,7 +454,7 @@ namespace GameViewer.App.Render
         /// 휘두른 궤적: (cx,cy) 를 중심으로 th0 -> th1 도 사이를 r0..r1 반지름의 반달 모양으로 채운다(칼날 잔상).
         /// 바깥쪽이 가장 진하고 안쪽으로 갈수록 투명하다.
         /// </summary>
-        private static void Trail(Graphics g, float cx, float cy, float th0, float th1, float r0, float r1, Color c, int alpha)
+        private static void Trail(IGfx g, float cx, float cy, float th0, float th1, float r0, float r1, Color c, int alpha)
         {
             if (th1 - th0 < 2f || alpha < 6) return;
             const int N = 8;
@@ -456,7 +475,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>창 한 자루: 손(hx,hy)에서 thDeg 방향으로 len 길이(뒤로 조금 더 자루가 나온다).</summary>
-        private static void Spear(Graphics g, float hx, float hy, float thDeg, float len)
+        private static void Spear(IGfx g, float hx, float hy, float thDeg, float len)
         {
             float rad = thDeg * 0.017453f;
             float dx = (float)Math.Cos(rad), dy = (float)Math.Sin(rad), nx = -dy, ny = dx;
@@ -471,7 +490,7 @@ namespace GameViewer.App.Render
             P.Ball(g, hx, hy, 0.12f, 0.12f, Skin, SkinD, Ol, 0.03f);
         }
 
-        private static void Lancer(Graphics g, float sn, float cs, float bob, float atk)
+        private static void Lancer(IGfx g, float sn, float cs, float bob, float atk)
         {
             Color armor = Color.FromArgb(184, 192, 206), armorD = Color.FromArgb(104, 114, 134);
             Color cape = Color.FromArgb(36, 124, 134), capeD = Color.FromArgb(20, 70, 84);
@@ -507,7 +526,7 @@ namespace GameViewer.App.Render
             P.Fill(g, -0.3f, -2.36f + bob, 0.6f, 0.05f, Gold);
         }
 
-        private static void Adventurer(Graphics g, float sn, float cs, float bob, float atk)
+        private static void Adventurer(IGfx g, float sn, float cs, float bob, float atk)
         {
             Color c = Color.FromArgb(176, 120, 210), d = Color.FromArgb(80, 50, 130);
             Legs(g, sn, cs, bob, Color.FromArgb(70, 60, 76), LeatherD);

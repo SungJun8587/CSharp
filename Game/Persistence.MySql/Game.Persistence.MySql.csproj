@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -11,12 +11,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Dapper" Version="2.1.89" />
+    <PackageReference Include="Dapper" Version="2.1.100" />
     <PackageReference Include="MySqlConnector" Version="3.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../Persistence/Game.Persistence.csproj" />
+    <ProjectReference Include="../../Library/Core/Data/Core.Data.csproj" />
   </ItemGroup>
 
 </Project>

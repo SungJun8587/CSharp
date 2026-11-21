@@ -45,7 +45,7 @@ namespace GameViewer.App.Render
 
         public void Dispose() { foreach (Bitmap b in _beam) b.Dispose(); if (_beamLayer != null) _beamLayer.Dispose(); }
 
-        public void Draw(Graphics g, ViewState v, long now)
+        public void Draw(IGfx g, ViewState v, long now)
         {
             if (ZoneTheme.Current == MapKind.Desert) { DrawDesertAir(g, v, now); return; }
             if (ZoneTheme.Current != MapKind.Forest) { DrawBiomeAir(g, v, now, ZoneTheme.Current); return; }
@@ -56,15 +56,15 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>숲의 색조: 위쪽 햇빛은 따뜻하게, 아래쪽은 차갑게 눌러 분위기를 만든다.</summary>
-        private void DrawForestGrade(Graphics g, ViewState v, long now)
+        private void DrawForestGrade(IGfx g, ViewState v, long now)
         {
             float W = v.Width, H = v.Height;
-            using (LinearGradientBrush t = new LinearGradientBrush(new RectangleF(0, 0, W, H + 1), Color.FromArgb(22, 255, 238, 160), Color.FromArgb(16, 20, 60, 90), LinearGradientMode.Vertical))
+            using (LinearGradientBrush t = GfxBrush.Linear(new RectangleF(0, 0, W, H + 1), Color.FromArgb(22, 255, 238, 160), Color.FromArgb(16, 20, 60, 90), LinearGradientMode.Vertical))
                 g.FillRectangle(t, 0, 0, W, H);
         }
 
         /// <summary>반딧불/꽃가루: 천천히 떠다니며 깜박이는 노란 빛 점.</summary>
-        private void DrawFireflies(Graphics g, ViewState v, long now)
+        private void DrawFireflies(IGfx g, ViewState v, long now)
         {
             float W = v.Width, H = v.Height;
             for (int i = 0; i < 22; ++i)
@@ -82,17 +82,17 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>사막의 공기: 뜨거운 햇빛의 따뜻한 색조, 위쪽의 아지랑이 빛, 바람에 쓸려 가는 모래 줄기와 먼지.</summary>
-        private void DrawDesertAir(Graphics g, ViewState v, long now)
+        private void DrawDesertAir(IGfx g, ViewState v, long now)
         {
             float W = v.Width, H = v.Height;
             g.FillRectangle(_res.Brush(16, 255, 186, 96), 0, 0, W, H);
-            using (LinearGradientBrush t = new LinearGradientBrush(new RectangleF(0, 0, W, H * 0.45f + 1), Color.FromArgb(46, 255, 226, 150), Color.FromArgb(0, 255, 226, 150), LinearGradientMode.Vertical))
+            using (LinearGradientBrush t = GfxBrush.Linear(new RectangleF(0, 0, W, H * 0.45f + 1), Color.FromArgb(46, 255, 226, 150), Color.FromArgb(0, 255, 226, 150), LinearGradientMode.Vertical))
                 g.FillRectangle(t, 0, 0, W, H * 0.45f);
             // 아지랑이: 천천히 일렁이는 밝은 띠
             for (int i = 0; i < 4; ++i)
             {
                 float yy = H * (0.18f + i * 0.2f) + (float)Math.Sin(now / 1900.0 + i * 1.7) * 14f;
-                using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(0, yy - 18, W, 36), Color.FromArgb(0, 255, 240, 200), Color.FromArgb(0, 255, 240, 200), LinearGradientMode.Vertical))
+                using (LinearGradientBrush b = GfxBrush.Linear(new RectangleF(0, yy - 18, W, 36), Color.FromArgb(0, 255, 240, 200), Color.FromArgb(0, 255, 240, 200), LinearGradientMode.Vertical))
                 {
                     ColorBlend cb = new ColorBlend(3);
                     cb.Colors = new Color[] { Color.FromArgb(0, 255, 240, 200), Color.FromArgb(18, 255, 240, 200), Color.FromArgb(0, 255, 240, 200) };
@@ -131,7 +131,7 @@ namespace GameViewer.App.Render
         private Bitmap _beamLayer; private long _beamAt = long.MinValue; private int _beamW, _beamH;
         private const int BeamRefreshMs = 250;
 
-        private void DrawBeams(Graphics g, ViewState v, long now)
+        private void DrawBeams(IGfx g, ViewState v, long now)
         {
             int lw = Math.Max(1, v.Width / 2), lh = Math.Max(1, v.Height / 2);
             if (_beamLayer == null || _beamW != lw || _beamH != lh)
@@ -142,7 +142,7 @@ namespace GameViewer.App.Render
             if (now - _beamAt >= BeamRefreshMs || now < _beamAt)
             {
                 _beamAt = now;
-                using (Graphics lg = Graphics.FromImage(_beamLayer))
+                using (GdiGfx lg = GdiGfx.FromImage(_beamLayer))
                 {
                     lg.Clear(Color.Transparent);
                     lg.ScaleTransform(0.5f, 0.5f);
@@ -155,7 +155,7 @@ namespace GameViewer.App.Render
             g.InterpolationMode = im;
         }
 
-        private void PaintBeams(Graphics g, float W, float H, long now)
+        private void PaintBeams(IGfx g, float W, float H, long now)
         {
             float lean = H * 0.34f;
             InterpolationMode im = g.InterpolationMode;
@@ -176,10 +176,10 @@ namespace GameViewer.App.Render
             g.InterpolationMode = im;
         }
 
-        private void DrawLeaves(Graphics g, ViewState v, long now)
+        private void DrawLeaves(IGfx g, ViewState v, long now)
         {
             float W = v.Width, H = v.Height;
-            GraphicsState st = g.Save();
+            GfxState st = g.Save();
             for (int i = 0; i < Leaves; ++i)
             {
                 uint h = Noise.Hash(i, 3, 211);

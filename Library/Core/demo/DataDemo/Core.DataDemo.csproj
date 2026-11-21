@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Core.Data 통합 시험. DB 없이 되는 것(접속 불가 시 서킷 브레이커)은 항상 돌고, 나머지는 환경변수 CORE_DATA_TEST_DB 에
+       "시험 전용" 데이터베이스(이름에 test 가 들어 있어야 한다)의 연결 문자열을 주면 돈다. 시험이 표를 만들고 지운다.
+       실행: set CORE_DATA_TEST_DB=Server=127.0.0.1;Port=3306;Database=core_data_test;User ID=...;Password=...;AllowUserVariables=true
+             dotnet run --project Library/Core/demo/DataDemo -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Core.DataDemo</RootNamespace>
+    <AssemblyName>Core.DataDemo</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MySqlConnector" Version="2.3.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../Data/Core.Data.csproj" />
+    <ProjectReference Include="../../Util/Core.Util.csproj" />
+  </ItemGroup>
+
+</Project>

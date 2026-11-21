@@ -254,6 +254,18 @@ namespace GameViewer.App.Forest
         /// heroKind 가 0 이상이면 영웅 선택 화면: 길 위에 선 영웅(HeroKind 번호)을 도는 카메라로 그린다.
         /// heroT = 영웅이 나타난 뒤 흐른 시간(초), heroNdcX = 영웅이 화면 가로 어디에 보일지(-1 왼쪽 .. 1 오른쪽).
         /// </summary>
+        /// <summary>true 면 영웅의 몸(절차적 모델)은 그리지 않고 마법진/불씨만 그린다(몸은 호출한 쪽이 glTF 로 위에 얹는다).</summary>
+        public bool HeroBodyOff;
+        /// <summary>마지막으로 그린 영웅의 화면 위치(0..1, 아래로 갈수록 큰 y): 발 가운데 x/y 와 머리 끝 y(영웅 키 3 모델 단위 = 1.9m). 영웅 없이 그렸으면 false.</summary>
+        public bool HeroScreenValid; public float HeroFootX, HeroFootY, HeroHeadY;
+
+        private static void Project(float[] vp, V3 p, out float sx, out float sy)
+        {
+            float cx = vp[0] * p.X + vp[4] * p.Y + vp[8] * p.Z + vp[12], cy = vp[1] * p.X + vp[5] * p.Y + vp[9] * p.Z + vp[13], cw = vp[3] * p.X + vp[7] * p.Y + vp[11] * p.Z + vp[15];
+            if (Math.Abs(cw) < 1e-6f) cw = 1e-6f;
+            sx = (cx / cw) * 0.5f + 0.5f; sy = 1f - ((cy / cw) * 0.5f + 0.5f);
+        }
+
         public void Render(float t, int w, int h, int heroKind, float heroT, float heroNdcX)
         {
             _ctx.EnsureCurrent();
@@ -268,14 +280,20 @@ namespace GameViewer.App.Forest
                 float breathe = 0.012f * (float)Math.Sin(heroT * 2.1f);
                 float pop = 1f - (float)Math.Exp(-heroT * 7f);                       // 새로 고른 영웅이 살짝 커지며 나타난다
                 float yaw = (float)Math.Atan2(hdir.X, hdir.Z);
-                List<HeroPrim> prims = HeroShowcase.Frame((HeroKind)heroKind, heroT);
+                List<HeroPrim> prims = HeroBodyOff ? new List<HeroPrim>() : HeroShowcase.Frame((HeroKind)heroKind, heroT);
                 float atkU = (heroT % HeroShowcase.Period - HeroShowcase.AtkStart) / HeroShowcase.AtkLen;      // 0..1 이 공격 구간
-                prims.AddRange(HeroFx.Build((HeroKind)heroKind, heroT, pop, atkU));
+                prims.AddRange(HeroFx.Build((HeroKind)heroKind, heroT, pop, atkU, !HeroBodyOff));
                 _heroBake = HeroMesh.Bake(prims, hpos + new V3(0f, breathe, 0f), yaw, ForestCamera.HeroScale * (0.94f + 0.06f * pop), _heroBake);
                 UploadHero();
             }
             else cam = _camera.Sample(t);
             float[] vp = Mat4.Multiply(Mat4.Perspective(cam.FovY, aspect, 0.15f, 220f), Mat4.LookAt(cam.Eye, cam.Eye + cam.Forward, cam.Up));
+            HeroScreenValid = false;
+            if (hero)
+            {
+                float fx, fy, hx, hy; Project(vp, hpos, out fx, out fy); Project(vp, hpos + new V3(0f, 3f * ForestCamera.HeroScale, 0f), out hx, out hy);
+                HeroFootX = fx; HeroFootY = fy; HeroHeadY = hy; HeroScreenValid = true;
+            }
             float[] lvp = hero ? ForestLighting.ShadowMatrixAt(hpos + new V3(0f, 1.0f, 0f), HeroShadowExtent) : ForestLighting.ShadowMatrix(cam.Eye, cam.Forward);
             float su, sv, ss; ForestLighting.SunOnScreen(vp, cam.Eye, out su, out sv, out ss);
             V3 right = V3.Cross(cam.Forward, cam.Up).Normalized();

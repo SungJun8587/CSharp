@@ -37,7 +37,8 @@ namespace GameViewer.App.Forest
         /// <param name="t">영웅이 나타난 뒤 흐른 시간(초)</param>
         /// <param name="pop">0..1, 나타나는 순간 마법진이 펼쳐지는 정도</param>
         /// <param name="atk">0..1, 공격 동작의 진행(충격 고리). 범위 밖이면 없음.</param>
-        public static List<HeroPrim> Build(HeroKind kind, float t, float pop, float atk)
+        /// <param name="gear">false 면 몸에 붙는 장식(망토/날개/보석)을 뺀다.</param>
+        public static List<HeroPrim> Build(HeroKind kind, float t, float pop, float atk, bool gear = true)
         {
             List<HeroPrim> o = new List<HeroPrim>(160);
             V3 c = Aura(kind);
@@ -86,6 +87,7 @@ namespace GameViewer.App.Forest
                 for (int i = 0; i < NW; ++i)
                     Rune(o, rr, i * (float)(2 * Math.PI / NW), new V3(0.05f * fade + 0.008f, 0.012f, 0.10f * fade + 0.008f), bright);
             }
+            if (!gear) return o;                                   // 3D 영웅이 몸을 맡으면 망토/날개/보석은 그리지 않는다(고정 방향이라 영웅이 돌면 따로 논다)
             int g0 = o.Count;
             Gear(o, kind, t, pop, c, bright);
             for (int i = g0; i < o.Count; ++i) { HeroPrim p = o[i]; p.C = p.C + new V3(0f, 0.15f, 0f); o[i] = p; }      // 영웅 몸통 이하가 다리 길이만큼 올라가 있으니 같이 올린다

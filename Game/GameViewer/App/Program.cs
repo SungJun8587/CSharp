@@ -28,7 +28,7 @@ namespace GameViewer.App
 
             bool demo = false;
             System.Collections.Generic.List<string> rest = new System.Collections.Generic.List<string>();
-            foreach (string a in args) { if (a == "--demo") demo = true; else if (a == "--no-3d") GameViewer.App.Forest.ForestBackdrop.Enabled = false; else rest.Add(a); }
+            foreach (string a in args) { if (a == "--demo") demo = true; else if (a == "--no-3d") { GameViewer.App.Forest.ForestBackdrop.Enabled = false; GameViewer.App.Forest.MonsterGl.Enabled = false; } else rest.Add(a); }
 
             // 옵션이 하나도 없으면 실행 파일 옆의 GameViewer.json 을 기본 설정으로 쓴다.
             if (!rest.Contains("--config") && !rest.Contains("--help") && !rest.Contains("--dump-config"))
@@ -74,7 +74,7 @@ namespace GameViewer.App
 
             GameViewer.App.Forest.ForestBackdrop.Prepare();         // 3D 숲 재료는 로딩바가 도는 동안 백그라운드에서 만든다(GL 을 못 쓰면 예전 2D 배경)
             try { Application.Run(new MainForm(cfg, loader, demo)); }
-            finally { GameViewer.App.Forest.ForestBackdrop.Shutdown(); }          // GL 자원과 숨은 창 정리
+            finally { GameViewer.App.Forest.MonsterGl.Shutdown(); GameViewer.App.Forest.ForestBackdrop.Shutdown(); }          // GL 자원과 숨은 창 정리
             return 0;
         }
     }

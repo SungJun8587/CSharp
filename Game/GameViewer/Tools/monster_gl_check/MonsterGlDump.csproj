@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 몬스터 3D 셰이더 점검용: Core 가 계산한 정점 버퍼/팔레트/행렬을 파일로 덤프한다(gl_check.py 가 읽는다). -->
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><Nullable>disable</Nullable></PropertyGroup>
+  <ItemGroup><ProjectReference Include="..\..\Core\GameViewer.Core.csproj" /></ItemGroup>
+</Project>

@@ -147,6 +147,27 @@ namespace GameViewer.Tests
             T.Run("live2: server list", Live2Tests.Servers);
             T.Run("live2: server probe", Live2Tests.Probe);
             T.Run("live2: feedback scale / settings", Live2Tests.FeedbackScale);
+            T.Run("ui: widgets", UiTests.Widgets);
+            T.Run("ui: lists", UiTests.Lists);
+            T.Run("ui: bag model", UiTests.Bag);
+            T.Run("ui: manager", UiTests.Manager);
+            T.Run("ui: dialogs", UiTests.Dialogs);
+            T.Run("ui: inventory", UiTests.InventoryScreen);
+            T.Run("ui: shop", UiTests.ShopScreen);
+            T.Run("ui: mail", UiTests.MailScreen);
+            T.Run("ui: settings", UiTests.SettingsScreen);
+            T.Run("ui: dock", UiTests.DockBar);
+            T.Run("model3d: loader", Model3DTests.Loader);
+            T.Run("model3d: skinning", Model3DTests.Skinning);
+            T.Run("model3d: sampling", Model3DTests.Sampling);
+            T.Run("model3d: animator", Model3DTests.Animator);
+            T.Run("model3d: camera", Model3DTests.Camera);
+            T.Run("model3d: registry", Model3DTests.Registry);
+            T.Run("model3d: vertex buffer", Model3DTests.VertexBuffer);
+            T.Run("model3d: manifest", Model3DTests.Manifest);
+            T.Run("model3d: real models", Model3DTests.RealModels);
+            T.Run("config: renderer option", UiTests.RendererOption);
+            T.Run("ui: draw checks", UiTests.DrawChecks);
 
             Console.WriteLine();
             Console.WriteLine("passed " + T.Passed + ", failed " + T.Failed);

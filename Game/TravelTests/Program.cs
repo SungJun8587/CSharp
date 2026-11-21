@@ -486,6 +486,11 @@ public static class Program
         cd2.AddCurrency(new CurrencyData.Currency { Id = 1, Name = "gold", MaxAmount = 100 });
         cd2.AddReward(new CurrencyData.Reward { MonsterId = 1, CurrencyId = 9, MinAmount = 1, MaxAmount = 2, ChancePermille = 1000 });
         Check(!cd2.Validate(out _), "a reward of an unknown currency is invalid");
+        CurrencyData cd3 = new CurrencyData();
+        cd3.AddCurrency(new CurrencyData.Currency { Id = 2, Name = "blue", MaxAmount = 100, Paid = true });
+        Check(cd3.IsPaid(2) && !cd3.IsPaid(1) && cd3.Validate(out _), "a paid currency is flagged and validates without rewards");
+        cd3.AddReward(new CurrencyData.Reward { MonsterId = 1, CurrencyId = 2, MinAmount = 1, MaxAmount = 2, ChancePermille = 1000 });
+        Check(!cd3.Validate(out _), "a paid currency cannot be a monster reward");
         Check(ZcExpNotify.TryRead(eb, out ZcExpNotify e2) && e2.Level == 5 && e2.Exp == 9 && e2.ExpToNext == 99 && e2.Gained == 4 && e2.Flags == ZcExpNotify.FlagLevelUp, "ZcExpNotify round trip");
 
         var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(data, "Level.json"))).RootElement.GetProperty("Level");

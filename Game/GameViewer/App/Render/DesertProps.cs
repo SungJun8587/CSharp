@@ -21,18 +21,18 @@ namespace GameViewer.App.Render
         public void Dispose() { _cache.Dispose(); }
 
         /// <summary>소품 한 개. (wx,wy)는 밑동의 월드 좌표, r 은 크기 기준 반지름(unit).</summary>
-        public void Draw(Graphics g, ViewState v, ZoneTheme.DesertProp kind, float wx, float wy, float r, uint seed, bool dark)
+        public void Draw(IGfx g, ViewState v, ZoneTheme.DesertProp kind, float wx, float wy, float r, uint seed, bool dark)
         {
             Place(g, v, kind, false, wx, wy, r, seed, dark);
         }
 
         /// <summary>월드 바깥의 사암 절벽 한 덩이.</summary>
-        public void DrawMesa(Graphics g, ViewState v, float wx, float wy, float r, uint seed)
+        public void DrawMesa(IGfx g, ViewState v, float wx, float wy, float r, uint seed)
         {
             Place(g, v, ZoneTheme.DesertProp.Cactus, true, wx, wy, r, seed, true);
         }
 
-        private void Place(Graphics g, ViewState v, ZoneTheme.DesertProp kind, bool mesa, float wx, float wy, float r, uint seed, bool dark)
+        private void Place(IGfx g, ViewState v, ZoneTheme.DesertProp kind, bool mesa, float wx, float wy, float r, uint seed, bool dark)
         {
             float sx = v.ToScreenX(wx), sy = v.ToScreenY(wy);
             float pr = v.Px(r);
@@ -55,7 +55,7 @@ namespace GameViewer.App.Render
 
         private static Color Tone(Color c, int d) { return Color.FromArgb(c.A, Col.Cl(c.R + d), Col.Cl(c.G + d), Col.Cl(c.B + d)); }
 
-        private void Paint(Graphics g)
+        private void Paint(IGfx g)
         {
             float r = _pr;
             g.ScaleTransform(_ppu, _ppu);
@@ -68,7 +68,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void PaintCactus(Graphics g, float r)
+        private void PaintCactus(IGfx g, float r)
         {
             int tone = (int)(_pseed % 3) * 7;
             Color body = Color.FromArgb(86 + tone, 142 + tone, 72), dk = Color.FromArgb(40, 84 + tone, 44), ol = Color.FromArgb(150, 20, 44, 22);
@@ -92,7 +92,7 @@ namespace GameViewer.App.Render
                 using (SolidBrush b = new SolidBrush(Color.FromArgb(240, 236, 90, 130))) g.FillEllipse(b, -0.16f * r, -2.55f * r, 0.32f * r, 0.26f * r);
         }
 
-        private void PaintDead(Graphics g, float r)
+        private void PaintDead(IGfx g, float r)
         {
             Color a = Color.FromArgb(150, 128, 104), b = Color.FromArgb(84, 66, 52), ol = Color.FromArgb(180, 30, 20, 14);
             PointF[] trunk = { new PointF(-0.34f * r, 0), new PointF(-0.2f * r, -1.4f * r), new PointF(-0.08f * r, -2.4f * r), new PointF(0.1f * r, -2.4f * r), new PointF(0.22f * r, -1.3f * r), new PointF(0.36f * r, 0) };
@@ -109,7 +109,7 @@ namespace GameViewer.App.Render
             using (Pen p = new Pen(Color.FromArgb(90, 40, 28, 20), 0.03f * r)) { g.DrawLine(p, -0.12f * r, -0.2f * r, -0.08f * r, -1.8f * r); g.DrawLine(p, 0.1f * r, -0.3f * r, 0.12f * r, -1.6f * r); }
         }
 
-        private void PaintPalm(Graphics g, float r)
+        private void PaintPalm(IGfx g, float r)
         {
             float lean = ((int)_pseed - 1.5f) * 0.12f;
             PointF[] tr = { new PointF(0, 0), new PointF(0.12f * r + lean * r * 0.5f, -1.2f * r), new PointF((0.18f + lean) * r, -2.6f * r) };
@@ -149,7 +149,7 @@ namespace GameViewer.App.Render
             using (SolidBrush b = new SolidBrush(Color.FromArgb(120, 82, 44))) { g.FillEllipse(b, cx - 0.2f * r, cy + 0.02f * r, 0.2f * r, 0.2f * r); g.FillEllipse(b, cx + 0.02f * r, cy + 0.06f * r, 0.2f * r, 0.2f * r); }
         }
 
-        private void PaintMesa(Graphics g, float r)
+        private void PaintMesa(IGfx g, float r)
         {
             Color[] strata = { Color.FromArgb(214, 160, 104), Color.FromArgb(186, 124, 80), Color.FromArgb(224, 178, 122), Color.FromArgb(168, 108, 70), Color.FromArgb(206, 150, 96) };
             float baseW = 1.55f * r, topW = (0.95f + (_pseed % 3) * 0.1f) * r, hh = (1.9f + (_pseed % 2) * 0.4f) * r;
@@ -175,7 +175,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>폐허 벽 / 사암 바위. 발자국(직사각)을 뒤쪽으로 들어 올려 높이를 준다.</summary>
-        public void DrawRuin(Graphics g, ViewState v, BlockRow b, int index)
+        public void DrawRuin(IGfx g, ViewState v, BlockRow b, int index)
         {
             float x0 = v.ToScreenX(b.X), y0 = v.ToScreenY(b.Y);
             float w = v.Px(b.W), h = v.Px(b.H);
@@ -185,7 +185,7 @@ namespace GameViewer.App.Render
             g.FillRectangle(_res.Brush(70, 80, 44, 14), x0 + 4, y0 + h - lift * 0.1f + 3, w, lift * 0.7f);
             // 앞면
             Color front = Color.FromArgb(176, 124, 80);
-            using (LinearGradientBrush lb = new LinearGradientBrush(new RectangleF(x0, y0 + h - lift - 1, w, lift + 2), Col.Light(front, 0.05f), Col.Dark(front, 0.35f), LinearGradientMode.Vertical))
+            using (LinearGradientBrush lb = GfxBrush.Linear(new RectangleF(x0, y0 + h - lift - 1, w, lift + 2), Col.Light(front, 0.05f), Col.Dark(front, 0.35f), LinearGradientMode.Vertical))
                 g.FillRectangle(lb, x0, y0 + h - lift, w, lift);
             float bw = Math.Max(8f, v.Px(2.2f));
             for (float bx = 0; bx < w; bx += bw)

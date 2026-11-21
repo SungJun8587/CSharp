@@ -41,7 +41,7 @@
     },
     {
       "Id": 4,
-      "Name": "창술사",
+      "Name": "수도사",
       "MaxHp": 3600,
       "Attack": 80,
       "Defense": 20,

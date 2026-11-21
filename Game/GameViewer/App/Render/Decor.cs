@@ -61,7 +61,7 @@ namespace GameViewer.App.Render
             return b;
         }
 
-        public void Draw(Graphics g, ViewState v, DecorItem it)
+        public void Draw(IGfx g, ViewState v, DecorItem it)
         {
             Bitmap b = Get(it.Name, it.Var);
             if (b == null) return;

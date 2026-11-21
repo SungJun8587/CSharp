@@ -12,6 +12,7 @@ namespace GameViewer.Core.Protocol
     {
         public const ushort Type = 2033;
         public const int Size = 16;
+        public const uint BlueDiamond = 2;  // 유료 재화 블루 다이아의 ID(샘플 데이터 기준). 항상 표시한다
         public const uint Gold = 1;         // Currency 표에서 골드의 ID(샘플 데이터 기준). 이름은 클라이언트가 모른다
 
         public uint CurrencyId, Amount, Gained;

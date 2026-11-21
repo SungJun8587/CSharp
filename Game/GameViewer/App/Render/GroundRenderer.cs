@@ -62,7 +62,7 @@ namespace GameViewer.App.Render
         private MapKind _builtKind = MapKind.Forest;
         private uint _builtZone;
 
-        public void Draw(Graphics g, ViewState v, float minX, float minY, float maxX, float maxY)
+        public void Draw(IGfx g, ViewState v, float minX, float minY, float maxX, float maxY)
         {
             if (_builtKind != ZoneTheme.Current || _builtZone != ZoneTheme.CurrentZoneId) { _builtKind = ZoneTheme.Current; _builtZone = ZoneTheme.CurrentZoneId; if (_bmp != null) { _bmp.Dispose(); _bmp = null; } _band = -1; }
             int bw = v.Width + MarginPx * 2, bh = v.Height + MarginPx * 2;
@@ -130,7 +130,7 @@ namespace GameViewer.App.Render
             ViewState bv = new ViewState();
             bv.Width = bw; bv.Height = bh; bv.Scale = v.Scale;
             bv.CamX = worldX + (float)(bw / 2.0 / v.Scale); bv.CamY = worldY + (float)(bh / 2.0 / v.Scale);
-            using (Graphics bg = Graphics.FromImage(target))
+            using (GdiGfx bg = GdiGfx.FromImage(target))
             {
                 bg.SetClip(new Rectangle(0, y0, bw, y1 - y0));
                 RenderBase(bg, bv, y0, y1, minX, minY, maxX, maxY);
@@ -264,7 +264,7 @@ namespace GameViewer.App.Render
             if (outside > 0) Mix(ref r, ref g, ref b, CliffRock, outside / 0.8f);
         }
 
-        private void RenderBase(Graphics g, ViewState v, int y0, int y1, float minX, float minY, float maxX, float maxY)
+        private void RenderBase(IGfx g, ViewState v, int y0, int y1, float minX, float minY, float maxX, float maxY)
         {
             int lw = (v.Width + Step - 1) / Step + 1;
             int ly0 = Math.Max(0, y0 / Step - 1), ly1 = Math.Min((v.Height + Step - 1) / Step + 1, (y1 + Step - 1) / Step + 2);
@@ -294,7 +294,7 @@ namespace GameViewer.App.Render
                 if (bd.Stride == lw * 4) Marshal.Copy(_lowPx, 0, bd.Scan0, lw * lh);
                 else for (int y = 0; y < lh; ++y) Marshal.Copy(_lowPx, y * lw, new IntPtr(bd.Scan0.ToInt64() + (long)y * bd.Stride), lw);
             }
-            finally { _low.UnlockBits(bd); }
+            finally { _low.UnlockBits(bd); GfxImages.Touch(_low); }
 
             g.CompositingMode = CompositingMode.SourceCopy;
             g.InterpolationMode = InterpolationMode.Bilinear;
@@ -309,7 +309,7 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 2) 장식
 
-        private void RenderDetails(Graphics g, ViewState v, int y0, int y1, float minX, float minY, float maxX, float maxY)
+        private void RenderDetails(IGfx g, ViewState v, int y0, int y1, float minX, float minY, float maxX, float maxY)
         {
             float scale = (float)v.Scale;
             g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -358,7 +358,7 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 2') 사막 장식
 
-        private void RenderDesertDetails(Graphics g, ViewState v, int y0, int y1, float minX, float minY, float maxX, float maxY)
+        private void RenderDesertDetails(IGfx g, ViewState v, int y0, int y1, float minX, float minY, float maxX, float maxY)
         {
             float scale = (float)v.Scale;
             if (scale < 5) return;
@@ -386,12 +386,12 @@ namespace GameViewer.App.Render
                 }
         }
 
-        private static void DShadow(Graphics g, float x, float y, float rx, float ry, int alpha)
+        private static void DShadow(IGfx g, float x, float y, float rx, float ry, int alpha)
         {
             using (SolidBrush b = new SolidBrush(Color.FromArgb(alpha, 90, 54, 20))) g.FillEllipse(b, x - rx, y - ry, rx * 2, ry * 2);
         }
 
-        private static void DryTuft(Graphics g, float x, float y, float scale, uint h)
+        private static void DryTuft(IGfx g, float x, float y, float scale, uint h)
         {
             float len = scale * (0.35f + Rnd(h, 2) * 0.3f);
             DShadow(g, x, y + len * 0.05f, len * 0.5f, len * 0.14f, 40);
@@ -406,7 +406,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void SandRocks(Graphics g, float x, float y, float scale, uint h)
+        private static void SandRocks(IGfx g, float x, float y, float scale, uint h)
         {
             int n = 1 + (int)(h % 3);
             for (int i = 0; i < n; ++i)
@@ -420,10 +420,10 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Bones(Graphics g, float x, float y, float scale, uint h)
+        private static void Bones(IGfx g, float x, float y, float scale, uint h)
         {
             float s = scale * 0.5f;
-            GraphicsState st = g.Save(); g.TranslateTransform(x, y); g.RotateTransform((Rnd(h, 3) - 0.5f) * 60f);
+            GfxState st = g.Save(); g.TranslateTransform(x, y); g.RotateTransform((Rnd(h, 3) - 0.5f) * 60f);
             DShadow(g, 0, s * 0.12f, s * 0.7f, s * 0.15f, 50);
             Color bone = Color.FromArgb(236, 228, 206), edge = Color.FromArgb(150, 90, 70, 50);
             using (Pen p = new Pen(edge, Math.Max(1.6f, s * 0.1f)) { StartCap = LineCap.Round, EndCap = LineCap.Round }) { g.DrawLine(p, -s * 0.5f, 0, s * 0.5f, 0); }
@@ -439,7 +439,7 @@ namespace GameViewer.App.Render
             g.Restore(st);
         }
 
-        private static void Barrel(Graphics g, float x, float y, float scale, uint h)
+        private static void Barrel(IGfx g, float x, float y, float scale, uint h)
         {
             float r = scale * (0.2f + Rnd(h, 2) * 0.14f);
             DShadow(g, x, y + r * 0.2f, r * 1.1f, r * 0.4f, 60);
@@ -448,7 +448,7 @@ namespace GameViewer.App.Render
             using (SolidBrush b = new SolidBrush(Color.FromArgb(240, 238, 110, 150))) g.FillEllipse(b, x - r * 0.25f, y - r * 1.8f, r * 0.5f, r * 0.34f);
         }
 
-        private static void Cracks(Graphics g, float x, float y, float scale, uint h)
+        private static void Cracks(IGfx g, float x, float y, float scale, uint h)
         {
             using (Pen p = new Pen(Color.FromArgb(150, 70, 44, 24), Math.Max(1f, scale * 0.03f)) { LineJoin = LineJoin.Round })
             {
@@ -465,7 +465,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void DesertPebbles(Graphics g, float x, float y, float scale, uint h)
+        private static void DesertPebbles(IGfx g, float x, float y, float scale, uint h)
         {
             int n = 2 + (int)(h % 3);
             for (int i = 0; i < n; ++i)
@@ -480,7 +480,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>바람이 모래에 남긴 물결무늬(작은 호 몇 줄).</summary>
-        private static void RippleMarks(Graphics g, float x, float y, float scale, uint h)
+        private static void RippleMarks(IGfx g, float x, float y, float scale, uint h)
         {
             float w = scale * (0.9f + Rnd(h, 2) * 0.9f);
             int n = 2 + (int)(h % 3);
@@ -494,7 +494,7 @@ namespace GameViewer.App.Render
                 }
         }
 
-        private static void Shrub(Graphics g, float x, float y, float scale, uint h)
+        private static void Shrub(IGfx g, float x, float y, float scale, uint h)
         {
             float r = scale * (0.3f + Rnd(h, 2) * 0.2f);
             DShadow(g, x, y + r * 0.1f, r * 1.1f, r * 0.35f, 55);
@@ -508,7 +508,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>풀 무더기: 휘어진 풀잎 여러 장을 어두운색 -> 밝은색 순서로 겹쳐 입체감을 낸다.</summary>
-        private static void GrassClump(Graphics g, float x, float y, float scale, uint h)
+        private static void GrassClump(IGfx g, float x, float y, float scale, uint h)
         {
             float len = scale * (0.42f + Rnd(h, 2) * 0.34f);
             int blades = 7 + (int)(h % 5);
@@ -531,7 +531,7 @@ namespace GameViewer.App.Render
             Color.FromArgb(255, 238, 120), Color.FromArgb(252, 252, 250), Color.FromArgb(255, 150, 190), Color.FromArgb(170, 190, 255), Color.FromArgb(255, 170, 90) };
 
         /// <summary>꽃밭: 같은 색 계열 꽃이 무리 지어 핀다(꽃밭 노이즈 값으로 색을 고른다).</summary>
-        private static void FlowerPatch(Graphics g, float x, float y, float scale, uint h, float patch)
+        private static void FlowerPatch(IGfx g, float x, float y, float scale, uint h, float patch)
         {
             Color petal = PetalCols[(int)(patch * 977f) % PetalCols.Length];
             int n = 3 + (int)(h % 4);
@@ -552,7 +552,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>이끼 낀 바위.</summary>
-        private static void MossRock(Graphics g, float x, float y, float scale, uint h)
+        private static void MossRock(IGfx g, float x, float y, float scale, uint h)
         {
             if (scale < 6) return;
             float s = scale * (0.18f + Rnd(h, 2) * 0.16f);
@@ -566,12 +566,12 @@ namespace GameViewer.App.Render
 
         private static float Rnd(uint h, int shift) { return ((h >> shift) & 255) / 255f; }
 
-        private static void Shadow(Graphics g, float x, float y, float rx, float ry, int alpha)
+        private static void Shadow(IGfx g, float x, float y, float rx, float ry, int alpha)
         {
             using (SolidBrush b = new SolidBrush(Color.FromArgb(alpha, 6, 20, 12))) g.FillEllipse(b, x - rx, y - ry, rx * 2, ry * 2);
         }
 
-        private static void Fern(Graphics g, float x, float y, float scale, uint h)
+        private static void Fern(IGfx g, float x, float y, float scale, uint h)
         {
             float len = scale * (0.55f + Rnd(h, 2) * 0.45f);
             int fronds = 6 + (int)(h % 3);
@@ -589,7 +589,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Bush(Graphics g, float x, float y, float scale, uint h)
+        private static void Bush(IGfx g, float x, float y, float scale, uint h)
         {
             float r = scale * (0.42f + Rnd(h, 2) * 0.3f);
             Shadow(g, x, y + r * 0.2f, r * 1.25f, r * 0.45f, 60);
@@ -612,7 +612,7 @@ namespace GameViewer.App.Render
                         g.FillEllipse(b, x + (Rnd(h, 3 + i * 2) - 0.5f) * r * 1.4f - 1.5f, y - r * (0.2f + Rnd(h, 4 + i * 2) * 0.6f) - 1.5f, 3f, 3f);
         }
 
-        private static void Mushrooms(Graphics g, float x, float y, float scale, uint h)
+        private static void Mushrooms(IGfx g, float x, float y, float scale, uint h)
         {
             bool red = (h & 1) == 0;
             Color cap = red ? Color.FromArgb(200, 60, 52) : Color.FromArgb(196, 150, 96);
@@ -632,11 +632,11 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Log(Graphics g, float x, float y, float scale, uint h)
+        private static void Log(IGfx g, float x, float y, float scale, uint h)
         {
             float len = scale * (1.4f + Rnd(h, 2) * 1.2f), rad = scale * (0.2f + Rnd(h, 5) * 0.08f);
             float ang = (Rnd(h, 11) - 0.5f) * 50f;
-            GraphicsState st = g.Save();
+            GfxState st = g.Save();
             g.TranslateTransform(x, y);
             g.RotateTransform(ang);
             Shadow(g, 0, rad * 0.8f, len * 0.55f, rad * 0.8f, 70);
@@ -656,7 +656,7 @@ namespace GameViewer.App.Render
             g.Restore(st);
         }
 
-        private static void Pebbles(Graphics g, float x, float y, float scale, uint h)
+        private static void Pebbles(IGfx g, float x, float y, float scale, uint h)
         {
             int n = 2 + (int)(h % 3);
             for (int i = 0; i < n; ++i)
@@ -673,10 +673,10 @@ namespace GameViewer.App.Render
         private static readonly Color[] LeafColors = {
             Color.FromArgb(214, 176, 92, 36), Color.FromArgb(214, 200, 150, 48), Color.FromArgb(214, 138, 70, 36), Color.FromArgb(214, 160, 60, 40), Color.FromArgb(200, 110, 120, 44) };
 
-        private static void Leaves(Graphics g, float x, float y, float scale, uint h)
+        private static void Leaves(IGfx g, float x, float y, float scale, uint h)
         {
             int n = 2 + (int)(h % 3);
-            GraphicsState st = g.Save();
+            GfxState st = g.Save();
             for (int i = 0; i < n; ++i)
             {
                 float lx = x + (Rnd(h, 3 + i * 2) - 0.5f) * scale * 0.9f, ly = y + (Rnd(h, 4 + i * 2) - 0.5f) * scale * 0.5f;
@@ -691,7 +691,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>월드 바깥의 빽빽한 나무 (그려지는 건 뷰포트에 걸린 칸뿐).</summary>
-        public void DrawBorderTrees(Graphics g, ViewState v, TreeRenderer trees, DesertProps props, BiomeProps biome, float minX, float minY, float maxX, float maxY)
+        public void DrawBorderTrees(IGfx g, ViewState v, TreeRenderer trees, DesertProps props, BiomeProps biome, float minX, float minY, float maxX, float maxY)
         {
             bool desert = ZoneTheme.Current == MapKind.Desert;
             float step = 4f;

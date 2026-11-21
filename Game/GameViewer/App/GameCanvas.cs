@@ -13,6 +13,7 @@ using GameViewer.Core.Audio;
 using GameViewer.Core.Data;
 using GameViewer.Core.Logic;
 using GameViewer.Core.Net;
+using GameViewer.Core.Ui;
 using GameViewer.Core.World;
 
 namespace GameViewer.App
@@ -21,6 +22,9 @@ namespace GameViewer.App
     {
         private readonly SceneRenderer _renderer = new SceneRenderer();
         private readonly ViewState _view = new ViewState();
+        private readonly UiManager _ui = new UiManager();           // 가방/상점/우편/환경설정 같은 새 창(Core/Ui). 입력은 이쪽이 먼저 받는다.
+        private readonly GdiUiCanvas _uic = new GdiUiCanvas();
+        private readonly UiDemoData _uiData = new UiDemoData();     // 서버 연동 전 데모 데이터
         private readonly Stopwatch _clock = Stopwatch.StartNew();
         private ViewerSession _session;
         private AutoPilot _pilot;
@@ -60,15 +64,39 @@ namespace GameViewer.App
             DoubleBuffered = true;
             TabStop = true;
             _view.Scale = cfg.PixelsPerUnit; _targetScale = _view.Scale;
+            if (cfg.Renderer == "skia")
+            {
+#if SKIA
+                try { _skia = new SkiaFrame(); }
+                catch (Exception ex) { Console.Error.WriteLine("Skia 를 시작하지 못해 GDI+ 로 진행합니다: " + ex.Message); }
+#else
+                Console.Error.WriteLine("--renderer skia 는 앱을 -p:UseSkia=true 로 빌드해야 합니다. GDI+ 로 진행합니다.");
+#endif
+            }
             _start = new StartScreen(_renderer.Res);
             _view.Settings = ViewSettings.Load(_settingsPath);
             ApplySettings(false);
+            _uiData.Register(_ui, _view.Settings, delegate { ApplySettings(true); });
+            SetupDock();
+            _ui.WindowToggled += delegate { if (_sfx.Enabled) _sfx.Play(SfxKind.UiTick, 0.8f); };
             _chat.Visible = false; _chat.MaxLength = 120; _chat.BorderStyle = BorderStyle.FixedSingle;
             _chat.BackColor = Color.FromArgb(24, 30, 28); _chat.ForeColor = Color.White;
             _chat.Font = new Font(_renderer.Res.FontFamily, 9.5f);
             _chat.KeyDown += ChatKeyDown;
             _chat.LostFocus += delegate { if (_view.ChatActive) CloseChat(); };
             Controls.Add(_chat);
+        }
+
+        /// <summary>전투 화면 오른쪽 위의 창 열기 단추 줄. 단축키 표시는 키 설정을 따라간다.</summary>
+        private void SetupDock()
+        {
+            Func<BindAction, Func<string>> hk = delegate (BindAction a) { return delegate { return KeyBindings.KeyName(_view.Settings.Keys.Get(a)); }; };
+            UiDock d = _ui.Dock;
+            d.Add("가방", UiIconKind.Bag, delegate { _ui.Toggle(InventoryWindow.WindowId); }, hk(BindAction.Inventory), delegate { return _ui.IsOpen(InventoryWindow.WindowId); });
+            d.Add("스킬", UiIconKind.Skill, delegate { if (_view.SkillBookOpen) _view.SkillBookOpen = false; else OpenSkillBook(); }, hk(BindAction.SkillBook), delegate { return _view.SkillBookOpen; }, null, 7);
+            d.Add("우편함", UiIconKind.Mail, delegate { _ui.Toggle(MailWindow.WindowId); }, hk(BindAction.Mail), delegate { return _ui.IsOpen(MailWindow.WindowId); }, delegate { return _uiData.Mailbox.Unread; });
+            d.Add("상점", UiIconKind.Shop, delegate { _ui.Toggle(ShopWindow.WindowId); }, hk(BindAction.Shop), delegate { return _ui.IsOpen(ShopWindow.WindowId); });
+            d.Add("환경설정", UiIconKind.Gear, delegate { _ui.Toggle(SettingsWindow.WindowId); }, null, delegate { return _ui.IsOpen(SettingsWindow.WindowId); });
         }
 
         public long Now { get { return _clock.ElapsedMilliseconds + 1000; } }
@@ -139,7 +167,7 @@ namespace GameViewer.App
                     Entity me = s.World.Self;
                     if (me != null) { v.CamX = me.X; v.CamY = me.Y; }
                     using (Bitmap bmp = new Bitmap(v.Width, v.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb))
-                    using (Graphics g = Graphics.FromImage(bmp))
+                    using (GdiGfx g = GdiGfx.FromImage(bmp))
                         for (int k = 0; k < 3; ++k) _renderer.Draw(g, s, pilot, v, s.World.RenderTime(now + k * 16));
                 }
             }
@@ -182,7 +210,7 @@ namespace GameViewer.App
         /// <summary>시작 화면을 마치고 게임(접속 또는 데모)을 시작한다.</summary>
         private void BeginGame()
         {
-            _phase = Phase.Playing;
+            _phase = Phase.Playing; Cursor = Cursors.Default; _start.EndHeroDrag();
             _hoverCard = -1; _start.HoverServer = -1; _start.HoverSkillCard = -1;
             if (_probe != null) _probe.Stop();
             StartSession();
@@ -196,7 +224,7 @@ namespace GameViewer.App
             BeginGame();
         }
 
-        private void DrawStart(Graphics g)
+        private void DrawStart(IGfx g)
         {
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
@@ -214,6 +242,7 @@ namespace GameViewer.App
             if (_phase != Phase.Select || e.Button != MouseButtons.Left) return;
             int n = _data.HeroIds().Count;
             if (StartScreen.StartRect(_view.Width, _view.Height).Contains(e.X, e.Y)) { StartWithSelected(); return; }
+            if (StartScreen.HeroViewHit(_view.Width, _view.Height, e.X, e.Y)) { _start.BeginHeroDrag(e.X); Capture = true; return; }          // 왼쪽 영웅: 끌어서 회전
             int zi = StartScreen.ZoneAt(_view.Width, _view.Height, e.X, e.Y);
             if (zi >= 0) { SelectZone(ZoneTheme.Zones[zi]); return; }
             if (_servers != null)
@@ -230,6 +259,13 @@ namespace GameViewer.App
         private void StartMouseMove(MouseEventArgs e)
         {
             if (_phase != Phase.Select) return;
+            if ((e.Button & MouseButtons.Left) != 0 && (_start.HeroDragging || StartScreen.HeroViewHit(_view.Width, _view.Height, e.X, e.Y)))
+            {
+                if (!_start.HeroDragging) { _start.BeginHeroDrag(e.X); Capture = true; }        // 누른 이벤트를 놓쳐도 왼쪽 띠에서 끌면 바로 돈다
+                _start.HeroDrag(e.X); return;
+            }
+            if (_start.HeroDragging) { _start.EndHeroDrag(); Capture = false; }
+            Cursor = StartScreen.HeroViewHit(_view.Width, _view.Height, e.X, e.Y) ? Cursors.SizeWE : Cursors.Default;
             int n = _data.HeroIds().Count;
             int zi = StartScreen.ZoneAt(_view.Width, _view.Height, e.X, e.Y);
             _hoverCard = StartScreen.StartRect(_view.Width, _view.Height).Contains(e.X, e.Y) ? -2 : (zi >= 0 ? -3 - zi : StartScreen.CardAt(_view.Width, _view.Height, n, e.X, e.Y));
@@ -323,6 +359,7 @@ namespace GameViewer.App
         {
             if (_phase != Phase.Playing) { TickStart(); return; }
             long now = Now;
+            _ui.Update(now);
             _session.Update(now);
             if (_view.SkillBookOpen && _session.State != SessionState.InZone) _view.SkillBookOpen = false;       // 연결이 끊기면 창을 닫는다
             if (_demo != null) _demo.Update(now);
@@ -396,7 +433,7 @@ namespace GameViewer.App
             }
             if (_phase != Phase.Playing)
             {
-                try { using (Graphics g = Graphics.FromImage(_frame)) DrawStart(g); }
+                try { using (GdiGfx g = GdiGfx.FromImage(_frame)) DrawStart(g); }
                 catch (Exception ex) { if (!_paintFailed) { _paintFailed = true; Console.Error.WriteLine(ex); } }
                 e.Graphics.DrawImageUnscaled(_frame, 0, 0);
                 return;
@@ -404,15 +441,28 @@ namespace GameViewer.App
             try
             {
                 _drawSw.Restart();
-                using (Graphics g = Graphics.FromImage(_frame))
+#if SKIA
+                if (_skia != null)
                 {
-                    _renderer.Draw(g, _session, _pilot, _view, _session.World.RenderTime(Now));
-                    DrawGateFade(g);
+                    DrawPlayingFrame(_skia.Begin(_view.Width, _view.Height));
+                    _skia.CopyTo(_frame);
                 }
+                else
+#endif
+                using (GdiGfx g = GdiGfx.FromImage(_frame)) DrawPlayingFrame(g);
                 _view.FrameMs = _view.FrameMs * 0.9 + _drawSw.Elapsed.TotalMilliseconds * 0.1;
             }
             catch (Exception ex)
             {
+#if SKIA
+                if (_skia != null)      // Skia 로 그리다 실패하면(네이티브 라이브러리 문제 등) 이 실행은 GDI+ 로 계속한다
+                {
+                    _skia.Dispose(); _skia = null;
+                    _session.World.AddLog(Now, 2, "Skia 그리기 오류, GDI+ 로 전환합니다: " + ex.Message); Console.Error.WriteLine(ex);
+                    e.Graphics.DrawImageUnscaled(_frame, 0, 0);
+                    return;
+                }
+#endif
                 // 그리는 중 예외가 나도 창이 멈추거나 빈 화면으로 굳지 않도록 한 번만 로그에 남기고 계속 진행한다
                 if (!_paintFailed) { _paintFailed = true; _session.World.AddLog(Now, 2, "그리기 오류: " + ex.Message); Console.Error.WriteLine(ex); }
             }
@@ -420,6 +470,19 @@ namespace GameViewer.App
         }
         private Bitmap _frame;
         private bool _paintFailed;
+#if SKIA
+        private SkiaFrame _skia;            // --renderer skia 일 때만 만든다
+#endif
+
+        /// <summary>한 프레임(월드 -> 새 UI 창 -> 관문 페이드)을 g 에 그린다. GDI+ 와 Skia 가 같은 순서를 쓴다.</summary>
+        private void DrawPlayingFrame(IGfx g)
+        {
+            _renderer.Draw(g, _session, _pilot, _view, _session.World.RenderTime(Now));
+            _ui.Resize(_view.Width, _view.Height);
+            _uic.Begin(g);
+            try { _ui.Draw(_uic); } finally { _uic.End(); }
+            DrawGateFade(g);
+        }
 
         protected override void OnPaintBackground(PaintEventArgs pevent) { /* 전체를 직접 그린다 */ }
 
@@ -431,6 +494,7 @@ namespace GameViewer.App
             if (_phase != Phase.Playing) { StartMouseDown(e); return; }
             UpdateMouse(e.X, e.Y);
             long now = Now;
+            if (_ui.PointerDown(e.X, e.Y, UiBtn(e.Button))) return;
             if (_view.KeysOpen) { if (e.Button == MouseButtons.Left) ClickKeys(e.X, e.Y); return; }
             if (_view.SettingsOpen) { if (e.Button == MouseButtons.Left && !ClickSettings(e.X, e.Y)) { } return; }
             if (_view.MapOpen)
@@ -491,6 +555,7 @@ namespace GameViewer.App
         {
             if (_phase != Phase.Playing) { StartMouseMove(e); return; }
             UpdateMouse(e.X, e.Y);
+            if (_ui.PointerMove(e.X, e.Y)) { _view.HoverId = 0; return; }
             if (_view.MapOpen) { DragMap(e.X, e.Y); return; }
             Entity hover = PickEntity(e.X, e.Y, Now);
             _view.HoverId = hover != null ? hover.Id : 0;
@@ -519,8 +584,12 @@ namespace GameViewer.App
             return !_session.World.SkillBookKnown || slot > ViewerSession.FixedSlots;
         }
 
+        private static int UiBtn(MouseButtons b) { return b == MouseButtons.Left ? 0 : (b == MouseButtons.Right ? 1 : 2); }
+
         protected override void OnMouseUp(MouseEventArgs e)
         {
+            if (_start.HeroDragging) { _start.EndHeroDrag(); Capture = false; return; }
+            if (_phase == Phase.Playing && _ui.PointerUp(e.X, e.Y, UiBtn(e.Button))) return;
             if (_view.DragSlot > 0 && e.Button == MouseButtons.Left)
             {
                 int to = SkillSlotAt(e.X, e.Y);
@@ -537,11 +606,13 @@ namespace GameViewer.App
             base.OnMouseUp(e);
         }
 
-        protected override void OnMouseLeave(EventArgs e) { _view.HasMouse = false; _view.DragSlot = -1; _rightDown = false; base.OnMouseLeave(e); }
+        protected override void OnMouseLeave(EventArgs e) { _ui.PointerMove(-1000, -1000); _view.HasMouse = false; _view.DragSlot = -1; _rightDown = false; base.OnMouseLeave(e); }
 
         protected override void OnMouseWheel(MouseEventArgs e)
         {
+            if (_phase == Phase.Select) { if (StartScreen.HeroViewHit(_view.Width, _view.Height, e.X, e.Y)) _start.RotateHero(e.Delta); return; }
             if (_phase != Phase.Playing) return;
+            if (_ui.Wheel(e.X, e.Y, e.Delta)) return;
             if (_view.SettingsOpen || _view.KeysOpen) return;
             if (_view.MapOpen)
             {
@@ -607,6 +678,8 @@ namespace GameViewer.App
             long now = Now;
             Keys k = e.KeyCode;
             KeyBindings kb = _view.Settings.Keys;
+            if (_ui.KeyDown((int)k)) { e.Handled = true; return; }
+            if (k == Keys.F10) { _ui.Toggle(SettingsWindow.WindowId); e.Handled = true; return; }
             if (_view.KeysOpen) { KeysKey(k); e.Handled = true; return; }
             if (_view.SettingsOpen) { SettingsKey(k); e.Handled = true; return; }
             if (_view.MapOpen) { MapKey(k); e.Handled = true; return; }
@@ -696,6 +769,9 @@ namespace GameViewer.App
         {
             if (a == BindAction.SkillBook) { OpenSkillBook(); return; }
             if (a == BindAction.InfoPanel) { _view.ShowInfo = !_view.ShowInfo; return; }
+            if (a == BindAction.Inventory) { _ui.Toggle(InventoryWindow.WindowId); return; }         // 새 창 3종은 스킬 칸 번호 판정보다 먼저 처리한다
+            if (a == BindAction.Mail) { _ui.Toggle(MailWindow.WindowId); return; }
+            if (a == BindAction.Shop) { _ui.Toggle(ShopWindow.WindowId); return; }
             if ((int)a >= KeyBindings.FirstSkill) { UseSkillSlot((int)a - KeyBindings.FirstSkill, now); return; }
             switch (a)
             {
@@ -832,7 +908,7 @@ namespace GameViewer.App
                 if (_sfx.Enabled) _sfx.Play(SfxKind.UiTick, 1f);
                 return;
             }
-            int n = KeyBindings.ActionCount, left = 14;
+            int n = KeyBindings.ActionCount, left = 15;
             if (k == Keys.Escape || k == Keys.F2) { _view.KeysOpen = false; _view.KeysMsg = ""; return; }
             if (k == Keys.Up) _view.KeysIndex = (_view.KeysIndex + n - 1) % n;
             else if (k == Keys.Down) _view.KeysIndex = (_view.KeysIndex + 1) % n;
@@ -966,7 +1042,7 @@ namespace GameViewer.App
             ApplyBgm();
         }
 
-        private void DrawGateFade(Graphics g)
+        private void DrawGateFade(IGfx g)
         {
             float t = _gate.Fade(Now);
             if (t <= 0f) return;
@@ -1224,7 +1300,7 @@ namespace GameViewer.App
                 string path = System.IO.Path.Combine(dir, "shot_" + _cfg.CharId + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + ".png");
                 using (Bitmap bmp = new Bitmap(Math.Max(1, ClientSize.Width), Math.Max(1, ClientSize.Height)))
                 {
-                    using (Graphics g = Graphics.FromImage(bmp)) _renderer.Draw(g, _session, _pilot, _view, Now);
+                    using (GdiGfx g = GdiGfx.FromImage(bmp)) _renderer.Draw(g, _session, _pilot, _view, Now);
                     bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
                 }
                 _session.World.AddLog(Now, 0, "스크린샷 저장: " + path);
@@ -1320,6 +1396,10 @@ namespace GameViewer.App
                 _bgm.Dispose();
                 if (_session != null) { _session.Leave(); _session.Dispose(); }
                 if (_frame != null) _frame.Dispose();
+                _uic.Dispose();
+#if SKIA
+                if (_skia != null) _skia.Dispose();
+#endif
                 _sfx.Dispose();
                 _chat.Dispose();
                 _start.Dispose();

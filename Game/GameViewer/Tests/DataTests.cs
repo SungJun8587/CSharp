@@ -31,7 +31,7 @@ namespace GameViewer.Tests
                 T.Check(ids.Contains(tpl), "sprite template " + tpl + " exists in Monster.json");
                 T.Check(seen.Add(tpl), "sprite template " + tpl + " is unique");
             }
-            foreach (uint id in ids) T.Check(seen.Contains(id), "monster " + id + " has a sprite");
+            // 3D 모델이 있는 몬스터만 항목이 있다. 나머지는 코드로 그린 기본 그림.
         }
 
         public static void MiniJsonBasics()
@@ -206,7 +206,7 @@ namespace GameViewer.Tests
             File.WriteAllText(tmp, "{ \"EntityScale\": 9 }");
             c = ViewerConfig.FromArgs(new string[] { "--config", tmp }, out err, out exit);
             T.Check(c == null && err != null, "EntityScale out of range rejected");
-            T.Near(1.15, new ViewerConfig().EntityScale, 1e-9, "default entity scale");
+            T.Near(1.45, new ViewerConfig().EntityScale, 1e-9, "default entity scale");
             File.WriteAllText(tmp, "{ \"Port\": 0 }");
             c = ViewerConfig.FromArgs(new string[] { "--config", tmp }, out err, out exit);
             T.Check(c == null, "bad port in file rejected");

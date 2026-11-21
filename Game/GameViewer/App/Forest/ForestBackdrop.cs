@@ -14,6 +14,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using GameViewer.App.Render;
 
 namespace GameViewer.App.Forest
 {
@@ -35,7 +36,8 @@ namespace GameViewer.App.Forest
         private static readonly Stopwatch _clock = new Stopwatch();
         private static long _lastRenderMs = -1000;
         private static int _reqKind = -1, _curKind = -1;        // 이번 Draw 에서 보여 줄 영웅(-1 없음) / 직전에 그린 영웅
-        private static float _reqNdcX;
+        private static float _reqNdcX; private static bool _reqBodyOff;
+        private static float _fx, _fy, _hy; private static bool _heroScreen;
         private static long _heroSinceMs;
 
         /// <summary>false 로 두면 숲을 쓰지 않는다(--no-3d, 환경변수 GAMEVIEWER_NO3D).</summary>
@@ -65,10 +67,15 @@ namespace GameViewer.App.Forest
         /// 다음 Draw 한 번 동안 숲 길 위에 영웅을 세운다(영웅 선택 화면). kind: 0 전사, 1 궁수, 2 마법사, 3 창기사. 부르지 않은 Draw 는 영웅 없이 걷는 숲이다.
         /// ndcX: 영웅이 화면 가로 어디에 보일지(-1 왼쪽 .. 1 오른쪽).
         /// </summary>
-        public static void ShowHero(int kind, float ndcX) { _reqKind = kind; _reqNdcX = ndcX; }
+        public static void ShowHero(int kind, float ndcX) { _reqKind = kind; _reqNdcX = ndcX; _reqBodyOff = false; }
+        /// <summary>bodyOff 이면 절차적 영웅 몸은 빼고 마법진만 그린다(호출한 쪽이 HeroScreen 위치에 3D 영웅을 얹는다).</summary>
+        public static void ShowHero(int kind, float ndcX, bool bodyOff) { _reqKind = kind; _reqNdcX = ndcX; _reqBodyOff = bodyOff; }
+
+        /// <summary>직전에 그린 영웅의 화면 위치(0..1). 발 가운데 x,y 와 머리끝 y(영웅 키 3 단위 기준). 영웅이 없으면 false.</summary>
+        public static bool HeroScreen(out float footX, out float footY, out float headY) { footX = _fx; footY = _fy; headY = _hy; return _heroScreen; }
 
         /// <summary>(0,0)-(width,height) 전체에 숲 화면을 그린다.</summary>
-        public static ForestResult Draw(Graphics g, int width, int height)
+        public static ForestResult Draw(IGfx g, int width, int height)
         {
             if (!Enabled || width < 8 || height < 8) return ForestResult.Unavailable;
             if (_stage == Stage.Failed) return ForestResult.Unavailable;
@@ -88,7 +95,7 @@ namespace GameViewer.App.Forest
                 catch (Exception e) { Fail("GL 초기화 실패", e); return ForestResult.Unavailable; }
             }
 
-            int kind = _reqKind; float ndcX = _reqNdcX; _reqKind = -1;
+            int kind = _reqKind; float ndcX = _reqNdcX; _reqKind = -1; bool bodyOff = _reqBodyOff;
             try
             {
                 long now = _clock.ElapsedMilliseconds;
@@ -99,7 +106,9 @@ namespace GameViewer.App.Forest
                 bool sizeChanged = _bmp == null || _bmp.Width != rw || _bmp.Height != rh;
                 if (sizeChanged || modeChanged || now - _lastRenderMs >= FrameIntervalMs)
                 {
+                    _r.HeroBodyOff = bodyOff;
                     _r.Render((float)(now / 1000.0), rw, rh, kind, (float)((now - _heroSinceMs) / 1000.0), ndcX);
+                    _heroScreen = _r.HeroScreenValid; _fx = _r.HeroFootX; _fy = _r.HeroFootY; _hy = _r.HeroHeadY;
                     if (_r.LastError != null && Status.IndexOf("GL 오류", StringComparison.Ordinal) < 0) { Status = _r.LastError; Log(_r.LastError); }
                     CopyToBitmap(_r.Pixels, rw, rh);
                     _lastRenderMs = now;
@@ -128,7 +137,7 @@ namespace GameViewer.App.Forest
                 for (int y = 0; y < h; ++y)                 // GL 은 아래 줄부터 주므로 위아래를 뒤집어 복사한다
                     Marshal.Copy(bgra, (h - 1 - y) * row, IntPtr.Add(bd.Scan0, y * bd.Stride), row);
             }
-            finally { _bmp.UnlockBits(bd); }
+            finally { _bmp.UnlockBits(bd); GfxImages.Touch(_bmp); }
         }
 
         private static void Fail(string what, Exception e)

@@ -29,10 +29,10 @@ namespace GameViewer.App.Render
         private static float Rn(ViewEffect fx, int i) { return Noise.Hash01(i * 7 + (int)(fx.StartMs & 0x7FFF), (int)(fx.EntityId & 0xFF) + i * 3, 0x77u); }
         private static float Ease(float p) { return GameViewer.Core.Logic.Mx.Ease(p); }
         private static float Clamp01(float v) { return GameViewer.Core.Logic.Mx.Clamp01(v); }
-        private void Glow(Graphics g, int rgb, float cx, float cy, float r, float k) { _fx.Glow(g, Color.FromArgb(255, (rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255), cx, cy, r, r, k); }
+        private void Glow(IGfx g, int rgb, float cx, float cy, float r, float k) { _fx.Glow(g, Color.FromArgb(255, (rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255), cx, cy, r, r, k); }
 
         /// <summary>네 갈래 반짝이.</summary>
-        private void Star(Graphics g, int rgb, int a, float cx, float cy, float r, float rot, float w)
+        private void Star(IGfx g, int rgb, int a, float cx, float cy, float r, float rot, float w)
         {
             float c = (float)Math.Cos(rot), s = (float)Math.Sin(rot);
             Pen p = Pn(rgb, a, w);
@@ -47,7 +47,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 범위 (바닥)
 
         /// <summary>범위 폭발의 바닥 부분. 처리했으면 true (false 면 기존 그림을 쓴다).</summary>
-        public bool RingGround(Graphics g, SkillFxInfo info, ViewEffect fx, ViewState v, long now, float cx, float cy, float radius)
+        public bool RingGround(IGfx g, SkillFxInfo info, ViewEffect fx, ViewState v, long now, float cx, float cy, float radius)
         {
             float p = fx.Progress(now);
             float sx = v.ToScreenX(cx), sy = v.ToScreenY(cy);
@@ -177,7 +177,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 범위 (공중)
 
         /// <summary>범위 폭발의 공중 부분. 처리했으면 true (false 면 기존 흙먼지를 쓴다).</summary>
-        public bool RingAir(Graphics g, SkillFxInfo info, ViewEffect fx, ViewState v, long now, float cx, float cy, float radius)
+        public bool RingAir(IGfx g, SkillFxInfo info, ViewEffect fx, ViewState v, long now, float cx, float cy, float radius)
         {
             float p = fx.Progress(now);
             float sx = v.ToScreenX(cx), sy = v.ToScreenY(cy);
@@ -362,7 +362,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 베기 (단일 대상)
 
         /// <summary>스킬 베기(Variant 1)를 양식에 맞게 그린다. 처리했으면 true.</summary>
-        public bool Slash(Graphics g, SkillFxInfo info, WorldModel w, ViewEffect fx, ViewState v, long now)
+        public bool Slash(IGfx g, SkillFxInfo info, WorldModel w, ViewEffect fx, ViewState v, long now)
         {
             float p = fx.Progress(now);
             Entity c = w.Find(fx.EntityId);
@@ -385,7 +385,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>단일 대상 형태로 쓰인 범위 양식의 바닥 부분.</summary>
-        public bool SlashGround(Graphics g, SkillFxInfo info, WorldModel w, ViewEffect fx, ViewState v, long now)
+        public bool SlashGround(IGfx g, SkillFxInfo info, WorldModel w, ViewEffect fx, ViewState v, long now)
         {
             if (fx.Radius <= 0f) return false;
             Entity c = w.Find(fx.EntityId);
@@ -408,7 +408,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>부채꼴 스킬: 시전자에서 겹겹이 퍼져 나가는 불꽃 부채.</summary>
-        private void DrawFan(Graphics g, SkillFxInfo info, ViewEffect fx, ViewState v, float p, float cx, float cy, float tx, float ty)
+        private void DrawFan(IGfx g, SkillFxInfo info, ViewEffect fx, ViewState v, float p, float cx, float cy, float tx, float ty)
         {
             int c1 = info.Color1, c2 = info.Color2;
             float R = fx.Value / 100f, half = fx.X2 * 0.5f * 0.0174533f;
@@ -449,7 +449,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>직선 스킬: 시전자에서 사거리 끝까지 뻗는 광선.</summary>
-        private void DrawBeam(Graphics g, SkillFxInfo info, ViewEffect fx, ViewState v, float p, float cx, float cy, float tx, float ty)
+        private void DrawBeam(IGfx g, SkillFxInfo info, ViewEffect fx, ViewState v, float p, float cx, float cy, float tx, float ty)
         {
             int c1 = info.Color1, c2 = info.Color2;
             float R = fx.Value / 100f, W = Math.Max(0.5f, fx.Y2);
@@ -502,7 +502,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void DrawBlade(Graphics g, SkillFxInfo info, ViewEffect fx, ViewState v, float p, float cx, float cy, float tx, float ty)
+        private void DrawBlade(IGfx g, SkillFxInfo info, ViewEffect fx, ViewState v, float p, float cx, float cy, float tx, float ty)
         {
             int c1 = info.Color1, c2 = info.Color2;
             float ang = (float)Math.Atan2(ty - cy, tx - cx);
@@ -537,7 +537,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void DrawPierce(Graphics g, SkillFxInfo info, ViewEffect fx, ViewState v, float p, float cx, float cy, float tx, float ty)
+        private void DrawPierce(IGfx g, SkillFxInfo info, ViewEffect fx, ViewState v, float p, float cx, float cy, float tx, float ty)
         {
             int c1 = info.Color1, c2 = info.Color2;
             float ax = v.ToScreenX(cx), ay = v.ToScreenY(cy) - v.Px(1.1f);
@@ -582,7 +582,7 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 투사체
 
-        public bool Projectile(Graphics g, SkillFxInfo info, ViewEffect fx, ViewState v, long now, float t, float ex, float ey)
+        public bool Projectile(IGfx g, SkillFxInfo info, ViewEffect fx, ViewState v, long now, float t, float ex, float ey)
         {
             if (info.Style != SkillFxStyle.Arrow && info.Style != SkillFxStyle.Fireball) return false;
             int c1 = info.Color1, c2 = info.Color2;
@@ -639,7 +639,7 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 적중 (투사체 착탄)
 
-        public bool Impact(Graphics g, SkillFxInfo info, ViewEffect fx, ViewState v, long now, float p, float sx, float sy)
+        public bool Impact(IGfx g, SkillFxInfo info, ViewEffect fx, ViewState v, long now, float p, float sx, float sy)
         {
             if (info.Style != SkillFxStyle.Arrow && info.Style != SkillFxStyle.Fireball) return false;
             int c1 = info.Color1, c2 = info.Color2;
@@ -676,7 +676,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 시전 중 기 모으기
 
         /// <summary>시전 중인 엔티티 몸으로 빛이 빨려 들어간다.</summary>
-        public void Charge(Graphics g, SkillFxInfo info, Entity e, ViewState v, long now, float sx, float sy, float bodyH, float halfW)
+        public void Charge(IGfx g, SkillFxInfo info, Entity e, ViewState v, long now, float sx, float sy, float bodyH, float halfW)
         {
             if (info.Style == SkillFxStyle.Default || e.CastTimeMs <= 0) return;
             float p = Clamp01((now - e.CastStartMs) / (float)e.CastTimeMs);
@@ -698,7 +698,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 상태 효과
 
         /// <summary>기절/보호막/지속 치유 표현. 처리했으면 true.</summary>
-        public bool Status(Graphics g, StatusRow row, ViewState v, long now, int idx, float sx, float sy, float bodyH, float halfW)
+        public bool Status(IGfx g, StatusRow row, ViewState v, long now, int idx, float sx, float sy, float bodyH, float halfW)
         {
             switch (row.Kind)
             {

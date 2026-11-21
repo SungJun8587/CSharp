@@ -54,7 +54,7 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 진입점
 
-        public static void Draw(Graphics g, Entity e, ViewState v, Look look, float bx, float by, long now)
+        public static void Draw(IGfx g, Entity e, ViewState v, Look look, float bx, float by, long now)
         {
             if (e.IsMonster || e.Dead) return;
             float t = now - e.AttackAnimMs;
@@ -71,7 +71,7 @@ namespace GameViewer.App.Render
             float hx = bx + fx * u * 0.6f, hy = by - v.Px(look.H * 0.46f) + fy * u * 0.25f;
             float charge = striking ? 0f : cast;
             float tt = striking ? t : -1f;
-            GraphicsState gs = g.Save();
+            GfxState gs = g.Save();
             g.SmoothingMode = SmoothingMode.AntiAlias;
             // 몸과 따로 그린 무기(에셋 영웅)는 무기 자체가 그림이다. 여기서는 궤적/불꽃/화살 같은 효과만 얹는다
             AssetSet a = AssetSprites.Find(false, e.TemplateId);
@@ -88,7 +88,7 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 전사: 큰 검
 
-        private static void Warrior(Graphics g, float hx, float hy, float u, float baseAng, float side, float t, float charge, bool skill)
+        private static void Warrior(IGfx g, float hx, float hy, float u, float baseAng, float side, float t, float charge, bool skill)
         {
             float len = u * (skill ? 2.8f : 2.45f);
             Color glow = skill ? Color.FromArgb(120, 190, 255) : Color.FromArgb(200, 225, 255);
@@ -119,7 +119,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>검 한 자루: 테이퍼진 날, 가운데 홈, 윗날 반사광, 십자 날밑, 손잡이, 장식 꼭지.</summary>
-        private static void Sword(Graphics g, float hx, float hy, float angDeg, float len, float u, float opacity, Color glow, bool detail)
+        private static void Sword(IGfx g, float hx, float hy, float angDeg, float len, float u, float opacity, Color glow, bool detail)
         {
             if (opacity < 0.03f) return;
             double r = angDeg * Math.PI / 180.0;
@@ -156,7 +156,7 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 궁수: 활과 화살
 
-        private static void Archer(Graphics g, float hx, float hy, float u, float fx, float fy, float t, float charge, bool skill, bool ranged)
+        private static void Archer(IGfx g, float hx, float hy, float u, float fx, float fy, float t, float charge, bool skill, bool ranged)
         {
             float bowX = hx + fx * u * 0.95f, bowY = hy + fy * u * 0.5f;
             float rel = t < 0f ? -1f : Swing(t);
@@ -204,7 +204,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Arrow(Graphics g, float x0, float y0, float x1, float y1, float u, int alpha, bool glow)
+        private static void Arrow(IGfx g, float x0, float y0, float x1, float y1, float u, int alpha, bool glow)
         {
             if (alpha < 10) return;
             alpha = Math.Min(255, alpha);
@@ -223,7 +223,7 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 마법사: 지팡이
 
-        private static void Mage(Graphics g, float hx, float hy, float u, float baseAng, float side, float t, float charge, bool skill)
+        private static void Mage(IGfx g, float hx, float hy, float u, float baseAng, float side, float t, float charge, bool skill)
         {
             float op = t < 0f ? 1f : Opacity(t);
             float s = t < 0f ? 0f : Swing(t);
@@ -275,7 +275,7 @@ namespace GameViewer.App.Render
         /// 창 자체는 몸과 따로 그린 이미지(Creatures)이고, 여기서는 창끝 앵커를 따라가는 잔광/불꽃/기모으기 빛만 낸다.
         /// 창은 자세 사이를 건너뛰며 바뀌므로 잔광 위치는 자세 사이를 보간한 창끝으로 구한다.
         /// </summary>
-        private static void SpriteFx(Graphics g, AssetSet a, Entity e, ViewState v, float bx, float by, float t, float charge, bool skill, float fx, float fy)
+        private static void SpriteFx(IGfx g, AssetSet a, Entity e, ViewState v, float bx, float by, float t, float charge, bool skill, float fx, float fy)
         {
             WeaponLayers w = a.Weapon;
             int dir = a.IndexFor(e.FaceX, e.FaceY);
@@ -324,7 +324,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>검: 칼날이 지나간 자리를 메우는 면 모양 궤적(최근 7개 표본)과 타격 불꽃.</summary>
-        private static void SwordFx(Graphics g, Func<float, PointF[]> at, float t, float op, float u, bool skill, PointF tip)
+        private static void SwordFx(IGfx g, Func<float, PointF[]> at, float t, float op, float u, bool skill, PointF tip)
         {
             Color c = skill ? Color.FromArgb(255, 200, 90) : Color.FromArgb(235, 240, 255);
             if (t >= 0f)
@@ -353,7 +353,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>활: 활과 메긴 화살은 그림이다. 놓은 뒤 날아가는 화살과 모으는 빛만 그린다.</summary>
-        private static void BowFx(Graphics g, PointF grip, float t, float charge, float op, float u, float fx, float fy, bool skill)
+        private static void BowFx(IGfx g, PointF grip, float t, float charge, float op, float u, float fx, float fy, bool skill)
         {
             if (t < 0f) { if (charge > 0.4f) ChargeGlow(g, grip.X, grip.Y, u * 0.5f, charge, Color.FromArgb(180, 255, 160)); return; }
             float f = Math.Max(0f, Math.Min(1f, (t - 30f) / 300f));
@@ -374,7 +374,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>지팡이: 머리 구슬이 모일수록 밝아지고, 휘두르면 충격 고리와 빛줄기가 번진다.</summary>
-        private static void StaffFx(Graphics g, PointF tip, float t, float charge, float op, float u, float fx, float fy, bool skill)
+        private static void StaffFx(IGfx g, PointF tip, float t, float charge, float op, float u, float fx, float fy, bool skill)
         {
             float s = t < 0f ? 0f : Swing(t);
             float glow = t < 0f ? 0.5f + charge * 1.3f : 1.1f + 1.0f * s * (t < 200f ? 1f : 0f) + (t < 200f ? 0f : 0.6f * Math.Max(0f, 1f - (t - 200f) / (TotalMs - 200f)));
@@ -401,7 +401,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 공통 효과
 
         /// <summary>무기가 지나간 부채꼴 모양 잔광. a0 에서 a1 까지, 끝(최근)으로 갈수록 진하다.</summary>
-        private static void ArcGlow(Graphics g, float cx, float cy, float r, float a0, float a1, Color c, float opacity, float w)
+        private static void ArcGlow(IGfx g, float cx, float cy, float r, float a0, float a1, Color c, float opacity, float w)
         {
             float sweep = a1 - a0;
             if (Math.Abs(sweep) < 4f || opacity < 0.04f) return;
@@ -418,7 +418,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>스킬일 때 날 둘레에 번지는 광채.</summary>
-        private static void Halo(Graphics g, float hx, float hy, float ang, float len, float u, Color c, float opacity)
+        private static void Halo(IGfx g, float hx, float hy, float ang, float len, float u, Color c, float opacity)
         {
             double r = ang * Math.PI / 180.0;
             using (Pen p = new Pen(Color.FromArgb((int)(120 * Math.Min(1f, opacity)), c), u * 0.9f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
@@ -426,7 +426,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>타격 불꽃: 중심에서 사방으로 튀는 짧은 선과 점. k 0~1.</summary>
-        private static void Sparks(Graphics g, float x, float y, float u, float k, Color c, int n)
+        private static void Sparks(IGfx g, float x, float y, float u, float k, Color c, int n)
         {
             if (k < 0f || k >= 1f) return;
             int al = (int)(255 * (1f - k));
@@ -442,7 +442,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>시전 중 무기 끝에 모이는 빛.</summary>
-        private static void ChargeGlow(Graphics g, float x, float y, float r, float charge, Color c)
+        private static void ChargeGlow(IGfx g, float x, float y, float r, float charge, Color c)
         {
             float rr = r * (0.5f + charge);
             using (SolidBrush b = new SolidBrush(Color.FromArgb((int)(70 + 120 * charge), c))) g.FillEllipse(b, x - rr, y - rr, rr * 2f, rr * 2f);

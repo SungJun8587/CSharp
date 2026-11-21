@@ -41,7 +41,7 @@ namespace GameViewer.App.Render
         private static bool Hero(Entity e) { return !e.IsMonster && !e.Dead && e.TemplateId >= 1 && e.TemplateId <= 4; }
 
         /// <summary>몸보다 먼저: 땅 조명과 몸 뒤 후광.</summary>
-        public static void DrawBack(Graphics g, EffectRenderer fx, Entity e, ViewState v, Look look, float bx, float by, long now, float dark)
+        public static void DrawBack(IGfx g, EffectRenderer fx, Entity e, ViewState v, Look look, float bx, float by, long now, float dark)
         {
             if (!Hero(e)) return;
             float c = AttackPose.CastProgress(e, now);
@@ -67,7 +67,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>몸 위에: 가슴께 섬광(흰 심 + 직업색).</summary>
-        public static void DrawFront(Graphics g, EffectRenderer fx, Entity e, ViewState v, Look look, float bx, float by, long now)
+        public static void DrawFront(IGfx g, EffectRenderer fx, Entity e, ViewState v, Look look, float bx, float by, long now)
         {
             if (!Hero(e)) return;
             float f = Flash(e, now);

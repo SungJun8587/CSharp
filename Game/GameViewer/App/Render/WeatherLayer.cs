@@ -18,7 +18,7 @@ namespace GameViewer.App.Render
 
         public WeatherState Last;
 
-        public void Draw(Graphics g, ViewState v, long now, MapKind kind, uint zone, bool screenFx)
+        public void Draw(IGfx g, ViewState v, long now, MapKind kind, uint zone, bool screenFx)
         {
             WeatherState w = WeatherRules.At(kind, zone, now);
             Last = w;
@@ -50,7 +50,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void DrawFog(Graphics g, int W, int H, long now, MapKind kind, float fog)
+        private void DrawFog(IGfx g, int W, int H, long now, MapKind kind, float fog)
         {
             Color c = FogColor(kind);
             g.FillRectangle(_res.Brush(Color.FromArgb(Math.Max(0, Math.Min(255, (int)(46 * fog))), c)), 0, 0, W, H);
@@ -67,7 +67,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void DrawRain(Graphics g, ViewState v, int W, int H, long now, float rain, float storm)
+        private void DrawRain(IGfx g, ViewState v, int W, int H, long now, float rain, float storm)
         {
             int n = (int)((v.Settings.Quality == GfxQuality.High ? 170 : (v.Settings.Quality == GfxQuality.Medium ? 90 : 40)) * (0.35f + 0.65f * rain) * (1f + 0.5f * storm));
             float slant = 0.22f + 0.12f * storm;

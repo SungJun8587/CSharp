@@ -65,7 +65,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>엔티티의 상태 효과를 아이콘 줄로 그린다(이로운 것 먼저, 남은 시간 짧은 순). 그린 폭을 돌려준다.</summary>
-        public float DrawStatusRow(Graphics g, GameData data, Entity e, float x, float y, float size, int max, long now, bool rightAlign)
+        public float DrawStatusRow(IGfx g, GameData data, Entity e, float x, float y, float size, int max, long now, bool rightAlign)
         {
             if (e == null || e.Statuses.Count == 0) return 0f;
             List<StatusInstance> list = new List<StatusInstance>(e.Statuses.Values);
@@ -83,7 +83,7 @@ namespace GameViewer.App.Render
             return total;
         }
 
-        private void DrawStatusChip(Graphics g, GameData data, StatusInstance st, float x, float y, float size, long now)
+        private void DrawStatusChip(IGfx g, GameData data, StatusInstance st, float x, float y, float size, long now)
         {
             StatusRow row = data.Status(st.StatusId);
             bool bad = StatusLook.IsDebuff(row);
@@ -92,13 +92,13 @@ namespace GameViewer.App.Render
             Color tint = HueColor(StatusLook.Hue(st.StatusId));
             using (GraphicsPath p = P.RoundPath(x, y, size, size, 6))
             {
-                using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(x, y, size, size + 1), Color.FromArgb(235, tint.R / 2 + 20, tint.G / 2 + 20, tint.B / 2 + 20), Color.FromArgb(235, 16, 18, 26), LinearGradientMode.Vertical))
+                using (LinearGradientBrush b = GfxBrush.Linear(new RectangleF(x, y, size, size + 1), Color.FromArgb(235, tint.R / 2 + 20, tint.G / 2 + 20, tint.B / 2 + 20), Color.FromArgb(235, 16, 18, 26), LinearGradientMode.Vertical))
                     g.FillPath(b, p);
                 _res.OutlinedText(g, StatusLook.Glyph(row, st.StatusId), _res.Bold, tint, x + size / 2, y + size / 2 - 10, _center);
                 if (row != null && row.DurationMs > 0 && row.DurationMs <= 120000)      // 아주 긴 효과(격노 등)는 쓸어내림 없이 숫자만
                 {
                     float frac = Math.Max(0f, Math.Min(1f, left / (float)row.DurationMs));
-                    GraphicsState gs = g.Save();
+                    GfxState gs = g.Save();
                     g.SetClip(p, CombineMode.Intersect);
                     g.FillPie(_res.Brush(120, 0, 0, 0), x - size * 0.2f, y - size * 0.2f, size * 1.4f, size * 1.4f, -90 + 360 * frac, 360 * (1f - frac));
                     g.Restore(gs);
@@ -111,7 +111,7 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 콤보
 
-        public void DrawCombo(Graphics g, ViewerSession s, ViewState v, long now)
+        public void DrawCombo(IGfx g, ViewerSession s, ViewState v, long now)
         {
             ComboCounter c = s.World.Combo;
             int n = c.Active(now);
@@ -120,7 +120,7 @@ namespace GameViewer.App.Render
             float pop = 1f + 0.35f * c.Pop(now);
             Color col = tier == 0 ? Color.FromArgb(255, 238, 170) : (tier == 1 ? Color.FromArgb(255, 196, 96) : (tier == 2 ? Color.FromArgb(255, 124, 76) : Color.FromArgb(255, 92, 210)));
             float x = v.Width - 36f, y = v.Height * 0.40f;
-            GraphicsState gs = g.Save();
+            GfxState gs = g.Save();
             g.TranslateTransform(x, y);
             g.ScaleTransform(pop, pop);
             _res.OutlinedText(g, n.ToString(), _res.Huge, col, -62f, -18f, _right);
@@ -137,7 +137,7 @@ namespace GameViewer.App.Render
 
         private static readonly string[] StepNames = { "서버 접속", "로그인", "존 입장" };
 
-        public void DrawConnection(Graphics g, ViewerSession s, ViewState v, long now)
+        public void DrawConnection(IGfx g, ViewerSession s, ViewState v, long now)
         {
             if (s.State == SessionState.InZone) return;
             bool failed = s.State == SessionState.Failed || s.State == SessionState.Disconnected;
@@ -203,7 +203,7 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 존 입장 연출
 
-        public void DrawIntro(Graphics g, ViewerSession s, ViewState v, long now)
+        public void DrawIntro(IGfx g, ViewerSession s, ViewState v, long now)
         {
             if (v.IntroStartMs < 0 || !ZoneIntro.Active(v.IntroStartMs, now)) return;
             float black = ZoneIntro.BlackAlpha(v.IntroStartMs, now);

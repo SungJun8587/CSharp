@@ -73,8 +73,17 @@
   접속 흐름   접속 -> 로그인 -> 입장 단계와 경과 시간을 보여 주고, 연결이 끊기거나 접속에 실패하면 1/2/4/8/10초 간격으로 최대 5번 자동 재접속합니다(Core/Logic/ReconnectPolicy.cs). 재접속 중에는 마지막 화면을 유지하고, 성공하면 월드를 새로 받습니다. 로그인/입장이 서버에서 거부된 경우(이미 접속 중 등)는 자동으로 다시 시도하지 않고 F5 를 기다립니다. 데모 모드는 자동 재접속을 쓰지 않습니다.
   존 입장 연출   입장할 때 검은 화면에서 밝아지며 "ZONE n / 존 이름 / 한 줄 소개" 배너가 나오고 존 종류별 입장 효과음이 한 번 울립니다(재접속은 페이드와 짧은 효과음만). 시간표는 Core/Logic/ZoneIntro.cs.
   로그 창   L 로 바꾸는 탭 창(전체/전투/시스템/채팅, 휠로 거슬러 올라감). 전투 탭에는 내가 관련된 타격 한 번마다의 줄(누가 -> 누구 몇 피해, 남은 체력)이 쌓이고 화면 아래에 떠오르는 줄에는 나오지 않습니다. 채팅 탭의 입력은 이 뷰어 안에만 표시되며 서버로 보내지 않습니다(뷰어 프로토콜에 채팅 패킷이 없음).
+  새 창(UI 툴킷)   V 가방, N 우편함, P 상점(키 설정에서 바꿈), F10 새 환경설정. 창은 제목줄을 끌어 옮기고(위치 기억), 클릭하면 앞으로 오며, Esc 는 맨 위 창부터 닫습니다. 창 위의 클릭/휠은 게임으로 가지 않고, 창이 쓰지 않는 키(이동 등)는 게임으로 갑니다.
+    창 열기 단추: 전투 화면 오른쪽 위에 가방/스킬/우편함/상점/환경설정 단추가 늘 떠 있어 클릭으로 창을 열고 닫습니다(열린 창은 테두리 강조, 안 읽은 우편 수 표시, 단축키 표시는 키 설정을 따라감, 마우스를 올리면 이름). 위치는 UiDock.Top, 항목은 GameCanvas.SetupDock.
+    가방: 6열 격자(잠긴 칸 표시), 탭(전체/장비/소모품/재료/기타, 다른 종류는 어둡게), 끌어서 이동/합치기/교환, 더블클릭·우클릭 사용, 창 밖(월드)에 놓으면 버리기 확인, 정렬, 방향키/Enter/Delete.
+    상점: 구매/판매 탭, 수량(살 수 있는 만큼까지 최대), 합계와 부족 사유, 처리 중에는 버튼 잠금(서버 응답을 기다림), 같은 물건도 재화별로 따로 판매 가능.
+    우편함: 안 읽음 표시, 첨부 아이콘, 첨부 받기/모두 받기(가방 공간이 모자라면 전부 안 받음), 읽은 우편 삭제(첨부가 남은 우편은 보존).
+    환경설정: 소리/화면/조작 탭, 키 바꾸기(Esc 취소, Backspace 기본값, 이미 쓰는 키는 맞바꿈).
+    그리기 경계: 렌더러(App/Render, App/Forest)는 Graphics 를 직접 받지 않고 IGfx(Render/IGfx.cs)를 받는다. 핵심 호출만 인터페이스에 있고(약 30개) int/Rectangle/Point 편의 오버로드는 GfxExt 확장 메서드가 핵심 호출로 바꾼다. 지금 구현은 GDI+ 를 감싼 GdiGfx 하나이며, 비트맵에 굽는 코드는 GdiGfx.FromImage(bmp) 로 얻는다. 펜/브러시/경로/글꼴/이미지는 아직 System.Drawing 형식이라, 다른 구현(예: SkiaSharp)은 이것들을 읽어 자기 형식으로 바꾸고 캐시한다.
+    SkiaSharp 그리기(선택): 기본은 GDI+ 다. 앱을 dotnet build -p:UseSkia=true 로 빌드(NuGet 의 SkiaSharp 2.88 복원)하고 --renderer skia (또는 GameViewer.json 의 "Renderer": "skia")로 실행하면 플레이 화면을 SkiaGfx(Render/Skia/SkiaGfx.cs)로 CPU 래스터로 그려 GDI+ 비트맵에 복사해 내보낸다(시작/로딩 화면과 비트맵 굽기는 GDI+ 그대로). Skia 가 시작하거나 그리다 실패하면 그 실행은 GDI+ 로 계속한다. GDI+ 와 다르게 동작하는 근사 목록은 SkiaGfx.cs 머리말에 있다. 선형 그라디언트는 GfxBrush.Linear, 색 행렬은 GfxAttr.SetColorMatrix, 비트맵을 직접 고쳤다면 GfxImages.Touch 를 써야 Skia 쪽 사본이 갱신된다.
+    구조: Core/Ui 는 그리기에 의존하지 않고(IUiCanvas), App/Render/GdiUiCanvas.cs 가 GDI+ 로 그립니다. 화면은 I*Backend 로 요청만 보내고 결과를 표시하며(서버가 정답), 지금은 UiDemoData 의 로컬 데모 백엔드로 동작합니다.
   설정 창(F2)   그래픽 품질(높음: 전부 / 중간: 대기 연출 끔 / 낮음: 대기 연출과 가장자리 어둡게 하기 끔), 효과음 켜기/끄기와 크기(0~100%), 배경음악 켜기/끄기와 크기(0~100%, 효과음과 따로), FPS/네트워크 정보 표시, 피해 숫자 표시, 화면 효과(저체력/피격) 켜기/끄기, 화면 흔들림 줄이기, 타격감 세기(0~150%, 100% 가 기본: 히트 스톱 길이/피격 번쩍임/화면 흔들림에 곱함), 키 설정. 바꾸면 바로 실행 파일 옆 settings.json 에 저장되고 다음 실행에 복원됩니다. 효과음/배경음악 크기는 소리 샘플 자체를 줄여서 적용합니다.
-  키 설정   동작 16개(기본 공격, 보스 선택, 자동 전투, 카메라 고정/가운데, 대상 전환, 도움말, 로그 창, 채팅, 설정, 월드맵, 영웅 선택, 존 변경, 스크린샷, 재접속, 스킬 창)와 스킬 1~9 의 키를 바꿉니다(Enter 또는 클릭 후 새 키, Delete 는 그 항목 기본값, R 은 전부 기본값). 한 키는 한 동작에만 묶여서 이미 쓰는 키를 고르면 두 동작이 키를 맞바꿉니다. Esc, 방향키, Shift/Ctrl/Alt, 숫자패드 1~9(스킬 1~9 와 같이 동작)는 쓸 수 없고 Ctrl+M(효과음 끄기)은 고정입니다. 도움말, 스킬 칸의 키 표시, 시작 화면의 안내는 바꾼 키를 따라갑니다. 규칙은 Core/Logic/KeyBindings.cs (키 값은 Windows 가상 키 코드).
+  키 설정   동작 19개(기본 공격, 보스 선택, 자동 전투, 카메라 고정/가운데, 대상 전환, 도움말, 로그 창, 채팅, 설정, 월드맵, 영웅 선택, 존 변경, 스크린샷, 재접속, 스킬 창, 가방, 우편함, 상점)와 스킬 1~9 의 키를 바꿉니다(Enter 또는 클릭 후 새 키, Delete 는 그 항목 기본값, R 은 전부 기본값). 한 키는 한 동작에만 묶여서 이미 쓰는 키를 고르면 두 동작이 키를 맞바꿉니다. Esc, 방향키, Shift/Ctrl/Alt, 숫자패드 1~9(스킬 1~9 와 같이 동작)는 쓸 수 없고 Ctrl+M(효과음 끄기)은 고정입니다. 도움말, 스킬 칸의 키 표시, 시작 화면의 안내는 바꾼 키를 따라갑니다. 규칙은 Core/Logic/KeyBindings.cs (키 값은 Windows 가상 키 코드).
   스킬 툴팁   스킬 칸(기본 공격 포함)에 마우스를 올리면 이름과 키, 모양/대상, 사거리/반경/각도/최대 대상, 재사용/시전 시간, 피해/치유 비율, 부가 효과(이름, 지속 시간, 지속 피해/능력치 증감), 남은 재사용 시간이 나옵니다. 값은 서버가 쓰는 Skill/Status/Hero 표에서 만듭니다(Core/Logic/SkillTip.cs).
   배경음악   존 종류(숲/사막/설원/화산/늪/폐허/해안/수정굴/천상/암흑)마다 다른 곡이 16초 길이로 반복됩니다(드론 + 코드 패드 + 드문 멜로디 + 존 질감). 시야에 보스가 있으면 같은 조(調)의 전투 곡(박자와 베이스/아르페지오가 붙음)으로 바뀌고, 보스가 사라진 뒤 6초가 지나야 평온한 곡으로 돌아갑니다(Core/Logic/BgmDirector.cs). 곡은 외부 음원 없이 코드로 합성하며(Core/Audio/Bgm.cs) 끝과 처음이 이어져 끊김이 없습니다. 재생은 Windows 멀티미디어(MCI)로 하며 곡을 임시 폴더(GameViewer_bgm)에 WAV 로 쓰고 종료할 때 지웁니다. 창이 비활성이 되면 멈추고 돌아오면 이어서 틉니다. Windows 가 아니거나 재생이 실패하면 소리 없이 넘어갑니다.
   서버 선택   GameViewer.json 의 Servers 목록([{"Name","Host","Port"}])이 시작 화면의 서버 칸이 됩니다. 비어 있으면 Host:Port 하나가 "기본 서버" 로 나오고, 명령행으로 준 --host/--port 가 목록에 없으면 "직접 지정" 이 덧붙습니다. 처음 고르는 서버는 명령행 주소 > 마지막에 고른 서버(settings.json 의 LastServer) > Host:Port 순입니다. 각 서버에는 TCP 접속만 해 보고(패킷은 보내지 않음) 10초마다 연결 시간을 갱신하며, 게임 중 핑(패킷 왕복)은 아닙니다(Core/Net/ServerProbe.cs). 데모 모드에는 서버 칸이 없습니다.
@@ -93,7 +102,7 @@
   경험치를 얻거나 레벨이 오르면 로그에 남고, 레벨이 오르면 발밑 충격파와 돌아가는 룬 원·금빛 고리·하늘로 솟는 빛기둥과 부채꼴 빛살·나선 반짝임·화면 금빛 번쩍임·좌우로 뻗는 빛줄기 위의 "LEVEL UP!" 글자와 Lv 장식·상승 팡파르가 3.2초간 나옵니다. 레벨 표가 없는 서버면 Lv 1 에 막대는 비어 있습니다.
 
 [재화]
-  서버가 보내는 재화 통지(ZcCurrencyNotify, 2033)로 보유량을 알고, 화면 오른쪽 위에 큰 재화 알약(골드 = 재화 ID 1, 항상 표시, 다른 재화는 그 아래로 쌓임)으로 그립니다. 얻을 때마다 로그에 남습니다.
+  서버가 보내는 재화 통지(ZcCurrencyNotify, 2033)로 보유량을 알고, 화면 오른쪽 위에 재화 알약으로 그립니다: 골드(재화 ID 1)와 블루 다이아(재화 ID 2, 보석 아이콘)는 0이어도 항상 표시하고, 다른 재화는 그 아래로 쌓입니다. 아이콘은 Assets/currencyicons/currency_<재화 ID>.png(128x128)를 쓰고, 파일이 없으면 코드로 그린 동전/보석으로 대신 그립니다. 얻을 때마다 로그에 남습니다.
 
 [보스 표시]
   GameData 에 Boss/BossPhase JSON 이 있으면(없으면 보스 표시 없이 동작) 몬스터 템플릿 ID 로 보스를 알아보고 다음을 그립니다.
@@ -135,7 +144,7 @@
 [이미지 에셋]  (선택. 사진/3D 렌더 같은 그림을 쓰려면)
   실행 파일 옆 Assets\sprites.json 에 적은 종류만 이미지로 그리고, 나머지는 위의 코드로 그린 그림을 그대로 씁니다. 파일이 없으면 모두 코드 그림입니다.
     { "sprites": [ { "kind": "monster", "template": 5, "pattern": "demon/{0:000}.png", "angles": 18, "height": 4.6 } ] }
-    (영웅/몬스터 그림은 height 에 GameViewer.json 의 EntityScale(기본 1.15)을 곱한 크기로 그린다. 지형/나무는 그대로.)
+    (영웅/몬스터 그림은 height 에 GameViewer.json 의 EntityScale(기본 1.45)을 곱한 크기로 그린다. 지형/나무는 그대로.)
     kind monster|hero|tree, template = Monster/Hero 시트의 Id (tree 는 없음: Block 의 원 = 나무 전부를 이 이미지로 그림, height 는 반경 1 일 때 높이), pattern = sprites.json 기준 경로({0} = 각도(도)), angles = 방향 수(1..72),
     height = 그림 내용이 차지할 높이(단위, 0.5..12). 각도 = 번호*360/angles. 0도는 화면 아래(카메라 쪽)를 보는 모습이고
     커질수록 화면 오른쪽 -> 위 -> 왼쪽으로 돕니다. 이미지는 PNG/JPG/GIF/BMP(투명 배경은 PNG)이며 WebP 는 GDI+ 가 못 읽습니다.
@@ -418,3 +427,25 @@
 - App/Render/CastLight.cs: 시전 중에는 직업색 후광이 몸 뒤에서 차오르고(전사 주황/궁수 연두/마법사 보라/창기사 푸른빛), 스킬이 나가는 순간 가슴께에서 220ms 동안 흰 심 섬광이 터지며, 발동 뒤에는 발밑 땅이 직업색으로 밝아졌다 사라진다.
 - 땅 조명은 어두울수록(ShadowStyle.Dark: 밤/동굴 0..1) 최대 1.7배 크게 번진다.
 - 장면 확인: SNAP_SKILL=1 [SNAP_T0=150000] Snap.exe --heroscene <GameData> out.png
+
+== 3D 몬스터 (OpenGL 실시간) ==
+- 몬스터를 스킨 메시 glTF(Quaternius Ultimate Monsters, CC0)로 OpenGL 에서 실시간으로 그린다. 뼈대 애니메이션(서기/걷기/공격/피격/사망)을 재생하고 GPU 에서 스키닝한다. 방향은 바라보는 쪽으로 부드럽게 돌고, 동작이 바뀔 때 0.14초 섞는다.
+- sprites.json 의 몬스터 항목에 "model3d":"models/Big_Yeti.gltf" 를 적으면 그 종류(와 번호+100 보스판)가 3D 로 그려진다. 선택 "walkStride" = 걷기 클립 한 바퀴에 걷는 거리(월드 단위, 기본 1.6). 크기는 그 항목의 height 에 맞춘다.
+  모델 파일이 없거나 읽는 중이거나 GL 을 쓸 수 없거나(드라이버 3.3 미만, 원격 데스크톱) 사망 클립이 없으면 같은 항목의 이미지 시트(pattern ...)로 그린다. 그래서 시트는 지우지 않는다.
+- 구조: Core/Model3D (GltfModel 로더, Skeleton 클립 샘플링/섞기/관절 팔레트, MonsterAnimState 동작 고르기, MonsterCamera 정사영 카메라, MonsterModels 종류->모델 표) 는 GL/그림 라이브러리와 무관해서 Tests 에서 검사한다.
+  App/Forest/MonsterGl 이 GL 쪽이다: 몬스터 한 마리를 정사각형 칸에 그려(4배 다중표본 FBO -> 해상 -> glReadPixels) 비트맵으로 CreatureRenderer 에 주고, 거기서 기존 시트와 같은 방식으로 y 순서에 맞춰 찍는다. 영웅/이펙트/UI 와의 겹침이 그대로다.
+- 칸 크기는 화면에 찍히는 크기에 맞춘다(16 단위, 64..512). 개체마다 33ms 마다 다시 그리고 한 프레임에 24마리까지 그린다(넘으면 지난 그림을 쓴다). 쓰러지는 동작이 끝난 시체는 다시 그리지 않는다.
+- 끄려면 --no-3d, 환경변수 GAMEVIEWER_NO3D(숲 배경과 함께) 또는 GAMEVIEWER_NO3DMONSTER(몬스터만). 상태/오류는 ForestGL.log 에 남는다.
+- 모델 추가: Assets/models 에 .gltf 를 넣고(스킨 메시, 관절 64개 이하, 보간 LINEAR/STEP) sprites.json 항목에 model3d 를 적는다. 동작 클립은 이름으로 고른다(AnimRoles.Names: Idle/Flying_Idle, Walk/Fast_Flying/Run, Punch/Bite_Front/Headbutt, HitReact/HitRecieve, Death).
+- 셰이더 점검(GPU/Windows 없이): Tools/monster_gl_check/gl_check.py 가 Core 가 계산한 정점/팔레트/행렬을 MonsterShaders.cs 의 GLSL 그대로 헤드리스 GL 에 그려 PNG 로 만든다.
+
+3D 전용 몬스터: sprites.json 몬스터 항목에 "pattern" 없이 "model3d", "height", "attack", "fx", "flying", "idleAnim"(선택 "halfW", "walkStride")만 적는다. 이미지 시트 없음; 3D 를 못 쓰면 코드로 그린 몬스터로 대신한다.
+
+== 3D 영웅 (OpenGL 실시간) ==
+몬스터와 같은 경로로 그린다(MonsterGl). sprites.json 의 hero 항목에 "model3d" 를 적으면 된다.
+  1 전사 = Warrior, 2 궁수 = Ranger, 3 마법사 = Wizard, 4 창병 = Monk   (Assets/models/*.gltf, RPG Characters - Nov 2020 by Quaternius, CC0)
+- 무기/투구/어깨 갑옷처럼 뼈에 붙은 별도 메시는 "강체 가상 관절"로 같은 팔레트에 실려 몸과 함께 움직인다. 텍스처는 파트마다 따로 바인딩.
+- 동작: 대기/걷기/공격(Sword_Attack, Staff_Attack, Bow_Shoot, Dagger_Attack ...)/피격/사망/시전(Spell1) - 시전은 시전 시간에 클립을 맞춘다.
+- 공격 클립 길이는 HeroWeapons.TotalMs(520ms)에 맞춘다. 영웅도 이미지 시트 없이 model3d 와 height 만 적는다(pattern 없음). --no-3d 이거나 GL 을 못 쓰면 코드로 그린 영웅으로 돌아간다.
+- 점검: Tools/monster_gl_check/gl_check.py <출력.png> heroes
+

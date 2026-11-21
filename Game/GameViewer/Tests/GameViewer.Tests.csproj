@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <!-- 3D 숲의 순수 계산부만 가져온다(GL/GDI+ 를 쓰는 Gl, GlContext, ForestRenderer, ForestBackdrop 은 제외) -->
-    <Compile Include="..\App\Forest\*.cs" Exclude="..\App\Forest\Gl.cs;..\App\Forest\GlContext.cs;..\App\Forest\ForestRenderer.cs;..\App\Forest\ForestBackdrop.cs" Link="Forest\%(Filename)%(Extension)" />
+    <Compile Include="..\App\Forest\*.cs" Exclude="..\App\Forest\Gl.cs;..\App\Forest\GlContext.cs;..\App\Forest\ForestRenderer.cs;..\App\Forest\ForestBackdrop.cs;..\App\Forest\MonsterGl.cs" Link="Forest\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

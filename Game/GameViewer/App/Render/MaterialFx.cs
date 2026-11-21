@@ -24,7 +24,7 @@ namespace GameViewer.App.Render
         private static int Dark(int rgb, float k) { int r = (int)(((rgb >> 16) & 255) * k), g = (int)(((rgb >> 8) & 255) * k), b = (int)((rgb & 255) * k); return (r << 16) | (g << 8) | b; }
 
         /// <summary>조각 하나. 재질에 따라 모양이 다르다(각진 조각 / 물방울 / 잎 / 금속 불꽃 / 불씨 / 영기).</summary>
-        private void Piece(Graphics g, HitMat m, int c1, int c2, float x, float y, float r, float rot, float vx, float vy, int a, float rnd)
+        private void Piece(IGfx g, HitMat m, int c1, int c2, float x, float y, float r, float rot, float vx, float vy, int a, float rnd)
         {
             int col = rnd < 0.5f ? c1 : c2;
             switch (m)
@@ -64,7 +64,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void Chunk(Graphics g, int rgb, float x, float y, float r, float rot, int a)
+        private void Chunk(IGfx g, int rgb, float x, float y, float r, float rot, int a)
         {
             float c = (float)Math.Cos(rot), s = (float)Math.Sin(rot);
             // 찌그러진 사각형: 두 변 길이를 다르게 해 돌/뼈 조각처럼 보이게 한다
@@ -75,7 +75,7 @@ namespace GameViewer.App.Render
             g.FillPolygon(Br(rgb, a), _q);
         }
 
-        private void Leaf(Graphics g, int rgb, float x, float y, float r, float rot, int a)
+        private void Leaf(IGfx g, int rgb, float x, float y, float r, float rot, int a)
         {
             float c = (float)Math.Cos(rot), s = (float)Math.Sin(rot);
             _q[0] = new PointF(x - c * r, y - s * r); _q[1] = new PointF(x - s * r * 0.45f, y + c * r * 0.45f);
@@ -84,7 +84,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>맞았을 때 튀는 재질 조각. dirA 는 맞은 방향(NaN 이면 사방), p 는 연출 진행도 0~1.</summary>
-        public void Debris(Graphics g, HitMat m, uint seed, float sx, float cy, float dirA, bool heavy, float p, ViewState v)
+        public void Debris(IGfx g, HitMat m, uint seed, float sx, float cy, float dirA, bool heavy, float p, ViewState v)
         {
             int c1, c2; HitMaterial.Colors(m, out c1, out c2);
             int n = heavy ? 9 : 5;
@@ -101,7 +101,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>죽을 때 터지는 재질 파열. size 는 몸 크기(월드 단위, 대략 키).</summary>
-        public void Burst(Graphics g, HitMat m, uint seed, float sx, float sy, float p, ViewState v, float size)
+        public void Burst(IGfx g, HitMat m, uint seed, float sx, float sy, float p, ViewState v, float size)
         {
             if (m == HitMat.Flesh) return;                       // 살점 몬스터는 기존 연기만
             int c1, c2; HitMaterial.Colors(m, out c1, out c2);

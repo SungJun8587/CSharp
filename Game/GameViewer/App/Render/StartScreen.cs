@@ -10,6 +10,9 @@ using System.Drawing.Imaging;
 using GameViewer.App.Forest;
 using GameViewer.Core.Data;
 using GameViewer.Core.Logic;
+using GameViewer.Core.Model3D;
+using GameViewer.Core.Protocol;
+using GameViewer.Core.World;
 using GameViewer.Core.Net;
 
 namespace GameViewer.App.Render
@@ -51,9 +54,9 @@ namespace GameViewer.App.Render
             _res = res;
             _tip = new TipBox(res);
             ColorMatrix m = new ColorMatrix(new float[][] {
-                new float[] { 0.55f, 0, 0, 0, 0 }, new float[] { 0, 0.55f, 0, 0, 0 }, new float[] { 0, 0, 0.6f, 0, 0 },
-                new float[] { 0, 0, 0, 0.8f, 0 }, new float[] { 0, 0, 0, 0, 1 } });
-            _dim.SetColorMatrix(m);
+                new float[] { 0.82f, 0, 0, 0, 0 }, new float[] { 0, 0.82f, 0, 0, 0 }, new float[] { 0, 0, 0.86f, 0, 0 },
+                new float[] { 0, 0, 0, 0.92f, 0 }, new float[] { 0, 0, 0, 0, 1 } });
+            GfxAttr.SetColorMatrix(_dim, m);
         }
 
         public void Dispose() { _dim.Dispose(); }
@@ -165,19 +168,23 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 공통
 
-        private void Background(Graphics g, int w, int h, int dark)
+        private bool _forestDrawn;
+        private static uint _bigHero;           // 이번 그리기에서 숲 위에 얹을 3D 영웅(0 없음)
+
+        private void Background(IGfx g, int w, int h, int dark)
         {
+            _forestDrawn = false;
             // 배경 우선순위: 3D 숲(OpenGL) > Assets/backdrop 이미지 > 초록 그라데이션. 숲을 만드는 동안(Pending)과 GL 을 못 쓸 때(Unavailable)는 다음 것으로 넘어간다.
-            if (ForestBackdrop.Draw(g, w, h) == ForestResult.Drawn) g.FillRectangle(_res.Brush(Math.Max(40, dark - 90), 4, 10, 6), 0, 0, w, h);
+            if (ForestBackdrop.Draw(g, w, h) == ForestResult.Drawn) { g.FillRectangle(_res.Brush(Math.Max(40, dark - 90), 4, 10, 6), 0, 0, w, h); _forestDrawn = true; }
             else if (Backdrop.Draw(g, w, h)) g.FillRectangle(_res.Brush(dark, 4, 10, 6), 0, 0, w, h);
             else
             {
-                using (LinearGradientBrush b = new LinearGradientBrush(new Rectangle(0, 0, w, h + 1), Color.FromArgb(22, 54, 34), Color.FromArgb(6, 14, 10), LinearGradientMode.Vertical))
+                using (LinearGradientBrush b = GfxBrush.Linear(new Rectangle(0, 0, w, h + 1), Color.FromArgb(22, 54, 34), Color.FromArgb(6, 14, 10), LinearGradientMode.Vertical))
                     g.FillRectangle(b, 0, 0, w, h);
             }
         }
 
-        private void Title(Graphics g, int w, int h)
+        private void Title(IGfx g, int w, int h)
         {
             RectangleF r = new RectangleF(0, Math.Max(14f, h * 0.05f), w, 50);
             _res.OutlinedText(g, "GAME VIEWER", _res.Huge, Color.FromArgb(255, 235, 150), w / 2f, r.Y, TitleFmt(w));
@@ -185,7 +192,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>3D 숲을 쓰지 못할 때(사용 안 함/오류) 원인을 화면 왼쪽 아래에 작게 적는다. 정상이면 아무것도 그리지 않는다.</summary>
-        private void ForestNote(Graphics g, int w, int h)
+        private void ForestNote(IGfx g, int w, int h)
         {
             string st = ForestBackdrop.Status;
             if (!ForestBackdrop.Enabled || ForestBackdrop.IsReady || st == null || !st.StartsWith("사용 안 함", StringComparison.Ordinal)) return;
@@ -202,7 +209,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 로딩
 
         /// <summary>로딩 화면. shown 은 화면에 보이는 진행률(0..1), label 은 지금 읽는 것.</summary>
-        public void DrawLoading(Graphics g, int w, int h, float shown, string label, long now)
+        public void DrawLoading(IGfx g, int w, int h, float shown, string label, long now)
         {
             shown = Math.Max(0f, Math.Min(1f, shown));
             Background(g, w, h, 150);
@@ -216,15 +223,15 @@ namespace GameViewer.App.Render
             float fw = bw * shown;
             if (fw >= 1f)
             {
-                using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(x, y, Math.Max(2f, fw), bh), Color.FromArgb(150, 230, 120), Color.FromArgb(60, 160, 90), LinearGradientMode.Vertical))
+                using (LinearGradientBrush b = GfxBrush.Linear(new RectangleF(x, y, Math.Max(2f, fw), bh), Color.FromArgb(150, 230, 120), Color.FromArgb(60, 160, 90), LinearGradientMode.Vertical))
                     g.FillRectangle(b, x, y, fw, bh);
                 g.FillRectangle(_res.Brush(60, 255, 255, 255), x, y, fw, 5);
                 // 지나가는 빛줄기
                 float sx = x + (float)((now % 1400) / 1400.0) * (fw + 60f) - 40f;
-                Region old = g.Clip;
+                GfxState old = g.Save();
                 g.SetClip(new RectangleF(x, y, fw, bh));
                 g.FillRectangle(_res.Brush(55, 255, 255, 255), sx, y, 26, bh);
-                g.Clip = old;
+                g.Restore(old);
             }
             g.DrawString(TipText((int)((now / 3500) % 5)), _res.Small, _res.Brush(Color.FromArgb(200, 215, 200)), new RectangleF(0, y + 36, w, 20), _res.Center);
         }
@@ -241,23 +248,76 @@ namespace GameViewer.App.Render
         /// <summary>선택된 영웅을 이번 그리기의 3D 숲 위에 세우도록 부탁해 둔다(Background 보다 먼저). 영웅 템플릿 1~4 = 전사/궁수/마법사/창기사, 그 밖은 영웅 없이 숲만 보인다.</summary>
         private static void RequestHero(List<uint> ids, int sel, int w)
         {
+            _bigHero = 0;
             float ox = Inset(w);
             if (ox <= 0f || ids.Count == 0) return;
             uint id = ids[Math.Max(0, Math.Min(ids.Count - 1, sel))];
             if (id < 1 || id > 4) return;
-            ForestBackdrop.ShowHero((int)id - 1, (ox * 0.5f) / Math.Max(1, w) * 2f - 1f);
+            ModelSpec spec = MonsterModels.Get(false, id);
+            bool body3d = spec != null && MonsterGl.Usable;                        // glTF 영웅을 쓸 수 있으면 처음부터 절차적 몸은 빼고 마법진만(읽는 동안은 빈 숲)
+            if (spec != null) { _bigHero = id; _bigHeroSeen = true; }
+            ForestBackdrop.ShowHero((int)id - 1, (ox * 0.5f) / Math.Max(1, w) * 2f - 1f, body3d);
+        }
+
+        // ------------------------------------------------------------------ 왼쪽 영웅 회전 (마우스로 끌면 360도)
+
+        private const float DragRadPerPx = (float)(2 * Math.PI) / 540f;       // 540px 끌면 한 바퀴
+        private float _heroYaw; private bool _heroDrag; private int _heroDragX;
+        public bool HeroDragging { get { return _heroDrag; } }
+
+        /// <summary>왼쪽 영웅이 서 있는 자리(숲이 비워 둔 왼쪽 띠)인지. 3D 영웅이 보일 때만 true.</summary>
+        public static bool HeroViewHit(int w, int h, float x, float y)
+        {
+            float ox = Inset(w);
+            return ox > 0f && x >= 0f && x < ox && y > h * 0.05f && y < h * 0.98f && _bigHeroSeen;
+        }
+        private static bool _bigHeroSeen;      // 3D 영웅이 한 번이라도 그려졌는지(그리는 사이 잠깐 비는 일 없이 판정하려고 따로 둔다)
+        /// <summary>마우스 휠로도 돌린다(한 칸 = 15도).</summary>
+        public void RotateHero(int wheelDelta) { _heroYaw += (wheelDelta / 120f) * (float)(Math.PI / 12.0); }
+        public void BeginHeroDrag(int x) { _heroDrag = true; _heroDragX = x; }
+        public void HeroDrag(int x) { if (!_heroDrag) return; _heroYaw += (x - _heroDragX) * DragRadPerPx; _heroDragX = x; }
+        public void EndHeroDrag() { _heroDrag = false; }
+
+        private readonly Dictionary<uint, Entity> _bigEnt = new Dictionary<uint, Entity>();
+        private long _bigNext; private uint _bigLast;
+
+        /// <summary>숲 길에 선 자리(마법진 한가운데)에 glTF 영웅을 얹는다. 크기와 발 위치는 숲 카메라 투영에서 얻고, 5초 남짓마다 공격 동작(마법진 충격 고리와 같은 박자)을 한다.</summary>
+        private void DrawBigHero(IGfx g, int w, int h, long now)
+        {
+            if (_bigHero == 0 || !_forestDrawn) return;
+            uint id = _bigHero;
+            AssetSet s = AssetSprites.Find(false, id); ModelSpec spec = MonsterModels.Get(false, id);
+            float fx, fy, hy;
+            if (s == null || spec == null || !ForestBackdrop.HeroScreen(out fx, out fy, out hy)) return;
+            Entity e;
+            if (!_bigEnt.TryGetValue(id, out e)) { e = new Entity(); e.Id = 0xF1000000UL + id; e.TemplateId = id; e.Type = (byte)EntityType.Player; _bigEnt[id] = e; }
+            if (_bigLast != id) { _bigLast = id; _heroYaw = 0f; _bigNext = now + (long)(HeroShowcase.AtkStart * 1000f); }
+            if (now >= _bigNext) { e.AttackAnimMs = now; _bigNext = now + (long)(HeroShowcase.Period * 1000f); }          // 마법진 충격 고리와 같은 박자로 한 바퀴마다 한 번
+            float ya = 0.25f + _heroYaw; e.FaceX = (float)Math.Sin(ya); e.FaceY = (float)Math.Cos(ya);                                                                                         // 카메라를 거의 정면으로 바라본다
+            float hPx = (fy - hy) * h;                                                                                              // 모델 키 3 단위가 화면에서 차지하는 높이(px)
+            if (hPx < 40f) return;
+            float H = Math.Max(0.5f, s.Look.H);
+            double ppu = hPx * 1.4 / H;                                                                                           // 영웅마다 키가 달라도(2.8~3.6) 화면에서 같은 높이로 맞춘다(머리가 잘리지 않게 위에 여유)
+            g.FillEllipse(_res.Brush(60, 0, 0, 0), fx * w - hPx * 0.2f, fy * h - hPx * 0.035f, hPx * 0.4f, hPx * 0.07f);          // 발 밑 그림자
+            Bitmap bmp = MonsterGl.Frame(e, spec, H, ppu, now, false);
+            if (bmp == null) return;
+            float cw = MonsterCamera.CellWorld(H) * (float)ppu;
+            InterpolationMode im = g.InterpolationMode; g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.DrawImage(bmp, fx * w - cw / 2f, fy * h - cw * MonsterCamera.FootRowFrac, cw, cw);
+            g.InterpolationMode = im;
         }
 
         /// <summary>영웅 선택 화면. sel 은 선택된 카드, hover 는 마우스가 올라간 카드(-1 없음), target 은 접속 대상 설명.</summary>
-        public void DrawSelect(Graphics g, int w, int h, GameData data, int sel, int hover, string target, long now) { DrawSelect(g, w, h, data, sel, hover, target, now, uint.MaxValue); }
+        public void DrawSelect(IGfx g, int w, int h, GameData data, int sel, int hover, string target, long now) { DrawSelect(g, w, h, data, sel, hover, target, now, uint.MaxValue); }
 
         /// <summary>zoneId 가 uint.MaxValue(존 없음)가 아니면 시작 버튼 옆에 맵 선택 칸을 그린다. hover: -2 시작 버튼, -3-i 맵 칸 i.</summary>
-        public void DrawSelect(Graphics g, int w, int h, GameData data, int sel, int hover, string target, long now, uint zoneId)
+        public void DrawSelect(IGfx g, int w, int h, GameData data, int sel, int hover, string target, long now, uint zoneId)
         {
             List<uint> ids = data.HeroIds();
             ComputeMaxes(data, ids);
             RequestHero(ids, sel, w);
             Background(g, w, h, 130);
+            DrawBigHero(g, w, h, now);
             Title(g, w, h);
             ForestNote(g, w, h);
             if (ids.Count == 0)
@@ -272,7 +332,7 @@ namespace GameViewer.App.Render
             }
             RectangleF b = StartRect(w, h);
             bool hot = hover == -2;
-            using (LinearGradientBrush br = new LinearGradientBrush(b, hot ? Color.FromArgb(150, 235, 130) : Color.FromArgb(110, 200, 100), hot ? Color.FromArgb(70, 170, 90) : Color.FromArgb(50, 140, 70), LinearGradientMode.Vertical))
+            using (LinearGradientBrush br = GfxBrush.Linear(b, hot ? Color.FromArgb(150, 235, 130) : Color.FromArgb(110, 200, 100), hot ? Color.FromArgb(70, 170, 90) : Color.FromArgb(50, 140, 70), LinearGradientMode.Vertical))
                 g.FillRectangle(br, b.X, b.Y, b.Width, b.Height);
             g.DrawRectangle(_res.Pen(230, 230, 255, 200, 1.6f), b.X, b.Y, b.Width, b.Height);
             g.DrawString("게임 시작", _res.Big, _res.Brush(Color.FromArgb(14, 30, 16)), b, _res.Center);
@@ -300,7 +360,7 @@ namespace GameViewer.App.Render
                         case MapKind.Dark: c1 = Color.FromArgb(170, 100, 240); c2 = Color.FromArgb(34, 18, 52); break;
                         default: c1 = Color.FromArgb(110, 190, 110); c2 = Color.FromArgb(40, 110, 60); break;
                     }
-                    using (LinearGradientBrush br = new LinearGradientBrush(zr, on ? c1 : Color.FromArgb(60, 70, 64), on ? c2 : Color.FromArgb(26, 32, 28), LinearGradientMode.Vertical))
+                    using (LinearGradientBrush br = GfxBrush.Linear(zr, on ? c1 : Color.FromArgb(60, 70, 64), on ? c2 : Color.FromArgb(26, 32, 28), LinearGradientMode.Vertical))
                         g.FillRectangle(br, zr.X, zr.Y, zr.Width, zr.Height);
                     g.DrawRectangle(_res.Pen(on ? 255 : (zh ? 190 : 110), on ? 255 : 210, on ? 240 : 225, on ? 190 : 200, on ? 2.2f : 1f), zr.X, zr.Y, zr.Width, zr.Height);
                     g.DrawString(id + "  " + ZoneTheme.NameOf(id), _res.Bold, _res.Brush(on ? Color.FromArgb(24, 20, 10) : Color.FromArgb(215, 225, 215)), zr, _res.Center);
@@ -341,7 +401,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>능력치 한 줄: 이름 / 영웅들 중 가장 높은 값을 100% 로 한 막대 / 값.</summary>
-        private void StatBar(Graphics g, float x, float y, float w, string label, string value, float ratio, Color c)
+        private void StatBar(IGfx g, float x, float y, float w, string label, string value, float ratio, Color c)
         {
             g.DrawString(label, _res.Small, _res.Brush(Color.FromArgb(190, 205, 192)), x, y);
             float bx = x + 34f, bw = w - 34f - 44f;
@@ -351,7 +411,7 @@ namespace GameViewer.App.Render
             g.DrawString(value, _res.Small, _res.Brush(Color.FromArgb(232, 240, 232)), new RectangleF(x + w - 44f, y, 44f, 16f), RightFmt());
         }
 
-        private void DrawCard(Graphics g, int w, int h, GameData data, List<uint> ids, int i, bool sel, bool hover, long now)
+        private void DrawCard(IGfx g, int w, int h, GameData data, List<uint> ids, int i, bool sel, bool hover, long now)
         {
             RectangleF rc = CardRect(w, h, ids.Count, i);
             HeroRow r = data.Hero(ids[i]);
@@ -387,7 +447,7 @@ namespace GameViewer.App.Render
             g.DrawString((i + 1).ToString(), _res.Bold, _res.Brush(Color.FromArgb(200, 230, 230, 200)), rc.X + 8, rc.Y + 4);
         }
 
-        private void DrawServers(Graphics g, int w, int h, long now)
+        private void DrawServers(IGfx g, int w, int h, long now)
         {
             ServerPanel sp = Servers;
             RectangleF r0 = ServerRect(w, h, 0);
@@ -417,10 +477,35 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void DrawHeroArt(Graphics g, uint id, RectangleF art, bool sel, long now)
+        private readonly Dictionary<uint, Entity> _heroEnt = new Dictionary<uint, Entity>();
+
+        /// <summary>영웅 카드의 3D 모습. 카드마다 가짜 엔티티 하나로 MonsterGl 에 맡긴다(대기 동작, 선택된 카드는 살짝 좌우로 돈다). 모델을 읽는 중이면 false(색 원).</summary>
+        private bool Draw3DHero(IGfx g, uint id, AssetSet s, RectangleF art, float footY, bool sel, long now)
+        {
+            ModelSpec spec = MonsterModels.Get(false, id);
+            if (spec == null) return false;
+            Entity e;
+            if (!_heroEnt.TryGetValue(id, out e)) { e = new Entity(); e.Id = 0xF0000000UL + id; e.TemplateId = id; e.Type = (byte)EntityType.Player; _heroEnt[id] = e; }
+            e.FaceX = sel ? 0.55f * (float)Math.Sin(now / 700.0) : 0f; e.FaceY = 1f;
+            float h = Math.Max(0.5f, s.Look.H);
+            double ppu = (art.Height - 16f) / h;
+            Bitmap bmp = MonsterGl.Frame(e, spec, h, ppu, now, false);
+            if (bmp == null) return false;
+            g.FillEllipse(_res.Brush(90, 0, 0, 0), art.X + art.Width * 0.22f, footY - 7, art.Width * 0.56f, 14);          // 발 밑 그림자(모습이 나올 때만)
+            float cw = MonsterCamera.CellWorld(h) * (float)ppu;
+            RectangleF dst = new RectangleF(art.X + (art.Width - cw) / 2f, footY - cw * MonsterCamera.FootRowFrac, cw, cw);
+            InterpolationMode im = g.InterpolationMode; g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            if (sel) g.DrawImage(bmp, dst.X, dst.Y, dst.Width, dst.Height);
+            else g.DrawImage(bmp, dst, new RectangleF(0, 0, bmp.Width, bmp.Height), GraphicsUnit.Pixel, _dim);
+            g.InterpolationMode = im;
+            return true;
+        }
+
+        private void DrawHeroArt(IGfx g, uint id, RectangleF art, bool sel, long now)
         {
             AssetSet s = AssetSprites.Find(false, id);
             float footY = art.Bottom - 10;
+            if (s != null && s.Frames == null && MonsterModels.Has(false, id) && MonsterGl.Usable) { Draw3DHero(g, id, s, art, footY, sel, now); return; }       // 3D 전용 영웅: OpenGL 로 그린다(읽는 동안은 아무것도 그리지 않는다: 색 원/그림자 없음)
             g.FillEllipse(_res.Brush(90, 0, 0, 0), art.X + art.Width * 0.22f, footY - 7, art.Width * 0.56f, 14);          // 발 밑 그림자
             if (s == null || s.Frames == null || s.Frames.Length == 0)
             {

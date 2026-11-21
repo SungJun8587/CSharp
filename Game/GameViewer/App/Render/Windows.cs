@@ -51,7 +51,7 @@ namespace GameViewer.App.Render
             return m;
         }
 
-        public void DrawWorldMap(Graphics g, ViewerSession s, ViewState v, long now)
+        public void DrawWorldMap(IGfx g, ViewerSession s, ViewState v, long now)
         {
             GameData d = s.Data;
             g.FillRectangle(_res.Brush(150, 0, 0, 0), 0, 0, v.Width, v.Height);
@@ -65,7 +65,7 @@ namespace GameViewer.App.Render
             string help = "휠: 확대   드래그: 이동   클릭: 그곳으로 이동   M / Esc: 닫기";
             _res.OutlinedText(g, help, _res.Small, Color.FromArgb(200, 210, 200), win.Right - 16, win.Y + 16, _right);
 
-            GraphicsState gs = g.Save();
+            GfxState gs = g.Save();
             g.SetClip(area, CombineMode.Replace);
             g.FillRectangle(_res.Brush(255, 8, 10, 12), area);
             float x0 = m.ToScreenX(d.WorldMinX), y0 = m.ToScreenY(d.WorldMinY), x1 = m.ToScreenX(d.WorldMaxX), y1 = m.ToScreenY(d.WorldMaxY);
@@ -190,14 +190,14 @@ namespace GameViewer.App.Render
             _res.OutlinedText(g, "확대 x" + m.Zoom.ToString("0.0"), _res.Small, Color.FromArgb(210, 220, 210), win.Right - 16, ly + 2, _right);
         }
 
-        private float Legend(Graphics g, float x, float y, Color c, string text)
+        private float Legend(IGfx g, float x, float y, Color c, string text)
         {
             g.FillEllipse(_res.Brush(c), x, y + 3, 11, 11);
             g.DrawString(text, _res.Small, _res.Brush(Color.FromArgb(225, 232, 225)), x + 15, y + 1);
             return x + 15 + g.MeasureString(text, _res.Small).Width;
         }
 
-        private void DrawGrid(Graphics g, GameData d, MapProjection m, RectangleF area)
+        private void DrawGrid(IGfx g, GameData d, MapProjection m, RectangleF area)
         {
             float step = m.Zoom >= 4f ? 25f : (m.Zoom >= 2f ? 50f : 100f);
             float gx = (float)Math.Ceiling(d.WorldMinX / step) * step;
@@ -249,7 +249,7 @@ namespace GameViewer.App.Render
             return new RectangleF(r.Right - 218, r.Y + 11, 150, 8);
         }
 
-        public void DrawSettings(Graphics g, ViewState v, long now)
+        public void DrawSettings(IGfx g, ViewState v, long now)
         {
             ViewSettings st = v.Settings;
             g.FillRectangle(_res.Brush(150, 0, 0, 0), 0, 0, v.Width, v.Height);
@@ -330,7 +330,7 @@ namespace GameViewer.App.Render
 
         public const int LogPanelLines = 8;
 
-        public void DrawLogPanel(Graphics g, ViewerSession s, ViewState v, long now)
+        public void DrawLogPanel(IGfx g, ViewerSession s, ViewState v, long now)
         {
             int skills = s.MySkills.Count;
             RectangleF p = LogPanel(v, skills);
@@ -369,7 +369,7 @@ namespace GameViewer.App.Render
 
         // ================================================================== 키 설정
 
-        private const int KeyRowsLeft = 14;
+        private const int KeyRowsLeft = 15;
 
         public static RectangleF KeysWindow(ViewState v)
         {
@@ -379,7 +379,7 @@ namespace GameViewer.App.Render
 
         private static float KeyPitch(ViewState v) { return Math.Max(20f, Math.Min(30f, (KeysWindow(v).Height - 130f) / KeyRowsLeft)); }
 
-        /// <summary>동작(BindAction 번호) i 의 줄. 왼쪽 열 14 개는 일반 동작, 오른쪽 열은 스킬 1~9.</summary>
+        /// <summary>동작(BindAction 번호) i 의 줄. 왼쪽 열 15 개는 일반 동작, 오른쪽 열은 스킬 1~9.</summary>
         public static RectangleF KeyRow(ViewState v, int i)
         {
             RectangleF win = KeysWindow(v);
@@ -396,7 +396,7 @@ namespace GameViewer.App.Render
             return new RectangleF(last.X, last.Bottom + 12f, last.Width, 28f);
         }
 
-        public void DrawKeys(Graphics g, ViewState v, long now)
+        public void DrawKeys(IGfx g, ViewState v, long now)
         {
             ViewSettings st = v.Settings;
             g.FillRectangle(_res.Brush(170, 0, 0, 0), 0, 0, v.Width, v.Height);

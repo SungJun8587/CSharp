@@ -122,13 +122,12 @@ namespace GameViewer.App.Render
         /// 외곽선 글자는 DrawString 을 5번 부르는 비싼 그림이라, (글자, 글꼴, 색, 정렬, 배율)마다 한 번만 비트맵으로 그려 두고 그 비트맵을 찍는다.
         /// 변환이 회전/비균일 배율이면 예전처럼 직접 그린다. 투명도는 찍을 때 곱한다(색의 알파 = 페이드).
         /// </remarks>
-        public void OutlinedText(Graphics g, string text, Font font, Color color, float x, float y, StringFormat fmt)
+        public void OutlinedText(IGfx g, string text, Font font, Color color, float x, float y, StringFormat fmt)
         {
             if (!TextCacheOn || string.IsNullOrEmpty(text) || text.Length > 80 || color.A < 4) { if (!string.IsNullOrEmpty(text) && color.A >= 4) OutlinedTextDirect(g, text, font, color, x, y, fmt); return; }
             float m11, m22, dx, dy;
-            using (Matrix m = g.Transform)
             {
-                float[] e = m.Elements;
+                float[] e = g.GetTransformElements();
                 if (Math.Abs(e[1]) > 0.001f || Math.Abs(e[2]) > 0.001f || Math.Abs(e[0] - e[3]) > 0.01f) { OutlinedTextDirect(g, text, font, color, x, y, fmt); return; }
                 m11 = e[0]; m22 = e[3]; dx = e[4]; dy = e[5];
             }
@@ -148,7 +147,7 @@ namespace GameViewer.App.Render
             float px = m11 * x + dx, py = m22 * y + dy;        // 화면(변환 후) 기준점
             float left = ha == StringAlignment.Near ? px - TextPad : (ha == StringAlignment.Center ? px - te.Bmp.Width / 2f : px - te.Bmp.Width + TextPad);
             float top = va == StringAlignment.Near ? py - TextPad : (va == StringAlignment.Center ? py - te.Bmp.Height / 2f : py - te.Bmp.Height + TextPad);
-            GraphicsState st = g.Save();
+            GfxState st = g.Save();
             g.ResetTransform();
             System.Drawing.Imaging.ImageAttributes ia = color.A >= 252 ? null : AlphaAttr(color.A / 255f);
             Rectangle dst = new Rectangle((int)Math.Round(left), (int)Math.Round(top), te.Bmp.Width, te.Bmp.Height);
@@ -158,7 +157,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>캐시 없이 예전 방식(5번 그리기)으로 그린다.</summary>
-        public void OutlinedTextDirect(Graphics g, string text, Font font, Color color, float x, float y, StringFormat fmt)
+        public void OutlinedTextDirect(IGfx g, string text, Font font, Color color, float x, float y, StringFormat fmt)
         {
             SolidBrush shadow = Brush(Color.FromArgb(Math.Min(220, (int)color.A), 0, 0, 0));
             g.DrawString(text, font, shadow, x - 1, y, fmt);
@@ -189,7 +188,7 @@ namespace GameViewer.App.Render
             if (_alphaAttr[k] == null)
             {
                 System.Drawing.Imaging.ColorMatrix cm = new System.Drawing.Imaging.ColorMatrix(); cm.Matrix33 = k / 16f;
-                System.Drawing.Imaging.ImageAttributes ia = new System.Drawing.Imaging.ImageAttributes(); ia.SetColorMatrix(cm); _alphaAttr[k] = ia;
+                System.Drawing.Imaging.ImageAttributes ia = new System.Drawing.Imaging.ImageAttributes(); GfxAttr.SetColorMatrix(ia, cm); _alphaAttr[k] = ia;
             }
             return _alphaAttr[k];
         }
@@ -203,7 +202,7 @@ namespace GameViewer.App.Render
             return sf;
         }
 
-        private TextEntry MakeText(Graphics like, string text, Font font, float scale, Color color, StringAlignment ha, StringAlignment va)
+        private TextEntry MakeText(IGfx like, string text, Font font, float scale, Color color, StringAlignment ha, StringAlignment va)
         {
             ++TextCacheMisses;
             Font f = ScaledFont(font, (int)Math.Round(scale * 8f));
@@ -212,7 +211,7 @@ namespace GameViewer.App.Render
             SizeF sz = _meas.MeasureString(text, f);
             int bw = (int)Math.Ceiling(sz.Width) + TextPad * 2 + 2, bh = (int)Math.Ceiling(sz.Height) + TextPad * 2;
             Bitmap bmp = new Bitmap(bw, bh, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
-            using (Graphics lg = Graphics.FromImage(bmp))
+            using (GdiGfx lg = GdiGfx.FromImage(bmp))
             using (StringFormat sf = new StringFormat())
             {
                 lg.TextRenderingHint = like.TextRenderingHint; lg.SmoothingMode = like.SmoothingMode;

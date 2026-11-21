@@ -18,6 +18,7 @@ C# 공용 라이브러리. 어셈블리 셋으로 나뉘며 `Core.Net`, `Core.Re
     dotnet run --project demo/DispatcherDemo/Core.DispatcherDemo.csproj  # 패킷 디스패처 테스트
     dotnet run --project demo/ThreadDemo/Core.ThreadDemo.csproj  # 스레드 유틸 정확성/스트레스 테스트
     dotnet run --project demo/RedisDemo/Core.RedisDemo.csproj    # Redis 테스트 (PATH에 redis-server 필요)
+    dotnet run --project demo/DataDemo/Core.DataDemo.csproj      # Data 통합 시험 (환경변수 CORE_DATA_TEST_DB 에 시험 전용 DB 연결 문자열, 없으면 DB 없이 되는 것만)
 
 각 데모는 마지막 줄에 `ALL PASSED`가 나와야 한다.
 

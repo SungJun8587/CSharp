@@ -19,7 +19,7 @@ namespace GameViewer.App.Render
         public void Dispose() { _cache.Dispose(); }
 
         /// <summary>나무 한 그루. (wx,wy)는 줄기 밑동의 월드 좌표, r 은 수관 반경(unit).</summary>
-        public void Draw(Graphics g, ViewState v, float wx, float wy, float r, uint seed, bool dark)
+        public void Draw(IGfx g, ViewState v, float wx, float wy, float r, uint seed, bool dark)
         {
             r *= 0.86f + ((seed >> 5) & 15) / 15f * 0.34f;          // 같은 데이터 반지름이라도 보이는 크기는 조금씩 다르게
             float sx = v.ToScreenX(wx), sy = v.ToScreenY(wy);
@@ -44,7 +44,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>이미지 나무. 반경에 비례해 키우고, 모양은 seed 로 고르며, 월드 바깥(dark)은 색을 어둡게 한 파생 그림을 쓴다.</summary>
-        private void DrawAsset(Graphics g, ViewState v, AssetSet a, float sx, float sy, float pr, float r, uint seed, bool dark)
+        private void DrawAsset(IGfx g, ViewState v, AssetSet a, float sx, float sy, float pr, float r, uint seed, bool dark)
         {
             float rq = (float)(Math.Max(1, Math.Round(r / 0.3)) * 0.3);
             float ppu = CreatureRenderer.QuantizePpu(v.Scale);
@@ -67,13 +67,13 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>나무 밑 그림자: 바깥은 옅게, 안쪽은 진하게 두 겹으로 가장자리를 부드럽게 한다.</summary>
-        private void DrawShadow(Graphics g, float sx, float sy, float pr, bool dark)
+        private void DrawShadow(IGfx g, float sx, float sy, float pr, bool dark)
         {
             // 키가 큰 나무라 오른쪽 아래로 길게 드리운다(반경의 약 1.3배). 색과 짙기는 존 분위기를 따른다.
             ShadowStyle.Object(g, _res, sx, sy, pr, pr * 1.3f, dark ? 30f : 44f);
         }
 
-        private void PaintTree(Graphics g)
+        private void PaintTree(IGfx g)
         {
             float r = _pr;
             g.ScaleTransform(_ppu, _ppu);

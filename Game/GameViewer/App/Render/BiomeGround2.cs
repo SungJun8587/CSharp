@@ -150,7 +150,7 @@ namespace GameViewer.App.Render
         }
 
         // ------------------------------------------------------------------ 장식
-        private static void NewDetail(MapKind kind, Graphics g, float x, float y, float scale, uint h, uint k, float dirtT)
+        private static void NewDetail(MapKind kind, IGfx g, float x, float y, float scale, uint h, uint k, float dirtT)
         {
             switch (kind)
             {
@@ -198,7 +198,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void StoneBits(Graphics g, float x, float y, float scale, uint h, Color hi, Color lo)
+        private static void StoneBits(IGfx g, float x, float y, float scale, uint h, Color hi, Color lo)
         {
             int n = 1 + (int)(h % 3);
             for (int i = 0; i < n; ++i)
@@ -210,7 +210,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Brick(Graphics g, float x, float y, float scale, uint h)
+        private static void Brick(IGfx g, float x, float y, float scale, uint h)
         {
             float w = scale * 0.3f, hh = scale * 0.14f;
             Sh(g, x, y + hh, w * 1.3f, hh * 0.7f, 70, 0, 0, 0);
@@ -221,7 +221,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Weed(Graphics g, float x, float y, float scale, uint h, Color c)
+        private static void Weed(IGfx g, float x, float y, float scale, uint h, Color c)
         {
             float len = scale * (0.28f + Rnd(h, 2) * 0.22f);
             int n = 5 + (int)(h % 3);
@@ -234,10 +234,10 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Drum(Graphics g, float x, float y, float scale, uint h)
+        private static void Drum(IGfx g, float x, float y, float scale, uint h)
         {
             float w = scale * 0.7f, hh = scale * 0.3f;
-            GraphicsState st = g.Save(); g.TranslateTransform(x, y); g.RotateTransform((Rnd(h, 3) - 0.5f) * 40f);
+            GfxState st = g.Save(); g.TranslateTransform(x, y); g.RotateTransform((Rnd(h, 3) - 0.5f) * 40f);
             Sh(g, 0, hh * 0.9f, w * 0.7f, hh * 0.5f, 70, 0, 0, 0);
             P.Round(g, -w * 0.5f, -hh, w, hh * 2f, hh * 0.3f, Cc(190, 184, 170), Cc(112, 106, 96), System.Drawing.Color.FromArgb(170, 30, 28, 26), 1.2f);
             for (int i = -1; i <= 1; ++i) using (Pen p = new Pen(System.Drawing.Color.FromArgb(90, 40, 38, 34), 1f)) g.DrawLine(p, -w * 0.45f, i * hh * 0.6f, w * 0.45f, i * hh * 0.6f);
@@ -245,14 +245,14 @@ namespace GameViewer.App.Render
             g.Restore(st);
         }
 
-        private static void Mossy(Graphics g, float x, float y, float scale, uint h)
+        private static void Mossy(IGfx g, float x, float y, float scale, uint h)
         {
             float rx = scale * (0.3f + Rnd(h, 2) * 0.3f);
             Sh(g, x, y, rx, rx * 0.4f, 100, 70, 110, 52);
             Sh(g, x - rx * 0.2f, y - rx * 0.06f, rx * 0.55f, rx * 0.18f, 110, 110, 150, 70);
         }
 
-        private static void Crackle(Graphics g, float x, float y, float scale, uint h, Color c)
+        private static void Crackle(IGfx g, float x, float y, float scale, uint h, Color c)
         {
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(150, c), 1f))
             {
@@ -266,7 +266,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Shell(Graphics g, float x, float y, float scale, uint h)
+        private static void Shell(IGfx g, float x, float y, float scale, uint h)
         {
             float s = scale * (0.1f + Rnd(h, 2) * 0.06f);
             Color c = (h & 1) == 0 ? Cc(250, 214, 200) : Cc(244, 236, 214);
@@ -275,7 +275,7 @@ namespace GameViewer.App.Render
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(130, 160, 110, 90), 1f)) for (int i = -1; i <= 1; ++i) g.DrawLine(p, x + i * s * 0.35f, y - s * 0.9f, x + i * s * 0.15f, y);
         }
 
-        private static void Starfish(Graphics g, float x, float y, float scale, uint h)
+        private static void Starfish(IGfx g, float x, float y, float scale, uint h)
         {
             float R = scale * 0.16f, r = R * 0.45f; PointF[] pts = new PointF[10];
             float rot = Rnd(h, 3) * 6.28f;
@@ -284,17 +284,17 @@ namespace GameViewer.App.Render
             P.Poly(g, pts, Cc(255, 168, 96), Cc(214, 92, 60), System.Drawing.Color.FromArgb(180, 120, 50, 30), 1f);
         }
 
-        private static void Driftwood(Graphics g, float x, float y, float scale, uint h)
+        private static void Driftwood(IGfx g, float x, float y, float scale, uint h)
         {
             float len = scale * (0.9f + Rnd(h, 2) * 0.8f), rad = scale * 0.1f;
-            GraphicsState st = g.Save(); g.TranslateTransform(x, y); g.RotateTransform((Rnd(h, 11) - 0.5f) * 70f);
+            GfxState st = g.Save(); g.TranslateTransform(x, y); g.RotateTransform((Rnd(h, 11) - 0.5f) * 70f);
             Sh(g, 0, rad * 0.9f, len * 0.5f, rad * 0.6f, 60, 90, 60, 30);
             P.Round(g, -len * 0.5f, -rad, len, rad * 2f, rad * 0.9f, Cc(206, 190, 160), Cc(134, 116, 90), System.Drawing.Color.FromArgb(150, 70, 56, 40), 1f);
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(90, 90, 74, 56), 1f)) g.DrawLine(p, -len * 0.4f, 0, len * 0.35f, 1);
             g.Restore(st);
         }
 
-        private static void Seaweed(Graphics g, float x, float y, float scale, uint h)
+        private static void Seaweed(IGfx g, float x, float y, float scale, uint h)
         {
             for (int i = 0; i < 4; ++i)
             {
@@ -304,13 +304,13 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void RipplePatch(Graphics g, float x, float y, float scale, uint h, Color c)
+        private static void RipplePatch(IGfx g, float x, float y, float scale, uint h, Color c)
         {
             float w = scale * (0.3f + Rnd(h, 2) * 0.3f);
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(46, c), 1f)) { g.DrawArc(p, x - w, y - w * 0.12f, w * 2, w * 0.4f, 0, 180); g.DrawArc(p, x - w * 0.6f, y + w * 0.1f, w * 1.2f, w * 0.26f, 0, 180); }
         }
 
-        private static void GlowShards(Graphics g, float x, float y, float scale, uint h)
+        private static void GlowShards(IGfx g, float x, float y, float scale, uint h)
         {
             Color c = (h & 3) == 0 ? Cc(255, 130, 236) : ((h & 3) == 1 ? Cc(130, 250, 255) : Cc(160, 170, 255));
             Sh(g, x, y, scale * 0.45f, scale * 0.16f, 34, c.R, c.G, c.B);
@@ -324,7 +324,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Stalag(Graphics g, float x, float y, float scale, uint h)
+        private static void Stalag(IGfx g, float x, float y, float scale, uint h)
         {
             float hh = scale * (0.4f + Rnd(h, 3) * 0.3f), w = scale * 0.16f;
             Sh(g, x, y + 1, w * 1.4f, w * 0.5f, 90, 0, 0, 0);
@@ -333,7 +333,7 @@ namespace GameViewer.App.Render
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(150, 130, 210, 255), 1f)) g.DrawLine(p, x - w * 0.3f, y - 2, x - w * 0.1f, y - hh * 0.7f);
         }
 
-        private static void GlowShroom(Graphics g, float x, float y, float scale, uint h)
+        private static void GlowShroom(IGfx g, float x, float y, float scale, uint h)
         {
             Color c = (h & 1) == 0 ? Cc(110, 240, 255) : Cc(255, 130, 230);
             int n = 1 + (int)(h % 3);
@@ -347,41 +347,41 @@ namespace GameViewer.App.Render
             }
         }
 
-        private static void Mote(Graphics g, float x, float y, float scale, uint h, Color c)
+        private static void Mote(IGfx g, float x, float y, float scale, uint h, Color c)
         {
             float s = scale * (0.04f + Rnd(h, 3) * 0.04f);
             Sh(g, x, y, s * 3f, s * 3f, 30, c.R, c.G, c.B);
             Sh(g, x, y, s, s, 230, Col.Cl(c.R + 40), Col.Cl(c.G + 40), Col.Cl(c.B + 40));
         }
 
-        private static void Petals(Graphics g, float x, float y, float scale, uint h)
+        private static void Petals(IGfx g, float x, float y, float scale, uint h)
         {
             for (int i = 0; i < 4; ++i)
             {
                 float px = x + (Rnd(h, 3 + i * 3) - 0.5f) * scale * 0.7f, py = y + (Rnd(h, 5 + i * 3) - 0.5f) * scale * 0.4f, s = scale * (0.04f + Rnd(h, 7 + i) * 0.03f);
-                GraphicsState st = g.Save(); g.TranslateTransform(px, py); g.RotateTransform(Rnd(h, 9 + i) * 360f);
+                GfxState st = g.Save(); g.TranslateTransform(px, py); g.RotateTransform(Rnd(h, 9 + i) * 360f);
                 using (SolidBrush b = new SolidBrush(System.Drawing.Color.FromArgb(220, 255, 214, 226))) g.FillEllipse(b, -s * 1.5f, -s * 0.7f, s * 3f, s * 1.4f);
                 g.Restore(st);
             }
         }
 
-        private static void Feather(Graphics g, float x, float y, float scale, uint h)
+        private static void Feather(IGfx g, float x, float y, float scale, uint h)
         {
             float l = scale * 0.4f;
-            GraphicsState st = g.Save(); g.TranslateTransform(x, y); g.RotateTransform((Rnd(h, 3) - 0.5f) * 120f);
+            GfxState st = g.Save(); g.TranslateTransform(x, y); g.RotateTransform((Rnd(h, 3) - 0.5f) * 120f);
             Sh(g, 1, 2, l, l * 0.18f, 36, 80, 90, 140);
             using (SolidBrush b = new SolidBrush(System.Drawing.Color.FromArgb(244, 255, 255, 255))) g.FillEllipse(b, -l, -l * 0.16f, l * 2f, l * 0.32f);
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(160, 170, 180, 210), 1f)) g.DrawLine(p, -l, 0, l, 0);
             g.Restore(st);
         }
 
-        private static void CloudWisp(Graphics g, float x, float y, float scale, uint h)
+        private static void CloudWisp(IGfx g, float x, float y, float scale, uint h)
         {
             float rx = scale * (0.5f + Rnd(h, 2) * 0.5f), ry = rx * 0.22f;
             Sh(g, x, y, rx, ry, 70, 255, 255, 255); Sh(g, x + rx * 0.2f, y - ry * 0.3f, rx * 0.6f, ry * 0.7f, 90, 255, 255, 255);
         }
 
-        private static void GlowFlower(Graphics g, float x, float y, float scale, uint h)
+        private static void GlowFlower(IGfx g, float x, float y, float scale, uint h)
         {
             Sh(g, x, y - scale * 0.1f, scale * 0.3f, scale * 0.2f, 40, 255, 230, 150);
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(220, 150, 190, 150), Math.Max(1f, scale * 0.03f))) g.DrawLine(p, x, y, x, y - scale * 0.2f);
@@ -389,19 +389,19 @@ namespace GameViewer.App.Render
             using (SolidBrush b = new SolidBrush(System.Drawing.Color.FromArgb(255, 255, 214, 100))) g.FillEllipse(b, x - scale * 0.025f, y - scale * 0.26f, scale * 0.05f, scale * 0.04f);
         }
 
-        private static void Gravestone(Graphics g, float x, float y, float scale, uint h)
+        private static void Gravestone(IGfx g, float x, float y, float scale, uint h)
         {
             float w = scale * 0.2f, hh = scale * 0.38f;
             Sh(g, x + w * 0.3f, y + 2, w * 1.3f, w * 0.4f, 90, 0, 0, 0);
             GraphicsPath gp = new GraphicsPath();
             gp.AddLine(x - w, y, x - w, y - hh * 0.7f); gp.AddArc(x - w, y - hh, w * 2, w * 2, 180, 180); gp.AddLine(x + w, y - hh * 0.7f, x + w, y); gp.CloseFigure();
-            using (LinearGradientBrush lb = new LinearGradientBrush(new RectangleF(x - w, y - hh, w * 2, hh), Cc(112, 104, 124), Cc(44, 38, 56), LinearGradientMode.Vertical)) g.FillPath(lb, gp);
+            using (LinearGradientBrush lb = GfxBrush.Linear(new RectangleF(x - w, y - hh, w * 2, hh), Cc(112, 104, 124), Cc(44, 38, 56), LinearGradientMode.Vertical)) g.FillPath(lb, gp);
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(200, 14, 10, 20), 1.4f)) g.DrawPath(p, gp);
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(170, 190, 140, 255), Math.Max(1f, scale * 0.025f))) { g.DrawLine(p, x, y - hh * 0.75f, x, y - hh * 0.35f); g.DrawLine(p, x - w * 0.4f, y - hh * 0.6f, x + w * 0.4f, y - hh * 0.6f); }
             gp.Dispose();
         }
 
-        private static void SoulFlame(Graphics g, float x, float y, float scale, uint h)
+        private static void SoulFlame(IGfx g, float x, float y, float scale, uint h)
         {
             float s = scale * (0.12f + Rnd(h, 3) * 0.08f);
             Sh(g, x, y - s, s * 3.2f, s * 2.4f, 30, 150, 110, 255);
@@ -411,7 +411,7 @@ namespace GameViewer.App.Render
             Sh(g, x, y - s * 0.7f, s * 0.3f, s * 0.6f, 240, 236, 226, 255);
         }
 
-        private static void Rune(Graphics g, float x, float y, float scale, uint h)
+        private static void Rune(IGfx g, float x, float y, float scale, uint h)
         {
             float rx = scale * 0.55f, ry = rx * 0.5f;
             using (Pen p = new Pen(System.Drawing.Color.FromArgb(120, 180, 110, 255), Math.Max(1f, scale * 0.025f))) { g.DrawEllipse(p, x - rx, y - ry, rx * 2, ry * 2); g.DrawEllipse(p, x - rx * 0.66f, y - ry * 0.66f, rx * 1.32f, ry * 1.32f); }
@@ -419,7 +419,7 @@ namespace GameViewer.App.Render
                 for (int i = 0; i < 5; ++i) { double a = i * 1.2566 + Rnd(h, 3); g.DrawLine(p, x + (float)Math.Cos(a) * rx * 0.66f, y + (float)Math.Sin(a) * ry * 0.66f, x + (float)Math.Cos(a + 2.5) * rx * 0.66f, y + (float)Math.Sin(a + 2.5) * ry * 0.66f); }
         }
 
-        private static void Thorns(Graphics g, float x, float y, float scale, uint h)
+        private static void Thorns(IGfx g, float x, float y, float scale, uint h)
         {
             Sh(g, x, y + 1, scale * 0.35f, scale * 0.08f, 80, 0, 0, 0);
             int n = 5 + (int)(h % 3);

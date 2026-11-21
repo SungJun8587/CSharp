@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Core.Data</RootNamespace>
+    <AssemblyName>Core.Data</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+  </PropertyGroup>
+
+  <!-- MySqlConnector NuGet이 없는 환경에서는 -p:SkipMySql=true 로 MySQL 의존 파일(MySqlDb.cs, MigrationRunner.cs)을 빼고 빌드한다(SqlBuilder, SqlScript, DbMetrics 등 순수 코드는 그대로 쓸 수 있다). -->
+  <ItemGroup Condition="'$(SkipMySql)' == 'true'">
+    <Compile Remove="MySqlDb.cs" />
+    <Compile Remove="MigrationRunner.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.100" />
+    <PackageReference Include="MySqlConnector" Version="3.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Util/Core.Util.csproj" />
+  </ItemGroup>
+
+</Project>

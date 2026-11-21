@@ -45,7 +45,7 @@ namespace GameViewer.App.Render
             return px >= 0f && px <= v.Width && py >= 0f && py <= v.Height;
         }
 
-        public void Draw(Graphics g, ViewerSession s, ViewState v, long now)
+        public void Draw(IGfx g, ViewerSession s, ViewState v, long now)
         {
             if (s.State != SessionState.InZone) return;
             Entity boss = ActiveBoss(s, v, now);
@@ -53,17 +53,17 @@ namespace GameViewer.App.Render
             DrawTargetFrame(g, s, v, now);
             DrawPartyFrames(g, s, v, now);
             DrawOffscreenBoss(g, s, v, now);
-            DrawDanger(g, s, v, now, boss != null ? 124 : 20);
+            DrawDanger(g, s, v, now, boss != null ? 124 + HudRenderer.BossDrop : 20);
             DrawBanners(g, s, v, now);
         }
 
         // ------------------------------------------------------------------ 보스 체력바
 
-        private void DrawBossBar(Graphics g, ViewerSession s, Entity boss, ViewState v, long now)
+        private void DrawBossBar(IGfx g, ViewerSession s, Entity boss, ViewState v, long now)
         {
             float zl, zr; HudRenderer.BossArea(v, out zl, out zr);          // 화면 가로 중앙(경험치바와 재화 표시에 닿지 않는 폭 안)
             float w = Math.Min(520f, zr - zl - 56f), h = 26f;
-            float x = zl + (zr - zl - w) / 2, y = 60f;
+            float x = zl + (zr - zl - w) / 2, y = 60f + HudRenderer.BossDrop;      // 맨 윗줄(경험치바/재화) 아래
             float ratio = boss.MaxHp > 0 ? Math.Max(0f, Math.Min(1f, boss.Hp / (float)boss.MaxHp)) : 0f;
             float ghost = boss.MaxHp > 0 ? Math.Max(ratio, Math.Min(1f, boss.GhostHp / (float)boss.MaxHp)) : ratio;
             bool enraged = boss.IsEnraged;
@@ -95,7 +95,7 @@ namespace GameViewer.App.Render
             for (int sd = -1; sd <= 1; sd += 2)                                       // 좌우로 뻗는 금빛 날개 선
             {
                 float ex = sd < 0 ? x - 12 : x + w + 12, tx = sd < 0 ? ex - 110 : ex + 110;
-                using (LinearGradientBrush wl = new LinearGradientBrush(new RectangleF(Math.Min(ex, tx), cyb - 2, 110, 4), sd < 0 ? Color.FromArgb(0, accent) : Color.FromArgb(230, accent), sd < 0 ? Color.FromArgb(230, accent) : Color.FromArgb(0, accent), 0f))
+                using (LinearGradientBrush wl = GfxBrush.Linear(new RectangleF(Math.Min(ex, tx), cyb - 2, 110, 4), sd < 0 ? Color.FromArgb(0, accent) : Color.FromArgb(230, accent), sd < 0 ? Color.FromArgb(230, accent) : Color.FromArgb(0, accent), 0f))
                     g.FillRectangle(wl, Math.Min(ex, tx), cyb - 1.5f, 110, 3f);
                 g.FillPolygon(_res.Brush(Color.FromArgb(200, accent)), new PointF[] { new PointF(ex + sd * 2, cyb), new PointF(ex - sd * 12, cyb - 9), new PointF(ex - sd * 12, cyb + 9) });
             }
@@ -104,13 +104,13 @@ namespace GameViewer.App.Render
             Color c1 = enraged ? Color.FromArgb(255, 110, 70) : Color.FromArgb(244, 104, 88);
             Color c2 = enraged ? Color.FromArgb(138, 14, 14) : Color.FromArgb(120, 18, 30);
             Ui.HpBar(g, _res, x, y, w, h, ratio, ghost, c1, c2, true);
-            GraphicsState bs = g.Save();                                              // 채워진 부분 위를 지나가는 빛 띠 + 10% 눈금
+            GfxState bs = g.Save();                                              // 채워진 부분 위를 지나가는 빛 띠 + 10% 눈금
             using (GraphicsPath tp = P.RoundPath(x, y, w, h, 9f)) g.SetClip(tp, CombineMode.Intersect);
             float fw = w * ratio;
             if (fw > 12f)
             {
                 float bandX = x - 90f + (now % 2800) / 2800f * (fw + 90f);
-                using (LinearGradientBrush sb = new LinearGradientBrush(new RectangleF(bandX, y, 90f, h), Color.FromArgb(0, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), 0f))
+                using (LinearGradientBrush sb = GfxBrush.Linear(new RectangleF(bandX, y, 90f, h), Color.FromArgb(0, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), 0f))
                 {
                     ColorBlend cbd = new ColorBlend(3);
                     cbd.Colors = new Color[] { Color.FromArgb(0, 255, 255, 255), Color.FromArgb(70, 255, 255, 255), Color.FromArgb(0, 255, 255, 255) };
@@ -147,7 +147,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>바 아래에 페이즈 경계(P2, P3 ...)를 표시하고, 도달한 것은 금색, 남은 것은 회색으로 보여준다. 왼쪽에는 다음 페이즈까지의 체력 구간을 적는다.</summary>
-        private void DrawPhaseLabels(Graphics g, Entity boss, float x, float y, float w, float h)
+        private void DrawPhaseLabels(IGfx g, Entity boss, float x, float y, float w, float h)
         {
             if (boss.Boss == null || boss.Boss.Phases.Count == 0) return;
             uint nextPct = 0; int nextPhase = 0;
@@ -166,11 +166,11 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 대상 창 / 파티 창
 
-        private void DrawTargetFrame(Graphics g, ViewerSession s, ViewState v, long now)
+        private void DrawTargetFrame(IGfx g, ViewerSession s, ViewState v, long now)
         {
             Entity t = s.World.Find(v.SelectedId);
             if (t == null) return;
-            float x = 10, y = v.ShowInfo ? 180 : 46, w = 250, h = 62;
+            float x = 10, y = v.ShowInfo ? 185 : 51, w = 250, h = 62;
             Ui.Frame(g, _res, x, y, w, h, 10, t.IsBoss ? Color.FromArgb(222, 188, 112) : (t.IsMonster ? Color.FromArgb(214, 110, 96) : Color.FromArgb(120, 170, 230)));
             string name = s.World.NameOf(t);
             Color nc = t.IsBoss ? Color.FromArgb(255, 214, 90) : (t.IsMonster ? Color.FromArgb(255, 200, 200) : Color.FromArgb(190, 225, 255));
@@ -191,7 +191,7 @@ namespace GameViewer.App.Render
             _live.DrawStatusRow(g, s.Data, t, x + 84, y + 41, 18f, 7, now, false);
         }
 
-        private void DrawPartyFrames(Graphics g, ViewerSession s, ViewState v, long now)
+        private void DrawPartyFrames(IGfx g, ViewerSession s, ViewState v, long now)
         {
             WorldModel w = s.World;
             List<Entity> list = new List<Entity>();
@@ -199,7 +199,7 @@ namespace GameViewer.App.Render
                 if (kv.Value.IsPlayer && kv.Key != w.SelfId) list.Add(kv.Value);
             if (list.Count == 0) return;
             list.Sort(delegate (Entity a, Entity b) { return a.Id.CompareTo(b.Id); });
-            float x = 10, y = v.ShowInfo ? 254 : 120;
+            float x = 10, y = v.ShowInfo ? 259 : 125;
             int n = Math.Min(5, list.Count);
             Ui.Frame(g, _res, x, y, 250, 10 + n * 24, 10, Color.FromArgb(120, 170, 230));
             for (int i = 0; i < n; ++i)
@@ -219,7 +219,7 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 화면 밖 보스 / 위험 지역 / 배너
 
-        private void DrawOffscreenBoss(Graphics g, ViewerSession s, ViewState v, long now)
+        private void DrawOffscreenBoss(IGfx g, ViewerSession s, ViewState v, long now)
         {
             float sx, sy;
             if (!s.SelfPos(now, out sx, out sy)) return;
@@ -248,7 +248,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>내가 보스(또는 누군가)의 시전 예고 지역 안에 있으면 화면 가장자리를 붉게 깜빡이고 경고한다.</summary>
-        private void DrawDanger(Graphics g, ViewerSession s, ViewState v, long now, float textY)
+        private void DrawDanger(IGfx g, ViewerSession s, ViewState v, long now, float textY)
         {
             WorldModel w = s.World;
             if (w.Self == null || w.Self.Dead) return;
@@ -266,15 +266,15 @@ namespace GameViewer.App.Render
             {
                 int a = 60 + (int)(55 * (0.5 + 0.5 * Math.Sin(now / 90.0)));
                 int e = 70;
-                using (LinearGradientBrush t = new LinearGradientBrush(new Rectangle(0, 0, v.Width, e + 1), Color.FromArgb(a * 2, 230, 20, 20), Color.FromArgb(0, 230, 20, 20), LinearGradientMode.Vertical))
+                using (LinearGradientBrush t = GfxBrush.Linear(new Rectangle(0, 0, v.Width, e + 1), Color.FromArgb(a * 2, 230, 20, 20), Color.FromArgb(0, 230, 20, 20), LinearGradientMode.Vertical))
                     g.FillRectangle(t, 0, 0, v.Width, e);
-                using (LinearGradientBrush b = new LinearGradientBrush(new Rectangle(0, v.Height - e - 1, v.Width, e + 1), Color.FromArgb(0, 230, 20, 20), Color.FromArgb(a * 2, 230, 20, 20), LinearGradientMode.Vertical))
+                using (LinearGradientBrush b = GfxBrush.Linear(new Rectangle(0, v.Height - e - 1, v.Width, e + 1), Color.FromArgb(0, 230, 20, 20), Color.FromArgb(a * 2, 230, 20, 20), LinearGradientMode.Vertical))
                     g.FillRectangle(b, 0, v.Height - e, v.Width, e);
                 _res.OutlinedText(g, "위험! 범위 밖으로 벗어나세요", _res.Big, Color.FromArgb(255, 120, 100), v.Width / 2f, textY + 30, _center2);
             }
         }
 
-        private void DrawBanners(Graphics g, ViewerSession s, ViewState v, long now)
+        private void DrawBanners(IGfx g, ViewerSession s, ViewState v, long now)
         {
             WorldModel w = s.World;
             for (int i = 0; i < w.Effects.Count; ++i)
@@ -309,7 +309,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void Panel(Graphics g, float x, float y, float w, float h)
+        private void Panel(IGfx g, float x, float y, float w, float h)
         {
             g.FillRectangle(_res.Brush(150, 10, 16, 12), x, y, w, h);
             g.DrawRectangle(_res.Pen(120, 200, 220, 190, 1f), x, y, w, h);

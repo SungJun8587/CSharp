@@ -11,7 +11,7 @@ namespace GameViewer.App.Render
 {
     public sealed partial class BiomePools
     {
-        private void Pool2(Graphics g, MapKind kind, float cx, float cy, float rx, float ry, uint seed, int index, double t, float x0, float y0, float w, float h)
+        private void Pool2(IGfx g, MapKind kind, float cx, float cy, float rx, float ry, uint seed, int index, double t, float x0, float y0, float w, float h)
         {
             Color bank, rim, wc, we, halo; float wob; int haloA;
             switch (kind)
@@ -29,7 +29,7 @@ namespace GameViewer.App.Render
                 p.AddClosedCurve(Outline(cx, cy, rx, ry, seed, 1.05f, wob));
                 g.FillPath(_res.Brush(rim), p);
                 g.DrawPath(_res.Pen(150, 20, 20, 30, 1.6f), p);
-                if (kind == MapKind.Ruins) { GraphicsState s0 = g.Save(); g.SetClip(p, CombineMode.Intersect); for (int k = 0; k < 30; ++k) { double a = k * Math.PI * 2 / 30; g.DrawLine(_res.Pen(120, 50, 48, 44, 1f), cx + (float)Math.Cos(a) * rx * 0.9f, cy + (float)Math.Sin(a) * ry * 0.9f, cx + (float)Math.Cos(a) * rx * 1.12f, cy + (float)Math.Sin(a) * ry * 1.12f); } g.Restore(s0); }
+                if (kind == MapKind.Ruins) { GfxState s0 = g.Save(); g.SetClip(p, CombineMode.Intersect); for (int k = 0; k < 30; ++k) { double a = k * Math.PI * 2 / 30; g.DrawLine(_res.Pen(120, 50, 48, 44, 1f), cx + (float)Math.Cos(a) * rx * 0.9f, cy + (float)Math.Sin(a) * ry * 0.9f, cx + (float)Math.Cos(a) * rx * 1.12f, cy + (float)Math.Sin(a) * ry * 1.12f); } g.Restore(s0); }
                 if (kind == MapKind.Sky) g.DrawPath(_res.Pen(230, 236, 200, 110, 2.4f), p);
             }
             using (GraphicsPath water = new GraphicsPath())
@@ -41,9 +41,9 @@ namespace GameViewer.App.Render
                     pg.CenterPoint = new PointF(cx + rx * 0.06f, cy + ry * 0.08f);
                     g.FillPath(pg, water);
                 }
-                GraphicsState gs = g.Save();
+                GfxState gs = g.Save();
                 g.SetClip(water, CombineMode.Intersect);
-                using (LinearGradientBrush lb = new LinearGradientBrush(new RectangleF(x0, y0, w, h * 0.6f + 1), Color.FromArgb(kind == MapKind.Sky ? 150 : 80, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), LinearGradientMode.Vertical)) g.FillRectangle(lb, x0, y0, w, h * 0.6f);
+                using (LinearGradientBrush lb = GfxBrush.Linear(new RectangleF(x0, y0, w, h * 0.6f + 1), Color.FromArgb(kind == MapKind.Sky ? 150 : 80, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), LinearGradientMode.Vertical)) g.FillRectangle(lb, x0, y0, w, h * 0.6f);
                 // 공통: 퍼지는 물결
                 for (int k = 0; k < 3; ++k)
                 {

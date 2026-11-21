@@ -37,7 +37,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>front=false 는 몸 뒤(속도선/잔상), true 는 몸 위(궤적/충격).</summary>
-        public void Draw(Graphics g, Entity e, ViewState v, Look look, float sx, float sy, long now, bool front)
+        public void Draw(IGfx g, Entity e, ViewState v, Look look, float sx, float sy, long now, bool front)
         {
             if (!Has(e) || e.Dead) return;
             float t = now - e.AttackAnimMs, total = AttackPose.DurationMs(e);
@@ -84,7 +84,7 @@ namespace GameViewer.App.Render
         private static int Q(float a) { return ((int)Math.Max(0f, Math.Min(255f, a))) & ~15; }
 
         /// <summary>타격 직전 몸 뒤로 늘어서는 속도선(몸이 앞으로 튀어 나가는 느낌).</summary>
-        private void Trail(Graphics g, Entity e, ViewState v, float sx, float cy, float fx, float fy, float lead, float sc)
+        private void Trail(IGfx g, Entity e, ViewState v, float sx, float cy, float fx, float fy, float lead, float sc)
         {
             if (lead < 0f || lead > 1.6f) return;
             if (AttackPose.StyleOf(e) == AttackStyle.Hop) return;
@@ -98,7 +98,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>타격 순간 번쩍이는 충격 섬광 + 퍼지는 고리.</summary>
-        private void Flash(Graphics g, ViewState v, float px, float py, float k, float sc, uint tpl, string fx)
+        private void Flash(IGfx g, ViewState v, float px, float py, float k, float sc, uint tpl, string fx)
         {
             if (k < 0f || k >= 0.55f) return;
             float p = k / 0.55f, r = v.Px((0.35f + 0.9f * p) * sc);
@@ -137,7 +137,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void Streak(Graphics g, ViewState v, float x0, float y0, float x1, float y1, float w, Color c, float a)
+        private void Streak(IGfx g, ViewState v, float x0, float y0, float x1, float y1, float w, Color c, float a)
         {
             if (a < 16f) return;
             g.DrawLine(_res.Pen(Q(a * 0.35f), c.R, c.G, c.B, w * 3.2f), x0, y0, x1, y1);
@@ -148,7 +148,7 @@ namespace GameViewer.App.Render
         private static float Hash(uint id, int i) { uint h = (uint)(id * 2654435761u) ^ (uint)(i * 40503); h ^= h >> 13; h *= 1274126177u; return (h & 1023) / 1023f; }
 
         // ------------------------------------------------------------------ 늑대: 세 줄 발톱 자국
-        private void Claws(Graphics g, ViewState v, float px, float py, float fx, float fy, float k, float sc)
+        private void Claws(IGfx g, ViewState v, float px, float py, float fx, float fy, float k, float sc)
         {
             float p = (k + 0.1f) / 0.7f; if (p < 0f || p >= 1f) return;
             float ext = AttackPose.EaseOut(p * 1.8f), a = 255f * (1f - p) * (1f - p);
@@ -165,7 +165,7 @@ namespace GameViewer.App.Render
         }
 
         // ------------------------------------------------------------------ 날개 해골 기사: 초승달 칼날
-        private void Blade(Graphics g, ViewState v, float px, float py, float fx, float fy, float k, float sc)
+        private void Blade(IGfx g, ViewState v, float px, float py, float fx, float fy, float k, float sc)
         {
             float p = (k + 0.15f) / 0.75f; if (p < 0f || p >= 1f) return;
             float sweep = 150f * AttackPose.EaseOut(p * 1.7f), a = 255f * (1f - p) * (1f - p);
@@ -182,7 +182,7 @@ namespace GameViewer.App.Render
         }
 
         // ------------------------------------------------------------------ 박쥐: 초음파 고리
-        private void Sonic(Graphics g, ViewState v, float px, float py, float fx, float fy, float k, float sc)
+        private void Sonic(IGfx g, ViewState v, float px, float py, float fx, float fy, float k, float sc)
         {
             for (int i = 0; i < 3; ++i)
             {
@@ -194,7 +194,7 @@ namespace GameViewer.App.Render
         }
 
         // ------------------------------------------------------------------ slam: 지면 균열 충격과 불씨 (보스/덩치 큰 몬스터)
-        private void Slam(Graphics g, ViewState v, float sx, float sy, float px, float py, float k, float sc, uint id)
+        private void Slam(IGfx g, ViewState v, float sx, float sy, float px, float py, float k, float sc, uint id)
         {
             if (k < 0f || k >= 1f) return;
             float gy = sy, ex = px, ey = gy;                                     // 충격은 발 밑 땅에서
@@ -216,7 +216,7 @@ namespace GameViewer.App.Render
         }
 
         // ------------------------------------------------------------------ slime: 착지에 튀는 점액
-        private void Slime(Graphics g, ViewState v, float sx, float sy, float px, float py, float k, float sc, uint id)
+        private void Slime(IGfx g, ViewState v, float sx, float sy, float px, float py, float k, float sc, uint id)
         {
             if (k < 0f || k >= 1f) return;
             float a = 230f * (1f - k) * (1f - k);
@@ -234,7 +234,7 @@ namespace GameViewer.App.Render
         }
 
         // ------------------------------------------------------------------ 버섯 전사: 포자 구름
-        private void Spores(Graphics g, ViewState v, float px, float py, float k, float sc, uint id)
+        private void Spores(IGfx g, ViewState v, float px, float py, float k, float sc, uint id)
         {
             if (k < 0f || k >= 1f) return;
             float a = 200f * (1f - k) * (1f - k);
@@ -258,7 +258,7 @@ namespace GameViewer.App.Render
         // ------------------------------------------------------------------ 보스 전용 타격 (sprites.json fx: bossbat, bossvenom, bossbone, bossquake, bosswail, bossstinger)
 
         /// <summary>박쥐 보스: 앞쪽으로 퍼지는 초음파 고리 다섯 겹과 발 밑에 번지는 보랏빛 파문.</summary>
-        private void BossBat(Graphics g, ViewState v, float sx, float sy, float px, float py, float fx, float fy, float k, float sc)
+        private void BossBat(IGfx g, ViewState v, float sx, float sy, float px, float py, float fx, float fy, float k, float sc)
         {
             for (int i = 0; i < 5; ++i)
             {
@@ -276,7 +276,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>독거미 보스: 바닥에 퍼지는 독 웅덩이, 거미줄 방사선, 튀는 독방울.</summary>
-        private void BossVenom(Graphics g, ViewState v, float sx, float sy, float px, float py, float k, float sc, uint id)
+        private void BossVenom(IGfx g, ViewState v, float sx, float sy, float px, float py, float k, float sc, uint id)
         {
             if (k < 0f || k >= 1f) return;
             float a = 235f * (1f - k) * (1f - k * 0.5f);
@@ -300,7 +300,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>해골 보스: 발 밑에서 둥글게 솟는 뼈창 일곱 개.</summary>
-        private void BossBone(Graphics g, ViewState v, float sx, float sy, float k, float sc, uint id)
+        private void BossBone(IGfx g, ViewState v, float sx, float sy, float k, float sc, uint id)
         {
             if (k < -0.05f || k >= 1f) return;
             float rise = AttackPose.EaseOut(Math.Max(0f, k) * 3f), a = 255f * (k < 0.55f ? 1f : 1f - (k - 0.55f) / 0.45f);
@@ -319,7 +319,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>골렘 보스: 두 겹 충격파, 사방으로 튀는 바위 조각, 먼지.</summary>
-        private void BossQuake(Graphics g, ViewState v, float sx, float sy, float k, float sc, uint id)
+        private void BossQuake(IGfx g, ViewState v, float sx, float sy, float k, float sc, uint id)
         {
             Slam(g, v, sx, sy, sx, sy, k, sc * 1.25f, id);
             if (k < 0f || k >= 1f) return;
@@ -340,7 +340,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>유령 보스: 사방으로 퍼지는 청록 울음 고리와 위로 흩날리는 영혼 불꽃.</summary>
-        private void BossWail(Graphics g, ViewState v, float sx, float sy, float px, float py, float k, float sc, uint id)
+        private void BossWail(IGfx g, ViewState v, float sx, float sy, float px, float py, float k, float sc, uint id)
         {
             for (int i = 0; i < 3; ++i)
             {
@@ -362,7 +362,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>전갈 보스: 위에서 내리꽂는 꼬리 침의 궤적과 번지는 독방울.</summary>
-        private void BossStinger(Graphics g, ViewState v, float sx, float sy, float px, float py, float fx, float fy, float k, float sc, uint id)
+        private void BossStinger(IGfx g, ViewState v, float sx, float sy, float px, float py, float fx, float fy, float k, float sc, uint id)
         {
             float p = (k + 0.12f) / 0.62f;
             if (p >= 0f && p < 1f)
@@ -392,7 +392,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>설인 보스: 땅에서 솟는 얼음 기둥 고리와 서리 충격파, 흩날리는 눈가루.</summary>
-        private void BossFrost(Graphics g, ViewState v, float sx, float sy, float k, float sc, uint id)
+        private void BossFrost(IGfx g, ViewState v, float sx, float sy, float k, float sc, uint id)
         {
             if (k < -0.05f || k >= 1f) return;
             float kk = Math.Max(0f, k), rise = AttackPose.EaseOut(kk * 3f), a = 255f * (kk < 0.5f ? 1f : 1f - (kk - 0.5f) / 0.5f);
@@ -418,7 +418,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>용암 도마뱀 보스: 발 밑 용암 고리, 갈라지는 불길, 솟구치는 불덩이.</summary>
-        private void BossLava(Graphics g, ViewState v, float sx, float sy, float k, float sc, uint id)
+        private void BossLava(IGfx g, ViewState v, float sx, float sy, float k, float sc, uint id)
         {
             if (k < 0f || k >= 1f) return;
             float a = 235f * (1f - k) * (1f - k), rr = v.Px((0.8f + 3.8f * AttackPose.EaseOut(k)) * sc);
@@ -440,7 +440,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>소라게 보스: 밀려오는 물결 고리 두 겹과 튀는 물방울, 조개 파편.</summary>
-        private void BossTide(Graphics g, ViewState v, float sx, float sy, float k, float sc, uint id)
+        private void BossTide(IGfx g, ViewState v, float sx, float sy, float k, float sc, uint id)
         {
             if (k < 0f || k >= 1f) return;
             for (int i = 0; i < 2; ++i)
@@ -463,7 +463,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>수정 사마귀 보스: 앞으로 내리긋는 수정 낫 궤적과 땅에서 튀어나오는 수정 조각.</summary>
-        private void BossCrystal(Graphics g, ViewState v, float sx, float sy, float px, float py, float fx, float fy, float k, float sc, uint id)
+        private void BossCrystal(IGfx g, ViewState v, float sx, float sy, float px, float py, float fx, float fy, float k, float sc, uint id)
         {
             float p = (k + 0.15f) / 0.7f;
             if (p >= 0f && p < 1f)
@@ -491,7 +491,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>폭풍 독수리 보스: 앞으로 쏘아지는 바람 소용돌이 줄기와 번개 불꽃.</summary>
-        private void BossGale(Graphics g, ViewState v, float sx, float sy, float px, float py, float fx, float fy, float k, float sc, uint id)
+        private void BossGale(IGfx g, ViewState v, float sx, float sy, float px, float py, float fx, float fy, float k, float sc, uint id)
         {
             if (k < -0.05f || k >= 1f) return;
             float kk = Math.Max(0f, k), a = 240f * (1f - kk) * (1f - kk * 0.4f);

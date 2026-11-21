@@ -136,7 +136,7 @@ public sealed partial class BattleZone
         if (player.Level < u.UnlockLevel)
             return SkillOpResult.LevelTooLow;
         // 존 서버는 Currency 표에 있는(몬스터 보상으로 얻는) 재화만 쓴다. 결제로 얻는 유료 재화는 Gateway/DB 거래로만 바꾼다.
-        if (_currencies.MaxOf(u.PriceCurrencyId) == 0)
+        if (_currencies.MaxOf(u.PriceCurrencyId) == 0 || _currencies.IsPaid(u.PriceCurrencyId))
             return SkillOpResult.Unknown;
         player.Wallet.TryGetValue(u.PriceCurrencyId, out uint have);
         if (have < u.Price)

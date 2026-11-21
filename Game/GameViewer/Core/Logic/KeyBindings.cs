@@ -15,26 +15,27 @@ namespace GameViewer.Core.Logic
     {
         BasicAttack, SelectBoss, AutoBattle, FollowToggle, CenterCamera, CycleTarget, ToggleHelp, ToggleLog, Chat, Settings, WorldMap, HeroSelect, ZoneSelect, Screenshot, Reconnect,
         Skill1, Skill2, Skill3, Skill4, Skill5, Skill6, Skill7, Skill8, Skill9,
-        SkillBook, InfoPanel
+        SkillBook, InfoPanel,
+        Inventory, Mail, Shop
     }
 
     public enum BindResult { Ok, Reserved, Swapped }
 
     public sealed class KeyBindings
     {
-        public const int ActionCount = 26;
+        public const int ActionCount = 29;
         public const int FirstSkill = (int)BindAction.Skill1;
         private readonly int[] _key = new int[ActionCount];
 
         public KeyBindings() { ResetAll(); }
 
-        // 기본 키(가상 키 코드): Q B A F Space Tab F1 L Enter F2 M H Z F12 F5, 스킬 1~9 = '1'~'9', 스킬 창 K, 정보 창 I
-        private static readonly int[] Defaults = { 81, 66, 65, 70, 32, 9, 112, 76, 13, 113, 77, 72, 90, 123, 116, 49, 50, 51, 52, 53, 54, 55, 56, 57, 75, 73 };
+        // 기본 키(가상 키 코드): Q B A F Space Tab F1 L Enter F2 M H Z F12 F5, 스킬 1~9 = '1'~'9', 스킬 창 K, 정보 창 I, 가방 V, 우편함 N, 상점 P(시험용)
+        private static readonly int[] Defaults = { 81, 66, 65, 70, 32, 9, 112, 76, 13, 113, 77, 72, 90, 123, 116, 49, 50, 51, 52, 53, 54, 55, 56, 57, 75, 73, 86, 78, 80 };
 
         private static readonly string[] Names =
         {
             "기본 공격", "보스 선택/이동", "자동 전투", "카메라 따라가기", "카메라 가운데로", "대상 바꾸기", "도움말", "로그 창 전환", "채팅 입력", "설정", "월드맵", "영웅 선택", "존 변경", "스크린샷", "재접속",
-            "스킬 1", "스킬 2", "스킬 3", "스킬 4", "스킬 5", "스킬 6", "스킬 7", "스킬 8", "스킬 9", "스킬 창", "정보 창"
+            "스킬 1", "스킬 2", "스킬 3", "스킬 4", "스킬 5", "스킬 6", "스킬 7", "스킬 8", "스킬 9", "스킬 창", "정보 창", "가방", "우편함", "상점"
         };
 
         public static string ActionName(BindAction a) { return Names[(int)a]; }

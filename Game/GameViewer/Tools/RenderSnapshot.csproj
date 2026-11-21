@@ -11,6 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="monster_gl_check\**" />
     <Compile Include="..\App\Render\*.cs" Link="Render\%(Filename)%(Extension)" />
     <Compile Include="..\App\Forest\*.cs" Link="Forest\%(Filename)%(Extension)" />
     <ProjectReference Include="..\Core\GameViewer.Core.csproj" />

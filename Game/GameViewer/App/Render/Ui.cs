@@ -11,7 +11,7 @@ namespace GameViewer.App.Render
     public static class Ui
     {
         /// <summary>알약형 체력바. top/bot 은 채움 그라데이션. ghost 는 피격 잔상 비율(없으면 ratio).</summary>
-        public static void HpBar(Graphics g, Resources res, float x, float y, float w, float h, float ratio, float ghost, Color top, Color bot, bool border)
+        public static void HpBar(IGfx g, Resources res, float x, float y, float w, float h, float ratio, float ghost, Color top, Color bot, bool border)
         {
             float r = Math.Min(h / 2f, 9f);
             ratio = Math.Max(0f, Math.Min(1f, ratio));
@@ -19,17 +19,17 @@ namespace GameViewer.App.Render
             using (GraphicsPath track = P.RoundPath(x, y, w, h, r))
             {
                 g.FillPath(res.Brush(225, 10, 10, 14), track);
-                GraphicsState gs = g.Save();
+                GfxState gs = g.Save();
                 g.SetClip(track, CombineMode.Intersect);
                 if (ghost > ratio + 0.002f)
                     g.FillRectangle(res.Brush(235, 255, 244, 214), x + w * ratio, y, w * (ghost - ratio), h);
                 if (ratio > 0.002f)
                 {
                     float fw = Math.Max(2f, w * ratio);
-                    using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(x, y, fw + 1, h + 1), top, bot, LinearGradientMode.Vertical))
+                    using (LinearGradientBrush b = GfxBrush.Linear(new RectangleF(x, y, fw + 1, h + 1), top, bot, LinearGradientMode.Vertical))
                         g.FillRectangle(b, x, y, fw, h);
                     // 윗면 광택 + 아랫면 어둠
-                    using (LinearGradientBrush gl = new LinearGradientBrush(new RectangleF(x, y, fw + 1, h * 0.55f + 1), Color.FromArgb(110, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), LinearGradientMode.Vertical))
+                    using (LinearGradientBrush gl = GfxBrush.Linear(new RectangleF(x, y, fw + 1, h * 0.55f + 1), Color.FromArgb(110, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), LinearGradientMode.Vertical))
                         g.FillRectangle(gl, x, y, fw, h * 0.55f);
                     // 채움 끝의 밝은 선
                     if (ratio < 0.995f) g.FillRectangle(res.Brush(170, 255, 255, 255), x + fw - 1.5f, y, 1.5f, h);
@@ -44,7 +44,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>내 영웅 머리 위 체력바: 금빛 이중 테두리, 25% 눈금, 양끝 마름모, 체력이 낮으면 붉게 맥동하는 바깥 광채.</summary>
-        public static void HeroBar(Graphics g, Resources res, float x, float y, float w, float h, float ratio, float ghost, Color top, Color bot, long now)
+        public static void HeroBar(IGfx g, Resources res, float x, float y, float w, float h, float ratio, float ghost, Color top, Color bot, long now)
         {
             if (ratio < 0.3f)
             {
@@ -53,7 +53,7 @@ namespace GameViewer.App.Render
             }
             using (GraphicsPath fr = P.RoundPath(x - 2, y - 2, w + 4, h + 4, h / 2f + 2f))
             {
-                using (LinearGradientBrush eb = new LinearGradientBrush(new RectangleF(x - 2, y - 2, w + 4, h + 5), Color.FromArgb(255, 248, 220, 140), Color.FromArgb(255, 120, 86, 34), LinearGradientMode.Vertical))
+                using (LinearGradientBrush eb = GfxBrush.Linear(new RectangleF(x - 2, y - 2, w + 4, h + 5), Color.FromArgb(255, 248, 220, 140), Color.FromArgb(255, 120, 86, 34), LinearGradientMode.Vertical))
                 using (Pen ep = new Pen(eb, 2f))
                     g.DrawPath(ep, fr);
             }
@@ -78,13 +78,13 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>금속 테두리를 두른 어두운 판. accent 는 테두리 색조.</summary>
-        public static void Frame(Graphics g, Resources res, float x, float y, float w, float h, float r, Color accent)
+        public static void Frame(IGfx g, Resources res, float x, float y, float w, float h, float r, Color accent)
         {
             using (GraphicsPath p = P.RoundPath(x, y, w, h, r))
             {
-                using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(x, y, w, h + 1), Color.FromArgb(225, 34, 38, 46), Color.FromArgb(235, 12, 14, 20), LinearGradientMode.Vertical))
+                using (LinearGradientBrush b = GfxBrush.Linear(new RectangleF(x, y, w, h + 1), Color.FromArgb(225, 34, 38, 46), Color.FromArgb(235, 12, 14, 20), LinearGradientMode.Vertical))
                     g.FillPath(b, p);
-                using (LinearGradientBrush e = new LinearGradientBrush(new RectangleF(x, y, w, h + 1), Col.Light(accent, 0.35f), Col.Dark(accent, 0.45f), LinearGradientMode.Vertical))
+                using (LinearGradientBrush e = GfxBrush.Linear(new RectangleF(x, y, w, h + 1), Col.Light(accent, 0.35f), Col.Dark(accent, 0.45f), LinearGradientMode.Vertical))
                 using (Pen pen = new Pen(e, 2f))
                     g.DrawPath(pen, p);
             }
@@ -97,7 +97,7 @@ namespace GameViewer.App.Render
         // ---- 스킬 아이콘: 연출 양식(SkillFxStyle)마다 고유 문양. 단위 좌표(-1..1)로 그린다.
         private sealed class IconCtx
         {
-            public Graphics G; public float Cx, Cy, U; public Color C1, C2, Dk;
+            public IGfx G; public float Cx, Cy, U; public Color C1, C2, Dk;
             public PointF Pt(float a, float b) { return new PointF(Cx + a * U, Cy + b * U); }
             public PointF[] Pts(params float[] v) { PointF[] r = new PointF[v.Length / 2]; for (int i = 0; i < r.Length; ++i) r[i] = Pt(v[i * 2], v[i * 2 + 1]); return r; }
             public void Line(Color c, float w, float x1, float y1, float x2, float y2)
@@ -110,7 +110,7 @@ namespace GameViewer.App.Render
             {
                 RectangleF r = path.GetBounds();
                 using (Pen o = new Pen(Color.FromArgb(200, 0, 0, 0), 2.6f) { LineJoin = LineJoin.Round }) G.DrawPath(o, path);
-                using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(r.X, r.Y, Math.Max(1f, r.Width), Math.Max(1f, r.Height) + 1f), top, bot, LinearGradientMode.Vertical)) G.FillPath(b, path);
+                using (LinearGradientBrush b = GfxBrush.Linear(new RectangleF(r.X, r.Y, Math.Max(1f, r.Width), Math.Max(1f, r.Height) + 1f), top, bot, LinearGradientMode.Vertical)) G.FillPath(b, path);
                 using (Pen e = new Pen(Color.FromArgb(150, 255, 255, 255), 1f) { LineJoin = LineJoin.Round }) G.DrawPath(e, path);
             }
             public void Poly(PointF[] pts, Color top, Color bot) { using (GraphicsPath p = new GraphicsPath()) { p.AddPolygon(pts); Shape(p, top, bot); } }
@@ -129,7 +129,7 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>스킬 아이콘: 연출 양식과 연출색으로 만든 문양. 사각 (x,y,s,s) 안에 그린다.</summary>
-        public static void SkillIcon(Graphics g, Resources res, float x, float y, float s, SkillRow sk, SkillFxInfo fx, bool basic)
+        public static void SkillIcon(IGfx g, Resources res, float x, float y, float s, SkillRow sk, SkillFxInfo fx, bool basic)
         {
             Color c1 = fx != null ? FromRgb(fx.Color1) : Color.FromArgb(230, 200, 120);
             Color c2 = fx != null ? FromRgb(fx.Color2) : Color.FromArgb(255, 244, 210);

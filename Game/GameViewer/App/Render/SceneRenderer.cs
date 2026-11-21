@@ -39,7 +39,7 @@ namespace GameViewer.App.Render
             _tension = new TensionHud(Res);
         }
 
-        public void Draw(Graphics g, ViewerSession s, AutoPilot pilot, ViewState v, long now)
+        public void Draw(IGfx g, ViewerSession s, AutoPilot pilot, ViewState v, long now)
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
@@ -129,17 +129,17 @@ namespace GameViewer.App.Render
         }
 
         /// <summary>화면 가장자리를 살짝 어둡게 해 시선을 가운데로 모은다. 가장자리 네 줄에 그라데이션만 깔아 비용이 작다.</summary>
-        private void DrawVignette(Graphics g, ViewState v)
+        private void DrawVignette(IGfx g, ViewState v)
         {
             int e = Math.Max(60, Math.Min(v.Width, v.Height) / 5);
             Color dark = VignetteColor(ZoneTheme.Current), clear = Color.FromArgb(0, dark.R, dark.G, dark.B);
-            using (LinearGradientBrush t = new LinearGradientBrush(new Rectangle(0, 0, v.Width, e + 1), dark, clear, LinearGradientMode.Vertical))
+            using (LinearGradientBrush t = GfxBrush.Linear(new Rectangle(0, 0, v.Width, e + 1), dark, clear, LinearGradientMode.Vertical))
                 g.FillRectangle(t, 0, 0, v.Width, e);
-            using (LinearGradientBrush b = new LinearGradientBrush(new Rectangle(0, v.Height - e - 1, v.Width, e + 1), clear, dark, LinearGradientMode.Vertical))
+            using (LinearGradientBrush b = GfxBrush.Linear(new Rectangle(0, v.Height - e - 1, v.Width, e + 1), clear, dark, LinearGradientMode.Vertical))
                 g.FillRectangle(b, 0, v.Height - e, v.Width, e);
-            using (LinearGradientBrush l = new LinearGradientBrush(new Rectangle(0, 0, e + 1, v.Height), dark, clear, LinearGradientMode.Horizontal))
+            using (LinearGradientBrush l = GfxBrush.Linear(new Rectangle(0, 0, e + 1, v.Height), dark, clear, LinearGradientMode.Horizontal))
                 g.FillRectangle(l, 0, 0, e, v.Height);
-            using (LinearGradientBrush r = new LinearGradientBrush(new Rectangle(v.Width - e - 1, 0, e + 1, v.Height), clear, dark, LinearGradientMode.Horizontal))
+            using (LinearGradientBrush r = GfxBrush.Linear(new Rectangle(v.Width - e - 1, 0, e + 1, v.Height), clear, dark, LinearGradientMode.Horizontal))
                 g.FillRectangle(r, v.Width - e, 0, e, v.Height);
         }
 

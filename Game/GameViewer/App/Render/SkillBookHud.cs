@@ -84,7 +84,7 @@ namespace GameViewer.App.Render
 
         // ------------------------------------------------------------------ 그리기
 
-        public void Draw(Graphics g, ViewerSession s, ViewState v, long now)
+        public void Draw(IGfx g, ViewerSession s, ViewState v, long now)
         {
             List<uint> all = s.Data.SkillsOf(s.HeroId);
             int n = all.Count;
@@ -168,7 +168,7 @@ namespace GameViewer.App.Render
 
         private static uint Wallet(ViewerSession s, SkillUnlockRow u) { uint a; s.World.Wallet.TryGetValue(u.PriceCurrencyId, out a); return a; }
 
-        private void DrawIcon(Graphics g, ViewerSession s, uint id, float x, float y, float size)
+        private void DrawIcon(IGfx g, ViewerSession s, uint id, float x, float y, float size)
         {
             Bitmap b = SkillIcons.Get(id);
             if (b != null) g.DrawImage(b, x, y, size, size);

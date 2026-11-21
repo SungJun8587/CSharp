@@ -21,17 +21,17 @@ namespace GameViewer.App.Render
         public BiomeProps(Resources res) { _res = res; _paint = Paint; }
         public void Dispose() { _cache.Dispose(); }
 
-        public void Draw(Graphics g, ViewState v, MapKind kind, ZoneTheme.PropSize size, float wx, float wy, float r, uint seed)
+        public void Draw(IGfx g, ViewState v, MapKind kind, ZoneTheme.PropSize size, float wx, float wy, float r, uint seed)
         {
             Place(g, v, kind, (int)size, false, wx, wy, r, seed);
         }
 
-        public void DrawBorder(Graphics g, ViewState v, MapKind kind, float wx, float wy, float r, uint seed)
+        public void DrawBorder(IGfx g, ViewState v, MapKind kind, float wx, float wy, float r, uint seed)
         {
             Place(g, v, kind, 0, true, wx, wy, r, seed);
         }
 
-        private void Place(Graphics g, ViewState v, MapKind kind, int size, bool border, float wx, float wy, float r, uint seed)
+        private void Place(IGfx g, ViewState v, MapKind kind, int size, bool border, float wx, float wy, float r, uint seed)
         {
             float sx = v.ToScreenX(wx), sy = v.ToScreenY(wy);
             float pr = v.Px(r);
@@ -61,7 +61,7 @@ namespace GameViewer.App.Render
         private static Color C(int r, int g, int b) { return Color.FromArgb(r, g, b); }
         private static Color A(int a, int r, int g, int b) { return Color.FromArgb(a, r, g, b); }
 
-        private void Paint(Graphics g)
+        private void Paint(IGfx g)
         {
             g.ScaleTransform(_ppu, _ppu);
             float r = _pr;
@@ -80,7 +80,7 @@ namespace GameViewer.App.Render
         }
 
         // ============================================================ 설원
-        private static void Tier(Graphics g, float cx, float yb, float hw, float hh, Color top, Color bot, float snow)
+        private static void Tier(IGfx g, float cx, float yb, float hw, float hh, Color top, Color bot, float snow)
         {
             PointF[] pts = { new PointF(cx - hw, yb), new PointF(cx - hw * 0.55f, yb - hh * 0.08f), new PointF(cx - hw * 0.15f, yb + hh * 0.04f), new PointF(cx + hw * 0.3f, yb - hh * 0.07f), new PointF(cx + hw, yb), new PointF(cx, yb - hh) };
             P.Poly(g, pts, top, bot, A(190, 10, 28, 24), Math.Max(0.02f, hh * 0.025f));
@@ -91,7 +91,7 @@ namespace GameViewer.App.Render
             P.Poly(g, cap, C(255, 255, 255), C(206, 224, 244), A(120, 90, 120, 160), Math.Max(0.015f, hh * 0.015f));
         }
 
-        private void Spruce(Graphics g, float r, bool big)
+        private void Spruce(IGfx g, float r, bool big)
         {
             int tiers = big ? 5 : 4;
             float h = (big ? 4.4f : 3.5f) * r, w0 = (big ? 1.7f : 1.35f) * r;
@@ -107,7 +107,7 @@ namespace GameViewer.App.Render
             if (_pseed % 2 == 0) { using (SolidBrush br = new SolidBrush(A(230, 255, 255, 255))) g.FillEllipse(br, -0.07f * r, -h - 0.05f * r, 0.14f * r, 0.1f * r); }
         }
 
-        private void IceCrystals(Graphics g, float r)
+        private void IceCrystals(IGfx g, float r)
         {
             float[] xs = { -0.62f, 0.0f, 0.58f, -0.3f, 0.32f }, hs = { 1.5f, 2.3f, 1.7f, 1.1f, 1.2f }, ws = { 0.34f, 0.42f, 0.34f, 0.26f, 0.26f }, ls = { -0.16f, 0.04f, 0.2f, -0.1f, 0.12f };
             using (SolidBrush glow = new SolidBrush(A(40, 140, 230, 255))) g.FillEllipse(glow, -1.4f * r, -1.6f * r, 2.8f * r, 1.9f * r);
@@ -125,7 +125,7 @@ namespace GameViewer.App.Render
             using (SolidBrush br = new SolidBrush(A(240, 255, 255, 255))) g.FillEllipse(br, -0.8f * r, -0.18f * r, 1.7f * r, 0.3f * r);
         }
 
-        private void PeakSnow(Graphics g, float r)
+        private void PeakSnow(IGfx g, float r)
         {
             float bw = 1.9f * r, hh = (2.6f + (_pseed % 3) * 0.3f) * r;
             float lean = ((int)_pseed - 1.5f) * 0.12f * r;
@@ -138,7 +138,7 @@ namespace GameViewer.App.Render
         }
 
         // ============================================================ 화산
-        private void LavaSpire(Graphics g, float r)
+        private void LavaSpire(IGfx g, float r)
         {
             float[] xs = { -0.55f, 0.1f, 0.65f, -0.1f }, hs = { 1.5f, 2.4f, 1.2f, 1.2f }, ws = { 0.36f, 0.5f, 0.34f, 0.3f };
             using (SolidBrush glow = new SolidBrush(A(52, 255, 90, 20))) g.FillEllipse(glow, -1.5f * r, -0.5f * r, 3f * r, 0.9f * r);
@@ -155,7 +155,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void CharredTree(Graphics g, float r)
+        private void CharredTree(IGfx g, float r)
         {
             Color a = C(58, 48, 50), b = C(18, 14, 16), ol = A(230, 6, 4, 6);
             PointF[] trunk = { new PointF(-0.4f * r, 0), new PointF(-0.24f * r, -1.8f * r), new PointF(-0.1f * r, -3.2f * r), new PointF(0.12f * r, -3.2f * r), new PointF(0.26f * r, -1.7f * r), new PointF(0.42f * r, 0) };
@@ -173,7 +173,7 @@ namespace GameViewer.App.Render
             using (SolidBrush e = new SolidBrush(A(150, 255, 90, 20))) g.FillEllipse(e, -0.5f * r, -0.15f * r, 1.0f * r, 0.25f * r);
         }
 
-        private void ObsidianPillar(Graphics g, float r)
+        private void ObsidianPillar(IGfx g, float r)
         {
             float[] xs = { -0.9f, -0.35f, 0.25f, 0.8f }, ws = { 0.42f, 0.5f, 0.46f, 0.38f }, hs = { 2.3f, 3.9f, 3.0f, 2.0f };
             using (SolidBrush glow = new SolidBrush(A(52, 255, 80, 20))) g.FillEllipse(glow, -1.8f * r, -0.5f * r, 3.6f * r, 1.0f * r);
@@ -192,7 +192,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void PeakVolcano(Graphics g, float r)
+        private void PeakVolcano(IGfx g, float r)
         {
             float bw = 2.0f * r, hh = (2.4f + (_pseed % 3) * 0.3f) * r;
             PointF[] rock = { new PointF(-bw, 0), new PointF(-bw * 0.6f, -hh * 0.6f), new PointF(-bw * 0.22f, -hh * 0.95f), new PointF(bw * 0.22f, -hh * 0.95f), new PointF(bw * 0.6f, -hh * 0.55f), new PointF(bw, 0) };
@@ -208,7 +208,7 @@ namespace GameViewer.App.Render
         }
 
         // ============================================================ 늪
-        private void Reeds(Graphics g, float r)
+        private void Reeds(IGfx g, float r)
         {
             int n = 9 + (int)(_pseed % 3);
             for (int i = 0; i < n; ++i)
@@ -227,7 +227,7 @@ namespace GameViewer.App.Render
             using (SolidBrush br = new SolidBrush(A(180, 28, 40, 22))) g.FillEllipse(br, -0.9f * r, -0.15f * r, 1.8f * r, 0.3f * r);
         }
 
-        private void Willow(Graphics g, float r)
+        private void Willow(IGfx g, float r)
         {
             // 맹그로브: 활처럼 굽은 버팀뿌리 + 어두운 줄기 + 늘어지는 잎 덩이와 이끼
             Color bark = C(70, 56, 42), bd = C(30, 22, 16);
@@ -252,7 +252,7 @@ namespace GameViewer.App.Render
             Hang(g, r, -1.6f, 6);
         }
 
-        private void Hang(Graphics g, float r, float spread, int n)
+        private void Hang(IGfx g, float r, float spread, int n)
         {
             for (int i = 0; i < n; ++i)
             {
@@ -263,7 +263,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void BogTree(Graphics g, float r)
+        private void BogTree(IGfx g, float r)
         {
             Color bark = C(66, 54, 42), bd = C(26, 20, 16);
             // 굵은 줄기와 널따란 밑동
@@ -290,7 +290,7 @@ namespace GameViewer.App.Render
             }
         }
 
-        private void Mangrove(Graphics g, float r)
+        private void Mangrove(IGfx g, float r)
         {
             Color d = C(14, 30, 22), m = C(28, 54, 34), l = C(54, 86, 46);
             float[,] blobs = { { -1.0f, -1.4f, 1.2f }, { 1.0f, -1.3f, 1.2f }, { 0f, -2.0f, 1.4f }, { -0.5f, -1.2f, 1.1f }, { 0.55f, -1.2f, 1.1f } };
@@ -306,7 +306,7 @@ namespace GameViewer.App.Render
         }
 
         // ============================================================ 직사각 장애물: 폐허 벽 / 바위
-        public void DrawRuin(Graphics g, ViewState v, MapKind kind, BlockRow b, int index)
+        public void DrawRuin(IGfx g, ViewState v, MapKind kind, BlockRow b, int index)
         {
             float x0 = v.ToScreenX(b.X), y0 = v.ToScreenY(b.Y);
             float w = v.Px(b.W), h = v.Px(b.H);
@@ -326,7 +326,7 @@ namespace GameViewer.App.Render
                 default: front = C(92, 98, 80); top = C(122, 130, 98); topLo = C(80, 88, 64); cap = C(86, 132, 56); edge = A(200, 16, 22, 12); mortar = A(90, 20, 28, 16); shA = 80; break;
             }
             g.FillRectangle(_res.Brush(shA, kind == MapKind.Snow ? 60 : 0, kind == MapKind.Snow ? 80 : 0, kind == MapKind.Snow ? 130 : 0), x0 + 4, y0 + h - lift * 0.1f + 3, w, lift * 0.7f);
-            using (LinearGradientBrush lb = new LinearGradientBrush(new RectangleF(x0, y0 + h - lift - 1, w, lift + 2), Col.Light(front, 0.06f), Col.Dark(front, 0.4f), LinearGradientMode.Vertical))
+            using (LinearGradientBrush lb = GfxBrush.Linear(new RectangleF(x0, y0 + h - lift - 1, w, lift + 2), Col.Light(front, 0.06f), Col.Dark(front, 0.4f), LinearGradientMode.Vertical))
                 g.FillRectangle(lb, x0, y0 + h - lift, w, lift);
             float bw = Math.Max(8f, v.Px(2.2f));
             for (float bx = 0; bx < w; bx += bw)
